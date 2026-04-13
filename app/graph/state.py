@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from typing import Literal, TypedDict
+
+ActionName = Literal[
+    "verify_identity",
+    "list_appointments",
+    "confirm_appointment",
+    "cancel_appointment",
+    "help",
+    "unknown",
+]
+
+
+class ConversationState(TypedDict, total=False):
+    thread_id: str
+    incoming_message: str
+    messages: list[dict[str, str]]
+    verified: bool
+    verification_status: str | None
+    patient_id: str | None
+    provided_full_name: str | None
+    provided_phone: str | None
+    provided_dob: str | None
+    missing_verification_fields: list[str]
+    requested_action: ActionName | None
+    deferred_action: ActionName | None
+    listed_appointments: list
+    appointment_reference: str | None
+    selected_appointment_id: str | None
+    last_action_result: dict | None
+    response_text: str | None
+    error_code: str | None
+
+
+def ensure_state_defaults(state: ConversationState) -> ConversationState:
+    state.setdefault("messages", [])
+    state.setdefault("verified", False)
+    state.setdefault("verification_status", None)
+    state.setdefault("patient_id", None)
+    state.setdefault("provided_full_name", None)
+    state.setdefault("provided_phone", None)
+    state.setdefault("provided_dob", None)
+    state.setdefault("missing_verification_fields", [])
+    state.setdefault("requested_action", "unknown")
+    state.setdefault("deferred_action", None)
+    state.setdefault("listed_appointments", [])
+    state.setdefault("appointment_reference", None)
+    state.setdefault("selected_appointment_id", None)
+    state.setdefault("last_action_result", None)
+    state.setdefault("response_text", None)
+    state.setdefault("error_code", None)
+    return state
