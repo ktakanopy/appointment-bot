@@ -83,6 +83,15 @@ async def chat(
     request: ChatRequest,
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> ChatResponse:
+    """Process a chat turn for an existing session and return the graph result.
+
+    The handler validates session-scoped runtime state, builds the graph input
+    payload from the incoming message and any restored identity context, and
+    executes the synchronous LangGraph workflow in a worker thread so the async
+    request handler does not block the event loop. Repository availability
+    failures are translated into HTTP 503 responses, and successful graph output
+    is converted into the public chat response model returned by the API.
+    """
     payload = _build_chat_payload(runtime, request)
     config = {"configurable": {"thread_id": request.session_id}}
     record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
@@ -104,6 +113,23 @@ async def forget_remembered_identity(
 
 
 def _build_chat_payload(runtime: RuntimeContext, request: ChatRequest) -> dict[str, Any]:
+    """Build the graph input payload for a chat turn within an existing session.
+
+    The function starts by removing expired runtime entries so stale session
+    records and one-time bootstrap state do not leak into a new request. It then
+    calls `_require_session()` to ensure the provided session id was created by
+    `/sessions/new`, refresh the session activity timestamp, and fail fast with a
+    404 if the session is unknown or has already been cleaned up.
+
+    Bootstrap state is used to inject restored identity context into the next
+    eligible chat turn. If a bootstrap entry was prepared when the session was
+    created, it is consumed here with `pop()` so it only affects the first
+    relevant request. If no bootstrap entry is cached but the request includes a
+    remembered identity id, the function rebuilds the bootstrap state on demand.
+    The final payload always includes the thread id and incoming message, and it
+    is extended with bootstrap state when available so the graph can resume with
+    the correct verification context.
+    """
     _cleanup_expired_runtime_entries(runtime)
     _require_session(runtime, request.session_id)
     bootstrap = runtime.session_bootstrap.pop(request.session_id, None)
