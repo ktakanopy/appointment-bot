@@ -20,12 +20,29 @@ class InvokableGraph(Protocol):
 
 @dataclass(slots=True)
 class SessionBootstrap:
+    """Temporary bootstrap state injected into the next chat turn for a session.
+
+    This record is created when a new session can start from previously restored
+    identity information. Its state payload is merged into the first eligible
+    chat request so the graph can begin with the correct verification context.
+    The timestamp is used to expire stale bootstrap entries that were never
+    consumed.
+    """
+
     state: dict[str, Any]
     created_at: float
 
 
 @dataclass(slots=True)
 class SessionRecord:
+    """Tracks a live API session registered in the in-memory runtime.
+
+    The record keeps the public session identifier, the graph thread identifier,
+    and monotonic timestamps for creation and last activity. These timestamps are
+    used to validate active sessions and to evict idle sessions after the
+    configured timeout.
+    """
+
     session_id: str
     thread_id: str
     created_at: float
@@ -34,6 +51,15 @@ class SessionRecord:
 
 @dataclass(slots=True)
 class RuntimeContext:
+    """Holds the shared application runtime used by request handlers.
+
+    A single instance is created at application startup and stored on the FastAPI
+    app state. It groups immutable runtime dependencies such as settings, logger,
+    tracer, graph, provider, and identity service together with mutable in-memory
+    session structures. Route handlers read and update this context to resolve
+    sessions, restore remembered identity, and execute the conversation graph.
+    """
+
     settings: Settings
     logger: logging.Logger
     tracer: object | None

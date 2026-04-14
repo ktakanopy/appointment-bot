@@ -52,6 +52,7 @@ async def create_session(
     request: NewSessionRequest | None = None,
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> NewSessionResponse:
+    """Create a new session and pre-load restored identity state when available."""
     _cleanup_expired_runtime_entries(runtime)
     session_id = str(uuid4())
     thread_id = session_id
@@ -62,22 +63,12 @@ async def create_session(
         created_at=now,
         last_seen_at=now,
     )
-    restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id if request else None)
-    restored_verification = bool(restored_identity and restored_identity.status == RememberedIdentityStatus.ACTIVE)
-    remembered_identity_status = _build_identity_summary(
+    restored_verification, remembered_identity_status, response_text = _prepare_new_session_restore(
         runtime,
-        restored_identity,
-        request.remembered_identity_id if request else None,
+        request,
+        session_id,
+        now,
     )
-    if restored_verification:
-        runtime.session_bootstrap[session_id] = SessionBootstrap(
-            state=_build_bootstrap_state(restored_identity, remembered_identity_status),
-            created_at=now,
-        )
-    if restored_verification:
-        response_text = f"Welcome back, {restored_identity.display_name or 'patient'}. Your identity has been restored."
-    else:
-        response_text = "New session started."
     return NewSessionResponse(
         session_id=session_id,
         thread_id=thread_id,
@@ -222,7 +213,39 @@ def _build_identity_summary(
     return RememberedIdentitySummary(**runtime.identity_service.summary_for_identity(identity))
 
 
+def _prepare_new_session_restore(
+    runtime: RuntimeContext,
+    request: NewSessionRequest | None,
+    session_id: str,
+    now: float,
+) -> tuple[bool, RememberedIdentitySummary, str]:
+    """Restore remembered identity state for a newly created session when possible."""
+    restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id if request else None)
+    restored_verification = bool(restored_identity and restored_identity.status == RememberedIdentityStatus.ACTIVE)
+    remembered_identity_status = _build_identity_summary(
+        runtime,
+        restored_identity,
+        request.remembered_identity_id if request else None,
+    )
+    if restored_verification:
+        runtime.session_bootstrap[session_id] = SessionBootstrap(
+            state=_build_bootstrap_state(restored_identity, remembered_identity_status),
+            created_at=now,
+        )
+        return (
+            True,
+            remembered_identity_status,
+            f"Welcome back, {restored_identity.display_name or 'patient'}. Your identity has been restored.",
+        )
+    return False, remembered_identity_status, "New session started."
+
+
 def _cleanup_expired_runtime_entries(runtime: RuntimeContext) -> None:
+    """Remove expired in-memory runtime entries before handling a request.
+
+    This drops one-time bootstrap state whose TTL has elapsed and removes
+    sessions that have been idle longer than the configured session timeout.
+    """
     now = time.monotonic()
     expired_bootstrap_session_ids = [
         session_id
