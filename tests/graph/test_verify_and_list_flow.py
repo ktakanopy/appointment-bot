@@ -17,3 +17,13 @@ def test_verify_then_list_flow_resumes_deferred_action():
     assert final["requested_action"] == "list_appointments"
     assert len(final["listed_appointments"]) == 2
     assert "Here are your appointments" in final["response_text"]
+
+
+def test_greeting_routes_into_verification_before_help():
+    graph = build_graph()
+    config = {"configurable": {"thread_id": "graph-greeting-verify"}}
+
+    result = graph.invoke({"thread_id": "graph-greeting-verify", "incoming_message": "hello"}, config)
+
+    assert result["requested_action"] == "verify_identity"
+    assert "full name" in result["response_text"].lower()

@@ -11,6 +11,8 @@ class ConversationState(TypedDict, total=False):
     incoming_message: str
     messages: list[dict[str, str]]
     verified: bool
+    verification_failures: int
+    verification_locked: bool
     verification_status: str | None
     patient_id: str | None
     provided_full_name: str | None
@@ -33,6 +35,8 @@ class ConversationState(TypedDict, total=False):
 def ensure_state_defaults(state: ConversationState) -> ConversationState:
     state.setdefault("messages", [])
     state.setdefault("verified", False)
+    state.setdefault("verification_failures", 0)
+    state.setdefault("verification_locked", False)
     state.setdefault("verification_status", None)
     state.setdefault("patient_id", None)
     state.setdefault("provided_full_name", None)

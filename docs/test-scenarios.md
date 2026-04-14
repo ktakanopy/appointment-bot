@@ -21,3 +21,9 @@
    summaries.
 10. Enable tracing with invalid Langfuse credentials and confirm the workflow
     still completes without failing the request path.
+11. Send a chat request with an unknown session id and confirm the API returns a
+    session-not-found response instead of silently creating a thread.
+12. Fail identity verification three times in the same session and confirm the
+    session is locked until a new session is created.
+13. Call `POST /chat/stream` and confirm the response emits node events followed
+    by a final message event.

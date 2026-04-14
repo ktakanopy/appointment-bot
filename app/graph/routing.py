@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from app.domain.policies import PROTECTED_ACTIONS
 
+VERIFICATION_FIRST_ACTIONS = {"help", "unknown", "verify_identity"}
+
 
 def route_after_interpret(state: dict) -> str:
     action = state.get("requested_action")
-    if not state.get("verified") and (action in PROTECTED_ACTIONS or state.get("deferred_action")):
+    if not state.get("verified") and (
+        action in PROTECTED_ACTIONS
+        or action in VERIFICATION_FIRST_ACTIONS
+        or state.get("deferred_action")
+    ):
         return "verification_subgraph"
     if action == "list_appointments":
         return "list_appointments"

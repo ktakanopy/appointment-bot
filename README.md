@@ -56,7 +56,7 @@ Key design decisions:
 - SQLite-backed short-term conversation memory keyed by `thread_id`
 - deterministic safety gates for verification and protected actions
 - a lightweight Streamlit frontend for patient chat
-- in-memory patient and appointment repositories with SQLite-backed remembered identity
+- in-memory patient and appointment repositories with uv run uvicorn app.main:app SQLite-backed remembered identity
 
 Main structure:
 
@@ -260,3 +260,54 @@ Specification artifacts:
 - There is no real EHR/EMR integration.
 - Appointment and patient sample data remains in memory.
 - Conversation checkpoints and remembered identity are persisted to SQLite.
+
+## Standout Additions
+
+- import-time runtime wiring was replaced with request-time runtime access plus
+  FastAPI lifespan management
+- `/chat` now rejects unknown or expired session ids instead of silently
+  accepting arbitrary thread ids
+- verification attempts are capped per session, with automatic lockout after
+  repeated failures
+- `POST /chat/stream` exposes a streaming chat endpoint with per-node progress
+  events and a final message event
+- the Streamlit frontend uses the streaming endpoint to show progress during
+  verification and appointment actions
+- the eval suite now covers retry recovery and missing-list-context flows
+- graph-level concurrency coverage verifies parallel thread isolation
+
+## Streaming Example
+
+```bash
+curl -N -X POST http://localhost:8000/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id":"demo-session-1","message":"I want to see my appointments"}'
+```
+
+Example event sequence:
+
+```text
+event: node
+data: {"node":"verification_subgraph","current_action":"verify_identity","verified":false,"verification_status":"collecting","error_code":null}
+
+event: message
+data: {"response":"I can help with that, but first I need to verify your identity. What is your full name?","verified":false,"current_action":"verify_identity", ...}
+```
+
+## Docker
+
+Build and run everything with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- Streamlit: `http://localhost:8501`
+
+## Additional Docs
+
+- `docs/graph.md`

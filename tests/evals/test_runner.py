@@ -11,4 +11,6 @@ def test_eval_runner_returns_results_for_default_scenarios():
         "verification-list",
         "ambiguous-cancel",
         "idempotent-confirm",
+        "retry-after-failed-verification",
+        "confirm-without-list-context",
     }

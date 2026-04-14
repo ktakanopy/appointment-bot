@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import logging
-import sqlite3
+import asyncio
+import json
+import threading
 import time
-from typing import Any, Protocol
+from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
     ActionResultResponse,
@@ -20,93 +21,61 @@ from app.api.schemas import (
     NewSessionResponse,
     RememberedIdentitySummary,
 )
-from app.config import Settings, load_settings
+from app.config import Settings
 from app.domain.models import RememberedIdentity, RememberedIdentityStatus
-from app.domain.services import RememberedIdentityService, RepositoryUnavailableError
-from app.graph.builder import build_graph
+from app.domain.services import RepositoryUnavailableError
 from app.graph.state import ConversationState
-from app.llm.base import LLMProvider
-from app.llm.factory import build_provider
-from app.observability import build_tracer, get_logger, record_trace_event
-from app.repositories.sqlite_identity import SQLiteRememberedIdentityRepository
+from app.observability import record_trace_event
+from app.runtime import RuntimeContext, SessionBootstrap, SessionRecord, close_runtime, create_runtime
 
 router = APIRouter()
 SESSION_BOOTSTRAP_TTL_SECONDS = 300
 
 
-class InvokableGraph(Protocol):
-    def invoke(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        ...
+def get_runtime(request: Request) -> RuntimeContext:
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime is None:
+        runtime = create_runtime()
+        request.app.state.runtime = runtime
+    return runtime
 
 
-@dataclass(slots=True)
-class SessionBootstrap:
-    state: ConversationState
-    created_at: float
+def reset_runtime(target_app=None, settings: Settings | None = None) -> RuntimeContext:
+    if target_app is None:
+        from app.main import app as target_app
 
-
-@dataclass
-class RuntimeContext:
-    settings: Settings
-    logger: logging.Logger
-    tracer: object | None
-    graph: InvokableGraph
-    provider: LLMProvider | None
-    checkpoint_connection: sqlite3.Connection
-    identity_service: RememberedIdentityService
-    session_bootstrap: dict[str, SessionBootstrap] = field(default_factory=dict)
-
-
-def create_runtime(settings: Settings | None = None) -> RuntimeContext:
-    settings = settings or load_settings()
-    logger = get_logger()
-    tracer = build_tracer(settings)
-    provider = build_provider(settings, logger, tracer=tracer)
-    checkpoint_connection = sqlite3.connect(str(settings.checkpoint_database_path), check_same_thread=False)
-    identity_repository = SQLiteRememberedIdentityRepository(settings.identity_database_path)
-    identity_service = RememberedIdentityService(identity_repository, settings.remembered_identity_ttl_hours)
-    graph = build_graph(
-        settings=settings,
-        logger=logger,
-        tracer=tracer,
-        provider=provider,
-        checkpoint_connection=checkpoint_connection,
-    )
-    return RuntimeContext(
-        settings=settings,
-        logger=logger,
-        tracer=tracer,
-        graph=graph,
-        provider=provider,
-        checkpoint_connection=checkpoint_connection,
-        identity_service=identity_service,
-    )
-
-
-runtime = create_runtime()
-graph = runtime.graph
-
-
-def reset_runtime(settings: Settings | None = None) -> RuntimeContext:
-    global runtime, graph
-    runtime.checkpoint_connection.close()
+    close_runtime(getattr(target_app.state, "runtime", None))
     runtime = create_runtime(settings=settings)
-    graph = runtime.graph
+    target_app.state.runtime = runtime
     return runtime
 
 
 @router.post("/sessions/new", response_model=NewSessionResponse)
-async def create_session(request: NewSessionRequest | None = None) -> NewSessionResponse:
-    _cleanup_expired_bootstrap_entries()
+async def create_session(
+    request: NewSessionRequest | None = None,
+    runtime: RuntimeContext = Depends(get_runtime),
+) -> NewSessionResponse:
+    _cleanup_expired_runtime_entries(runtime)
     session_id = str(uuid4())
     thread_id = session_id
+    now = time.monotonic()
+    runtime.sessions[session_id] = SessionRecord(
+        session_id=session_id,
+        thread_id=thread_id,
+        created_at=now,
+        last_seen_at=now,
+    )
     restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id if request else None)
     restored_verification = bool(restored_identity and restored_identity.status == RememberedIdentityStatus.ACTIVE)
-    remembered_identity_status = _build_identity_summary(restored_identity, request.remembered_identity_id if request else None)
+    remembered_identity_status = _build_identity_summary(
+        runtime,
+        restored_identity,
+        request.remembered_identity_id if request else None,
+    )
     if restored_verification:
         runtime.session_bootstrap[session_id] = SessionBootstrap(
             state=_build_bootstrap_state(restored_identity, remembered_identity_status),
-            created_at=time.monotonic(),
+            created_at=now,
         )
     if restored_verification:
         response_text = f"Welcome back, {restored_identity.display_name or 'patient'}. Your identity has been restored."
@@ -122,28 +91,106 @@ async def create_session(request: NewSessionRequest | None = None) -> NewSession
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
-    _cleanup_expired_bootstrap_entries()
+async def chat(
+    request: ChatRequest,
+    runtime: RuntimeContext = Depends(get_runtime),
+) -> ChatResponse:
+    payload = _build_chat_payload(runtime, request)
+    config = {"configurable": {"thread_id": request.session_id}}
+    record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
+    try:
+        result = await asyncio.to_thread(runtime.graph.invoke, payload, config)
+    except RepositoryUnavailableError as error:
+        raise HTTPException(status_code=503, detail="The appointment service is temporarily unavailable.") from error
+    record_trace_event(runtime.logger, runtime.tracer, "workflow.end", {"session_id": request.session_id, "result": result})
+    return _build_chat_response(runtime, request, result)
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    request: ChatRequest,
+    runtime: RuntimeContext = Depends(get_runtime),
+) -> StreamingResponse:
+    payload = _build_chat_payload(runtime, request)
+    config = {"configurable": {"thread_id": request.session_id}}
+    queue: asyncio.Queue[tuple[str, dict[str, Any] | None]] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def publish(event_name: str, data: dict[str, Any] | None) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, (event_name, data))
+
+    def produce() -> None:
+        final_result: dict[str, Any] | None = None
+        try:
+            record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
+            for chunk in runtime.graph.stream(payload, config):
+                if not chunk:
+                    continue
+                node_name, node_state = next(iter(chunk.items()))
+                final_result = node_state
+                publish("node", _build_stream_node_event(node_name, node_state))
+            if final_result is None:
+                publish("error", {"detail": "The chat stream did not produce a result.", "error_code": "empty_stream"})
+                return
+            record_trace_event(runtime.logger, runtime.tracer, "workflow.end", {"session_id": request.session_id, "result": final_result})
+            publish("message", _build_chat_response(runtime, request, final_result).model_dump())
+            publish("done", {"thread_id": request.session_id})
+        except RepositoryUnavailableError:
+            publish("error", {"detail": "The appointment service is temporarily unavailable.", "error_code": "service_unavailable"})
+        except Exception:
+            publish("error", {"detail": "The chat stream failed.", "error_code": "stream_failed"})
+        finally:
+            publish("__end__", None)
+
+    threading.Thread(target=produce, daemon=True).start()
+
+    async def event_stream():
+        while True:
+            event_name, data = await queue.get()
+            if event_name == "__end__":
+                break
+            yield _format_sse(event_name, data or {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/remembered-identity/forget", response_model=ForgetRememberedIdentityResponse)
+async def forget_remembered_identity(
+    request: ForgetRememberedIdentityRequest,
+    runtime: RuntimeContext = Depends(get_runtime),
+) -> ForgetRememberedIdentityResponse:
+    cleared = runtime.identity_service.revoke_identity(request.remembered_identity_id)
+    return ForgetRememberedIdentityResponse(cleared=cleared)
+
+
+def _build_chat_payload(runtime: RuntimeContext, request: ChatRequest) -> dict[str, Any]:
+    _cleanup_expired_runtime_entries(runtime)
+    _require_session(runtime, request.session_id)
     bootstrap = runtime.session_bootstrap.pop(request.session_id, None)
     if bootstrap is None and request.remembered_identity_id:
         restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id)
         bootstrap = SessionBootstrap(
             state=_build_bootstrap_state(
                 restored_identity,
-                _build_identity_summary(restored_identity, request.remembered_identity_id),
+                _build_identity_summary(runtime, restored_identity, request.remembered_identity_id),
             ),
             created_at=time.monotonic(),
         )
-    try:
-        payload = {"thread_id": request.session_id, "incoming_message": request.message}
-        if bootstrap:
-            payload.update(bootstrap.state)
-        record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
-        result = graph.invoke(payload, {"configurable": {"thread_id": request.session_id}})
-        record_trace_event(runtime.logger, runtime.tracer, "workflow.end", {"session_id": request.session_id, "result": result})
-    except RepositoryUnavailableError as error:
-        raise HTTPException(status_code=503, detail="The appointment service is temporarily unavailable.") from error
+    payload = {"thread_id": request.session_id, "incoming_message": request.message}
+    if bootstrap:
+        payload.update(bootstrap.state)
+    return payload
 
+
+def _build_chat_response(runtime: RuntimeContext, request: ChatRequest, result: dict[str, Any]) -> ChatResponse:
     appointments = None
     if result.get("requested_action") == "list_appointments" and result.get("listed_appointments"):
         appointments = [
@@ -161,14 +208,15 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if result.get("last_action_result"):
         last_action_result = ActionResultResponse(**result["last_action_result"])
 
-    remembered_identity = _ensure_remembered_identity(result)
+    remembered_identity = _ensure_remembered_identity(runtime, result)
     remembered_identity_status = _build_identity_summary(
+        runtime,
         remembered_identity,
         request.remembered_identity_id,
     )
 
     current_action = result.get("requested_action") or "unknown"
-    if not result.get("verified") and current_action == "unknown":
+    if not result.get("verified") and current_action in {"unknown", "help", "verify_identity"}:
         current_action = "verify_identity"
 
     return ChatResponse(
@@ -183,15 +231,20 @@ async def chat(request: ChatRequest) -> ChatResponse:
     )
 
 
-@router.post("/remembered-identity/forget", response_model=ForgetRememberedIdentityResponse)
-async def forget_remembered_identity(
-    request: ForgetRememberedIdentityRequest,
-) -> ForgetRememberedIdentityResponse:
-    cleared = runtime.identity_service.revoke_identity(request.remembered_identity_id)
-    return ForgetRememberedIdentityResponse(cleared=cleared)
+def _build_stream_node_event(node_name: str, state: dict[str, Any]) -> dict[str, Any]:
+    current_action = state.get("requested_action") or "unknown"
+    if not state.get("verified") and current_action in {"unknown", "help", "verify_identity"}:
+        current_action = "verify_identity"
+    return {
+        "node": node_name,
+        "current_action": current_action,
+        "verified": state.get("verified", False),
+        "verification_status": state.get("verification_status"),
+        "error_code": state.get("error_code"),
+    }
 
 
-def _ensure_remembered_identity(result: dict[str, Any]) -> RememberedIdentity | None:
+def _ensure_remembered_identity(runtime: RuntimeContext, result: dict[str, Any]) -> RememberedIdentity | None:
     if not result.get("verified") or not result.get("patient_id"):
         remembered_identity_id = result.get("remembered_identity_id")
         return runtime.identity_service.restore_identity(remembered_identity_id)
@@ -227,6 +280,7 @@ def _build_bootstrap_state(
 
 
 def _build_identity_summary(
+    runtime: RuntimeContext,
     identity: RememberedIdentity | None,
     requested_identity_id: str | None = None,
 ) -> RememberedIdentitySummary:
@@ -240,12 +294,33 @@ def _build_identity_summary(
     return RememberedIdentitySummary(**runtime.identity_service.summary_for_identity(identity))
 
 
-def _cleanup_expired_bootstrap_entries() -> None:
+def _cleanup_expired_runtime_entries(runtime: RuntimeContext) -> None:
     now = time.monotonic()
-    expired_session_ids = [
+    expired_bootstrap_session_ids = [
         session_id
         for session_id, bootstrap in runtime.session_bootstrap.items()
         if now - bootstrap.created_at > SESSION_BOOTSTRAP_TTL_SECONDS
     ]
-    for session_id in expired_session_ids:
+    for session_id in expired_bootstrap_session_ids:
         del runtime.session_bootstrap[session_id]
+
+    session_ttl_seconds = runtime.settings.session_ttl_minutes * 60
+    expired_session_ids = [
+        session_id
+        for session_id, session in runtime.sessions.items()
+        if now - session.last_seen_at > session_ttl_seconds
+    ]
+    for session_id in expired_session_ids:
+        del runtime.sessions[session_id]
+
+
+def _require_session(runtime: RuntimeContext, session_id: str) -> SessionRecord:
+    session = runtime.sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found. Start a new session.")
+    session.last_seen_at = time.monotonic()
+    return session
+
+
+def _format_sse(event_name: str, data: dict[str, Any]) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(data, ensure_ascii=True)}\n\n"

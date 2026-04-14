@@ -7,7 +7,7 @@ client = TestClient(app)
 
 
 def test_api_confirm_first_appointment():
-    session_id = "api-confirm"
+    session_id = client.post("/sessions/new").json()["session_id"]
 
     for message in ["show my appointments", "Ana Silva", "11999998888", "1990-05-10"]:
         client.post("/chat", json={"session_id": session_id, "message": message})
@@ -21,7 +21,7 @@ def test_api_confirm_first_appointment():
 
 
 def test_api_ambiguous_confirm_without_list_context():
-    session_id = "api-confirm-no-list"
+    session_id = client.post("/sessions/new").json()["session_id"]
 
     for message in ["Ana Silva", "11999998888", "1990-05-10"]:
         client.post("/chat", json={"session_id": session_id, "message": message})

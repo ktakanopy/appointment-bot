@@ -7,7 +7,7 @@ client = TestClient(app)
 
 
 def test_api_cancel_then_reroute_back_to_list():
-    session_id = "api-cancel-reroute"
+    session_id = client.post("/sessions/new").json()["session_id"]
 
     for message in ["show my appointments", "Ana Silva", "11999998888", "1990-05-10"]:
         client.post("/chat", json={"session_id": session_id, "message": message})

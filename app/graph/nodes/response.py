@@ -7,10 +7,12 @@ from app.observability import log_event
 def make_help_node(logger):
     def help_or_unknown(state: ConversationState) -> ConversationState:
         state["requested_action"] = "help"
-        state["response_text"] = (
-            "I can help you verify your identity, list your appointments, confirm one, or cancel one. "
-            "Tell me what you would like to do."
-        )
+        if state.get("verified"):
+            state["response_text"] = (
+                "You are verified. You can ask me to list your appointments, confirm one, or cancel one."
+            )
+        else:
+            state["response_text"] = "I need to verify your identity first. Please tell me your full name."
         log_event(logger, "handle_help_or_unknown", state)
         return state
 

@@ -49,7 +49,14 @@ def build_graph(
     builder = StateGraph(ConversationState)
     builder.add_node("ingest_user_message", make_ingest_node(logger))
     builder.add_node("parse_intent_and_entities", make_interpret_node(logger, provider=provider))
-    builder.add_node("verification_subgraph", make_verification_node(verification_service, logger))
+    builder.add_node(
+        "verification_subgraph",
+        make_verification_node(
+            verification_service,
+            logger,
+            settings.max_verification_attempts,
+        ),
+    )
     builder.add_node("list_appointments", make_list_node(appointment_service, logger))
     builder.add_node("confirm_appointment", make_confirm_node(appointment_service, logger))
     builder.add_node("cancel_appointment", make_cancel_node(appointment_service, logger))

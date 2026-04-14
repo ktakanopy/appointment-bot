@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import app.graph.builder as builder_module
+import app.runtime as runtime_module
 from fastapi.testclient import TestClient
 
 from app.api import routes
@@ -25,8 +26,8 @@ class BrokenProvider:
 
 def test_api_returns_successful_fallback_when_provider_fails(monkeypatch):
     monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
-    monkeypatch.setattr(routes, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
-    routes.reset_runtime()
+    monkeypatch.setattr(runtime_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
+    routes.reset_runtime(app)
     session = client.post("/sessions/new").json()
 
     for message in ["show my appointments", "Ana Silva", "11999998888"]:

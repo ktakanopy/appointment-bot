@@ -46,6 +46,8 @@ class Settings:
     checkpoint_database_path: Path
     identity_database_path: Path
     remembered_identity_ttl_hours: int
+    session_ttl_minutes: int
+    max_verification_attempts: int
     frontend_api_base_url: str
     provider: ProviderSettings
     tracing: TracingSettings
@@ -69,6 +71,8 @@ def load_settings() -> Settings:
         checkpoint_database_path=checkpoint_database_path,
         identity_database_path=identity_database_path,
         remembered_identity_ttl_hours=_env_int("REMEMBERED_IDENTITY_TTL_HOURS", 24),
+        session_ttl_minutes=_env_int("SESSION_TTL_MINUTES", 60),
+        max_verification_attempts=_env_int("MAX_VERIFICATION_ATTEMPTS", 3),
         frontend_api_base_url=os.getenv("FRONTEND_API_BASE_URL", "http://localhost:8000"),
         provider=provider,
         tracing=TracingSettings(

@@ -15,7 +15,8 @@ class BrokenTracer:
 
 
 def test_chat_flow_succeeds_when_tracing_backend_fails():
-    routes.runtime.tracer = BrokenTracer()
+    routes.reset_runtime(app)
+    app.state.runtime.tracer = BrokenTracer()
     session = client.post("/sessions/new").json()
 
     response = client.post(

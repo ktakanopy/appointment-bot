@@ -19,9 +19,10 @@ def test_repository_failure_returns_503(monkeypatch):
     def fail_invoke(*args, **kwargs):
         raise RepositoryUnavailableError("boom")
 
-    monkeypatch.setattr(routes.graph, "invoke", fail_invoke)
+    session = client.post("/sessions/new").json()
+    monkeypatch.setattr(app.state.runtime.graph, "invoke", fail_invoke)
 
-    response = client.post("/chat", json={"session_id": "repo-failure", "message": "show my appointments"})
+    response = client.post("/chat", json={"session_id": session["session_id"], "message": "show my appointments"})
 
     assert response.status_code == 503
     assert response.json() == {"detail": "The appointment service is temporarily unavailable."}
