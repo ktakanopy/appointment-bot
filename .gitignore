@@ -9,6 +9,7 @@ build/
 .coverage
 htmlcov/
 .env
+.env.*
 *.log
 .DS_Store
 Thumbs.db
@@ -16,3 +17,7 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+.data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

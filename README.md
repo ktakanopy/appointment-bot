@@ -43,32 +43,41 @@ This project is built with:
 - FastAPI
 - LangGraph
 - Pydantic
+- Streamlit
+- OpenAI Python SDK
+- Langfuse Python SDK
 - pytest
 
 Key design decisions:
 
 - a single `POST /chat` endpoint
+- a `POST /sessions/new` bootstrap endpoint and a `POST /remembered-identity/forget` revoke endpoint
 - explicit workflow orchestration with `LangGraph StateGraph`
-- short-term conversation memory keyed by `thread_id`
+- SQLite-backed short-term conversation memory keyed by `thread_id`
 - deterministic safety gates for verification and protected actions
-- in-memory repositories so the exercise stays focused on orchestration and
-  business logic
+- a lightweight Streamlit frontend for patient chat
+- in-memory patient and appointment repositories with SQLite-backed remembered identity
 
 Main structure:
 
 ```text
 app/
   api/
+  evals/
   graph/
   domain/
+  llm/
   repositories/
   prompts/
+frontend/
 tests/
   api/
+  evals/
   graph/
   unit/
 docs/
 specs/001-appointment-management/
+specs/002-frontend-llm-memory/
 ```
 
 ## Important Business Rules
@@ -95,6 +104,26 @@ uv sync --extra dev
 You can also rely on `uv run` if you prefer not to manage the virtual
 environment manually.
 
+### Configure environment
+
+Copy the values you need from `.env.example`, then export the provider and tracing settings you want to use.
+
+Minimum provider setup:
+
+```bash
+export OPENAI_API_KEY=your_key_here
+export OPENAI_MODEL=gpt-4o-mini
+```
+
+Optional tracing setup:
+
+```bash
+export TRACING_ENABLED=true
+export LANGFUSE_PUBLIC_KEY=your_public_key
+export LANGFUSE_SECRET_KEY=your_secret_key
+export LANGFUSE_HOST=https://cloud.langfuse.com
+```
+
 ## Running the Service
 
 Start the API locally with:
@@ -108,9 +137,23 @@ Then open:
 - API: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 
+Start the frontend with:
+
+```bash
+uv run streamlit run frontend/streamlit_app.py
+```
+
+Then open the Streamlit URL shown in the terminal.
+
 ## Example Usage
 
-First message:
+Create a new session:
+
+```bash
+curl -X POST http://localhost:8000/sessions/new
+```
+
+Then use the returned `session_id` for chat turns:
 
 ```bash
 curl -X POST http://localhost:8000/chat \
@@ -150,10 +193,19 @@ curl -X POST http://localhost:8000/chat \
   -d '{"session_id":"demo-session-1","message":"cancel the first one"}'
 ```
 
+If a response includes an active `remembered_identity_status.remembered_identity_id`, you can restore it in a new session:
+
+```bash
+curl -X POST http://localhost:8000/sessions/new \
+  -H 'Content-Type: application/json' \
+  -d '{"remembered_identity_id":"<remembered-identity-id>"}'
+```
+
 ## Sample Data
 
-The project uses in-memory repositories defined in
-`app/repositories/in_memory.py`.
+The project uses in-memory patient and appointment repositories defined in
+`app/repositories/in_memory.py`, plus SQLite files for LangGraph checkpoints
+and remembered identity.
 
 Valid manual test example:
 
@@ -175,6 +227,13 @@ By layer:
 uv run --extra dev pytest tests/unit
 uv run --extra dev pytest tests/graph
 uv run --extra dev pytest tests/api
+uv run --extra dev pytest tests/evals
+```
+
+Offline evaluation:
+
+```bash
+uv run python -m app.evals.runner
 ```
 
 ## Design Artifacts
@@ -199,4 +258,5 @@ Specification artifacts:
 - The project is intentionally scoped to the exercise and uses simplified
   identity verification.
 - There is no real EHR/EMR integration.
-- Data is volatile and lives only in memory.
+- Appointment and patient sample data remains in memory.
+- Conversation checkpoints and remembered identity are persisted to SQLite.

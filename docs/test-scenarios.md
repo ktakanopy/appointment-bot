@@ -10,3 +10,14 @@
    the service asks for list context first.
 5. Retry verification with wrong identity details and confirm the response stays
    generic.
+6. Use the Streamlit app to start a new session and complete one protected flow
+   without calling the API manually.
+7. Verify in one session, note the returned remembered-identity id, start a new
+   session with it, and confirm appointments are available without re-entering
+   identity details.
+8. Revoke a remembered identity and confirm the next session falls back to
+   normal verification.
+9. Run the eval suite and confirm it returns per-scenario status and judge
+   summaries.
+10. Enable tracing with invalid Langfuse credentials and confirm the workflow
+    still completes without failing the request path.

@@ -18,13 +18,20 @@ def make_help_node(logger):
     return help_or_unknown
 
 
-def make_response_node(logger):
+def make_response_node(logger, provider=None):
     def generate_response(state: ConversationState) -> ConversationState:
         state = ensure_state_defaults(state)
         if not state.get("response_text"):
             state["response_text"] = "I couldn't complete that request right now. Please try again."
+        if provider is not None:
+            try:
+                generated = provider.generate_response(state, state["response_text"])
+                state["response_text"] = generated.response_text
+            except Exception:
+                state["provider_error"] = "response_failed"
+                state["error_code"] = state.get("error_code") or "provider_fallback"
         state["messages"].append({"role": "assistant", "content": state["response_text"]})
-        log_event(logger, "generate_response", state)
+        log_event(logger, "generate_response", state, provider_error=state.get("provider_error"))
         return state
 
     return generate_response

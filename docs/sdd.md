@@ -1,14 +1,15 @@
 # System Design
 
-The service is a single FastAPI backend with one conversational `POST /chat`
-endpoint. LangGraph `StateGraph` handles routing across verification, list,
-confirm, cancel, and help paths. The design keeps the LLM boundary optional and
-bounded while making authorization and mutation safety deterministic.
+The system now has two user-facing surfaces:
+
+- a FastAPI backend that owns workflow state, policy gates, session bootstrap, and remembered-identity lifecycle
+- a Streamlit frontend that starts sessions, renders chat history, and calls the backend over HTTP
 
 Core design choices:
 
-- thread-scoped conversation state keyed by `session_id`
-- reusable verification subgraph before protected actions
-- repository interfaces with in-memory v1 implementations
-- structured logging for decision-path visibility
-- tests at unit, graph, and API levels
+- thread-scoped LangGraph state persisted in SQLite checkpoints
+- remembered identity stored separately in SQLite with explicit revoke and expiry behavior
+- an internal provider boundary for interpretation, patient-facing phrasing, and eval judging
+- deterministic authorization and appointment mutation logic kept outside prompts
+- workflow and provider events emitted through the observability layer with redacted payloads
+- tests at unit, graph, API, and eval-runner levels

@@ -1,7 +1,7 @@
 {
-  "integration": "opencode",
-  "version": "0.6.2",
+  "integration": "cursor-agent",
+  "version": "0.6.3.dev0",
   "scripts": {
-    "update-context": ".specify/integrations/opencode/scripts/update-context.sh"
+    "update-context": ".specify/integrations/cursor-agent/scripts/update-context.sh"
   }
 }

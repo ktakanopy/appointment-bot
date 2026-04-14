@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from app.domain.models import ActionResult, Appointment, AppointmentStatus, Patient
+import hashlib
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+from app.domain.models import (
+    ActionResult,
+    Appointment,
+    AppointmentStatus,
+    Patient,
+    RememberedIdentity,
+    RememberedIdentityStatus,
+)
 from app.domain.policies import normalize_dob, normalize_name, normalize_phone
 
 
@@ -62,3 +73,90 @@ class AppointmentService:
 
         outcome = "already_canceled" if appointment.status == AppointmentStatus.CANCELED else "canceled"
         return updated, ActionResult("cancel_appointment", outcome, appointment_id)
+
+
+class RememberedIdentityService:
+    def __init__(self, identity_repository, ttl_hours: int, now_factory=None):
+        self.identity_repository = identity_repository
+        self.ttl_hours = ttl_hours
+        self.now_factory = now_factory or (lambda: datetime.now(UTC))
+
+    def build_fingerprint(self, full_name: str | None, phone: str | None, dob: str | None, patient_id: str) -> str:
+        payload = "|".join(
+            [
+                normalize_name(full_name or ""),
+                normalize_phone(phone or ""),
+                normalize_dob(dob or "") or (dob or ""),
+                patient_id,
+            ]
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def ensure_identity(
+        self,
+        patient_id: str,
+        display_name: str | None,
+        verification_fingerprint: str,
+    ) -> RememberedIdentity:
+        existing = self.identity_repository.get_active_by_patient_id(patient_id)
+        if existing and self._is_active(existing):
+            return existing
+        now = self.now_factory()
+        identity = RememberedIdentity(
+            remembered_identity_id=str(uuid4()),
+            patient_id=patient_id,
+            display_name=display_name,
+            verification_fingerprint=verification_fingerprint,
+            issued_at=now,
+            expires_at=now + timedelta(hours=self.ttl_hours),
+            revoked_at=None,
+            status=RememberedIdentityStatus.ACTIVE,
+        )
+        return self.identity_repository.save(identity)
+
+    def restore_identity(self, remembered_identity_id: str | None) -> RememberedIdentity | None:
+        if not remembered_identity_id:
+            return None
+        identity = self.identity_repository.get_by_id(remembered_identity_id)
+        if identity is None:
+            return None
+        if not self._is_active(identity):
+            expired = self._mark_expired(identity)
+            self.identity_repository.save(expired)
+            return expired
+        return identity
+
+    def revoke_identity(self, remembered_identity_id: str) -> bool:
+        return self.identity_repository.revoke(remembered_identity_id)
+
+    def summary_for_identity(self, identity: RememberedIdentity | None) -> dict[str, str | None]:
+        if identity is None:
+            return {
+                "remembered_identity_id": "",
+                "status": RememberedIdentityStatus.UNAVAILABLE.value,
+                "display_name": None,
+                "expires_at": None,
+            }
+        return {
+            "remembered_identity_id": identity.remembered_identity_id,
+            "status": identity.status.value,
+            "display_name": identity.display_name,
+            "expires_at": identity.expires_at.isoformat(),
+        }
+
+    def _mark_expired(self, identity: RememberedIdentity) -> RememberedIdentity:
+        return RememberedIdentity(
+            remembered_identity_id=identity.remembered_identity_id,
+            patient_id=identity.patient_id,
+            display_name=identity.display_name,
+            verification_fingerprint=identity.verification_fingerprint,
+            issued_at=identity.issued_at,
+            expires_at=identity.expires_at,
+            revoked_at=identity.revoked_at,
+            status=RememberedIdentityStatus.EXPIRED if identity.revoked_at is None else RememberedIdentityStatus.REVOKED,
+        )
+
+    def _is_active(self, identity: RememberedIdentity) -> bool:
+        if identity.revoked_at is not None:
+            return False
+        return identity.expires_at > self.now_factory()
