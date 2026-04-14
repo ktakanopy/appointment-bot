@@ -4,32 +4,25 @@ from app.domain import policies
 from app.graph.state import ConversationState
 from app.observability import log_event
 
+APPOINTMENT_ACTIONS = {"confirm_appointment", "cancel_appointment"}
+
 
 def make_interpret_node(logger, provider):
     def interpret(state: ConversationState) -> ConversationState:
         message = (state.get("incoming_message") or "").strip()
-        provider_result = provider.interpret(message, state)
-        requested_action = provider_result.requested_action
-        provider_phone = policies.extract_phone(provider_result.phone) if provider_result.phone else None
-        provider_dob = policies.normalize_dob(provider_result.dob) if provider_result.dob else None
-        provider_full_name = policies.normalize_name(provider_result.full_name).title() if provider_result.full_name else None
-        if state.get("provided_phone") is None and provider_phone:
-            state["provided_phone"] = provider_phone
-        if state.get("provided_dob") is None and provider_dob:
-            state["provided_dob"] = provider_dob
-        if state.get("provided_full_name") is None and provider_full_name:
-            state["provided_full_name"] = provider_full_name
-        if provider_result.appointment_reference:
-            state["appointment_reference"] = provider_result.appointment_reference
-        state["requested_action"] = requested_action
-        if requested_action in policies.PROTECTED_ACTIONS and not state.get("verified"):
-            state["deferred_action"] = requested_action
+        result = provider.interpret(message, state)
+        requested_action = result.requested_action
 
-        if requested_action in {"confirm_appointment", "cancel_appointment"} and not state.get("appointment_reference"):
-            state["appointment_reference"] = provider_result.appointment_reference
-        else:
-            if requested_action not in {"confirm_appointment", "cancel_appointment"}:
-                state["appointment_reference"] = None
+        _fill_missing_identity_fields(
+            state,
+            phone=policies.extract_phone(result.phone) if result.phone else None,
+            dob=policies.normalize_dob(result.dob) if result.dob else None,
+            full_name=policies.normalize_name(result.full_name).title() if result.full_name else None,
+        )
+
+        state["requested_action"] = requested_action
+        _update_deferred_action(state, requested_action)
+        _update_appointment_reference(state, requested_action, result.appointment_reference)
 
         state["missing_verification_fields"] = policies.missing_verification_fields(state)
         log_event(
@@ -41,3 +34,35 @@ def make_interpret_node(logger, provider):
         return state
 
     return interpret
+
+
+def _fill_missing_identity_fields(
+    state: ConversationState,
+    *,
+    phone: str | None,
+    dob: str | None,
+    full_name: str | None,
+) -> None:
+    if state.get("provided_phone") is None and phone:
+        state["provided_phone"] = phone
+    if state.get("provided_dob") is None and dob:
+        state["provided_dob"] = dob
+    if state.get("provided_full_name") is None and full_name:
+        state["provided_full_name"] = full_name
+
+
+def _update_deferred_action(state: ConversationState, requested_action: str) -> None:
+    if requested_action in policies.PROTECTED_ACTIONS and not state.get("verified"):
+        state["deferred_action"] = requested_action
+
+
+def _update_appointment_reference(
+    state: ConversationState,
+    requested_action: str,
+    appointment_reference: str | None,
+) -> None:
+    if requested_action not in APPOINTMENT_ACTIONS:
+        state["appointment_reference"] = None
+        return
+    if state.get("appointment_reference") is None and appointment_reference:
+        state["appointment_reference"] = appointment_reference
