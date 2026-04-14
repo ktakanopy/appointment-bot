@@ -4,15 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-
-ActionName = Literal[
-    "verify_identity",
-    "list_appointments",
-    "confirm_appointment",
-    "cancel_appointment",
-    "help",
-    "unknown",
-]
+from app.action_names import ActionName
 
 
 class ChatRequest(BaseModel):

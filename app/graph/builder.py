@@ -1,45 +1,55 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
-from app.config import load_settings
+from app.config import Settings, load_settings
 from app.domain.services import AppointmentService, VerificationService
 from app.graph.nodes.appointments import make_cancel_node, make_confirm_node, make_list_node
 from app.graph.nodes.ingest import make_ingest_node
 from app.graph.nodes.interpret import make_interpret_node
 from app.graph.nodes.response import make_help_node, make_response_node
+from app.graph.nodes.verification import make_verification_node
 from app.graph.routing import route_after_interpret, route_after_verification
 from app.graph.state import ConversationState
-from app.graph.subgraphs.verification_subgraph import build_verification_subgraph
-from app.observability import get_logger
+from app.llm.base import LLMProvider
 from app.llm.factory import build_provider
+from app.observability import build_tracer, get_logger
 from app.repositories.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
+
+_UNSET = object()
 
 
 def build_graph(
     *,
-    logger=None,
-    settings=None,
-    verification_service=None,
-    appointment_service=None,
+    logger: logging.Logger | None = None,
+    settings: Settings | None = None,
+    tracer: object = _UNSET,
+    provider: LLMProvider | None | object = _UNSET,
+    verification_service: VerificationService | None = None,
+    appointment_service: AppointmentService | None = None,
+    checkpoint_connection: sqlite3.Connection | None = None,
 ):
     settings = settings or load_settings()
     logger = logger or get_logger()
+    if tracer is _UNSET:
+        tracer = build_tracer(settings)
     if verification_service is None:
         patient_repository = InMemoryPatientRepository()
         verification_service = VerificationService(patient_repository)
     if appointment_service is None:
         appointment_repository = InMemoryAppointmentRepository()
         appointment_service = AppointmentService(appointment_repository)
-    provider = build_provider(settings, logger)
+    if provider is _UNSET:
+        provider = build_provider(settings, logger, tracer=tracer)
 
     builder = StateGraph(ConversationState)
     builder.add_node("ingest_user_message", make_ingest_node(logger))
     builder.add_node("parse_intent_and_entities", make_interpret_node(logger, provider=provider))
-    builder.add_node("verification_subgraph", build_verification_subgraph(verification_service, logger))
+    builder.add_node("verification_subgraph", make_verification_node(verification_service, logger))
     builder.add_node("list_appointments", make_list_node(appointment_service, logger))
     builder.add_node("confirm_appointment", make_confirm_node(appointment_service, logger))
     builder.add_node("cancel_appointment", make_cancel_node(appointment_service, logger))
@@ -76,8 +86,5 @@ def build_graph(
     builder.add_edge("handle_help_or_unknown", "generate_response")
     builder.add_edge("generate_response", END)
 
-    connection = sqlite3.connect(str(settings.checkpoint_database_path), check_same_thread=False)
-    graph = builder.compile(checkpointer=SqliteSaver(connection))
-    setattr(graph, "_sqlite_connection", connection)
-    setattr(graph, "_provider", provider)
-    return graph
+    connection = checkpoint_connection or sqlite3.connect(str(settings.checkpoint_database_path), check_same_thread=False)
+    return builder.compile(checkpointer=SqliteSaver(connection))

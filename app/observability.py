@@ -4,8 +4,9 @@ import json
 import logging
 import re
 
+from app.config import Settings
 
-def build_tracer(settings):
+def build_tracer(settings: Settings) -> object | None:
     if not settings.tracing.enabled:
         return None
     if not settings.tracing.public_key or not settings.tracing.secret_key:

@@ -46,11 +46,11 @@ class SQLiteRememberedIdentityRepository:
                     revoked_at,
                     status
                 from remembered_identity
-                where patient_id = ?
+                where patient_id = ? and status = ? and revoked_at is null
                 order by issued_at desc
                 limit 1
                 """,
-                (patient_id,),
+                (patient_id, RememberedIdentityStatus.ACTIVE.value),
             ).fetchone()
         return self._row_to_identity(row)
 

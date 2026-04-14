@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from app.graph.state import ConversationState, ensure_state_defaults
+from app.graph.state import ConversationState
 from app.observability import log_event
 
 
 def make_help_node(logger):
     def help_or_unknown(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
         state["requested_action"] = "help"
         state["response_text"] = (
             "I can help you verify your identity, list your appointments, confirm one, or cancel one. "
@@ -20,7 +19,6 @@ def make_help_node(logger):
 
 def make_response_node(logger, provider=None):
     def generate_response(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
         if not state.get("response_text"):
             state["response_text"] = "I couldn't complete that request right now. Please try again."
         if provider is not None:

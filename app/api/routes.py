@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+import logging
+import sqlite3
+import time
+from typing import Any, Protocol
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
@@ -17,38 +20,65 @@ from app.api.schemas import (
     NewSessionResponse,
     RememberedIdentitySummary,
 )
-from app.config import load_settings
+from app.config import Settings, load_settings
 from app.domain.models import RememberedIdentity, RememberedIdentityStatus
 from app.domain.services import RememberedIdentityService, RepositoryUnavailableError
 from app.graph.builder import build_graph
+from app.graph.state import ConversationState
+from app.llm.base import LLMProvider
+from app.llm.factory import build_provider
 from app.observability import build_tracer, get_logger, record_trace_event
 from app.repositories.sqlite_identity import SQLiteRememberedIdentityRepository
 
 router = APIRouter()
+SESSION_BOOTSTRAP_TTL_SECONDS = 300
+
+
+class InvokableGraph(Protocol):
+    def invoke(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+        ...
+
+
+@dataclass(slots=True)
+class SessionBootstrap:
+    state: ConversationState
+    created_at: float
 
 
 @dataclass
 class RuntimeContext:
-    settings: Any
-    logger: Any
-    tracer: Any
-    graph: Any
+    settings: Settings
+    logger: logging.Logger
+    tracer: object | None
+    graph: InvokableGraph
+    provider: LLMProvider | None
+    checkpoint_connection: sqlite3.Connection
     identity_service: RememberedIdentityService
-    session_bootstrap: dict[str, dict[str, Any]] = field(default_factory=dict)
+    session_bootstrap: dict[str, SessionBootstrap] = field(default_factory=dict)
 
 
-def create_runtime(settings=None) -> RuntimeContext:
+def create_runtime(settings: Settings | None = None) -> RuntimeContext:
     settings = settings or load_settings()
     logger = get_logger()
     tracer = build_tracer(settings)
+    provider = build_provider(settings, logger, tracer=tracer)
+    checkpoint_connection = sqlite3.connect(str(settings.checkpoint_database_path), check_same_thread=False)
     identity_repository = SQLiteRememberedIdentityRepository(settings.identity_database_path)
     identity_service = RememberedIdentityService(identity_repository, settings.remembered_identity_ttl_hours)
-    graph = build_graph(settings=settings, logger=logger)
+    graph = build_graph(
+        settings=settings,
+        logger=logger,
+        tracer=tracer,
+        provider=provider,
+        checkpoint_connection=checkpoint_connection,
+    )
     return RuntimeContext(
         settings=settings,
         logger=logger,
         tracer=tracer,
         graph=graph,
+        provider=provider,
+        checkpoint_connection=checkpoint_connection,
         identity_service=identity_service,
     )
 
@@ -57,8 +87,9 @@ runtime = create_runtime()
 graph = runtime.graph
 
 
-def reset_runtime(settings=None) -> RuntimeContext:
+def reset_runtime(settings: Settings | None = None) -> RuntimeContext:
     global runtime, graph
+    runtime.checkpoint_connection.close()
     runtime = create_runtime(settings=settings)
     graph = runtime.graph
     return runtime
@@ -66,15 +97,17 @@ def reset_runtime(settings=None) -> RuntimeContext:
 
 @router.post("/sessions/new", response_model=NewSessionResponse)
 async def create_session(request: NewSessionRequest | None = None) -> NewSessionResponse:
+    _cleanup_expired_bootstrap_entries()
     session_id = str(uuid4())
     thread_id = session_id
     restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id if request else None)
     restored_verification = bool(restored_identity and restored_identity.status == RememberedIdentityStatus.ACTIVE)
     remembered_identity_status = _build_identity_summary(restored_identity, request.remembered_identity_id if request else None)
-    runtime.session_bootstrap[session_id] = {
-        "thread_id": thread_id,
-        "state": _build_bootstrap_state(restored_identity, remembered_identity_status),
-    }
+    if restored_verification:
+        runtime.session_bootstrap[session_id] = SessionBootstrap(
+            state=_build_bootstrap_state(restored_identity, remembered_identity_status),
+            created_at=time.monotonic(),
+        )
     if restored_verification:
         response_text = f"Welcome back, {restored_identity.display_name or 'patient'}. Your identity has been restored."
     else:
@@ -90,29 +123,26 @@ async def create_session(request: NewSessionRequest | None = None) -> NewSession
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    bootstrap = runtime.session_bootstrap.get(request.session_id)
+    _cleanup_expired_bootstrap_entries()
+    bootstrap = runtime.session_bootstrap.pop(request.session_id, None)
     if bootstrap is None and request.remembered_identity_id:
         restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id)
-        bootstrap = {
-            "thread_id": request.session_id,
-            "state": _build_bootstrap_state(
+        bootstrap = SessionBootstrap(
+            state=_build_bootstrap_state(
                 restored_identity,
                 _build_identity_summary(restored_identity, request.remembered_identity_id),
             ),
-        }
-        runtime.session_bootstrap[request.session_id] = bootstrap
+            created_at=time.monotonic(),
+        )
     try:
         payload = {"thread_id": request.session_id, "incoming_message": request.message}
         if bootstrap:
-            payload.update(bootstrap["state"])
+            payload.update(bootstrap.state)
         record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
         result = graph.invoke(payload, {"configurable": {"thread_id": request.session_id}})
         record_trace_event(runtime.logger, runtime.tracer, "workflow.end", {"session_id": request.session_id, "result": result})
     except RepositoryUnavailableError as error:
         raise HTTPException(status_code=503, detail="The appointment service is temporarily unavailable.") from error
-    finally:
-        if request.session_id in runtime.session_bootstrap:
-            del runtime.session_bootstrap[request.session_id]
 
     appointments = None
     if result.get("requested_action") == "list_appointments" and result.get("listed_appointments"):
@@ -184,7 +214,7 @@ def _ensure_remembered_identity(result: dict[str, Any]) -> RememberedIdentity | 
 def _build_bootstrap_state(
     identity: RememberedIdentity | None,
     remembered_identity_status: RememberedIdentitySummary,
-) -> dict[str, Any]:
+) -> ConversationState:
     if identity is None or identity.status != RememberedIdentityStatus.ACTIVE:
         return {"remembered_identity_status": remembered_identity_status.model_dump()}
     return {
@@ -208,3 +238,14 @@ def _build_identity_summary(
             expires_at=None,
         )
     return RememberedIdentitySummary(**runtime.identity_service.summary_for_identity(identity))
+
+
+def _cleanup_expired_bootstrap_entries() -> None:
+    now = time.monotonic()
+    expired_session_ids = [
+        session_id
+        for session_id, bootstrap in runtime.session_bootstrap.items()
+        if now - bootstrap.created_at > SESSION_BOOTSTRAP_TTL_SECONDS
+    ]
+    for session_id in expired_session_ids:
+        del runtime.session_bootstrap[session_id]

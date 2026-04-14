@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import TypedDict
 
-ActionName = Literal[
-    "verify_identity",
-    "list_appointments",
-    "confirm_appointment",
-    "cancel_appointment",
-    "help",
-    "unknown",
-]
+from app.action_names import ActionName
+from app.domain.models import Appointment
 
 
 class ConversationState(TypedDict, total=False):
@@ -25,15 +19,15 @@ class ConversationState(TypedDict, total=False):
     missing_verification_fields: list[str]
     requested_action: ActionName | None
     deferred_action: ActionName | None
-    listed_appointments: list
+    listed_appointments: list[Appointment]
     appointment_reference: str | None
     selected_appointment_id: str | None
-    last_action_result: dict | None
+    last_action_result: dict[str, str | None] | None
     response_text: str | None
     error_code: str | None
     provider_error: str | None
     remembered_identity_id: str | None
-    remembered_identity_status: dict | None
+    remembered_identity_status: dict[str, str | None] | None
 
 
 def ensure_state_defaults(state: ConversationState) -> ConversationState:

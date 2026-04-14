@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Callable
 from uuid import uuid4
 
 from app.domain.models import (
@@ -13,6 +15,9 @@ from app.domain.models import (
     RememberedIdentityStatus,
 )
 from app.domain.policies import normalize_dob, normalize_name, normalize_phone
+from app.repositories.appointment_repository import AppointmentRepository
+from app.repositories.patient_repository import PatientRepository
+from app.repositories.remembered_identity_repository import RememberedIdentityRepository
 
 
 class RepositoryUnavailableError(RuntimeError):
@@ -20,7 +25,7 @@ class RepositoryUnavailableError(RuntimeError):
 
 
 class VerificationService:
-    def __init__(self, patient_repository):
+    def __init__(self, patient_repository: PatientRepository):
         self.patient_repository = patient_repository
 
     def verify_identity(self, full_name: str, phone: str, dob: str) -> Patient | None:
@@ -35,7 +40,7 @@ class VerificationService:
 
 
 class AppointmentService:
-    def __init__(self, appointment_repository):
+    def __init__(self, appointment_repository: AppointmentRepository):
         self.appointment_repository = appointment_repository
 
     def list_appointments(self, patient_id: str) -> list[Appointment]:
@@ -76,7 +81,12 @@ class AppointmentService:
 
 
 class RememberedIdentityService:
-    def __init__(self, identity_repository, ttl_hours: int, now_factory=None):
+    def __init__(
+        self,
+        identity_repository: RememberedIdentityRepository,
+        ttl_hours: int,
+        now_factory: Callable[[], datetime] | None = None,
+    ):
         self.identity_repository = identity_repository
         self.ttl_hours = ttl_hours
         self.now_factory = now_factory or (lambda: datetime.now(UTC))
@@ -145,14 +155,8 @@ class RememberedIdentityService:
         }
 
     def _mark_expired(self, identity: RememberedIdentity) -> RememberedIdentity:
-        return RememberedIdentity(
-            remembered_identity_id=identity.remembered_identity_id,
-            patient_id=identity.patient_id,
-            display_name=identity.display_name,
-            verification_fingerprint=identity.verification_fingerprint,
-            issued_at=identity.issued_at,
-            expires_at=identity.expires_at,
-            revoked_at=identity.revoked_at,
+        return replace(
+            identity,
             status=RememberedIdentityStatus.EXPIRED if identity.revoked_at is None else RememberedIdentityStatus.REVOKED,
         )
 

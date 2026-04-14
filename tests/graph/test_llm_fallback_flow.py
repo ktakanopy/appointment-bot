@@ -17,7 +17,7 @@ class BrokenProvider:
 
 
 def test_graph_uses_deterministic_fallback_when_provider_fails(monkeypatch):
-    monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger: BrokenProvider())
+    monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
     graph = builder_module.build_graph()
     config = {"configurable": {"thread_id": "graph-llm-fallback"}}
 

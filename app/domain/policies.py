@@ -134,10 +134,6 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
     if len(date_matches) > 1:
         return None
 
-    for appointment in appointments:
-        if appointment.id == reference:
-            return appointment
-
     if reference.isdigit():
         index = int(reference)
         if 0 <= index < len(appointments):

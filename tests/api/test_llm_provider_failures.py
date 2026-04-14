@@ -24,7 +24,8 @@ class BrokenProvider:
 
 
 def test_api_returns_successful_fallback_when_provider_fails(monkeypatch):
-    monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger: BrokenProvider())
+    monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
+    monkeypatch.setattr(routes, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
     routes.reset_runtime()
     session = client.post("/sessions/new").json()
 

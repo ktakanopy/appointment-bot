@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from app.domain import policies
-from app.graph.state import ConversationState, ensure_state_defaults
+from app.graph.state import ConversationState
 from app.observability import log_event
 
 
 def make_interpret_node(logger, provider=None):
     def interpret(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
         message = (state.get("incoming_message") or "").strip()
         deterministic_action = policies.extract_requested_action(message, state)
         requested_action = deterministic_action

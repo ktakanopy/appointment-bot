@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.domain import policies
-from app.graph.state import ConversationState, ensure_state_defaults
+from app.graph.state import ConversationState
 from app.observability import log_event
 
 
@@ -14,7 +14,6 @@ PROMPTS = {
 
 def make_verification_node(verification_service, logger):
     def verify(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
         state["missing_verification_fields"] = policies.missing_verification_fields(state)
 
         if state["missing_verification_fields"]:

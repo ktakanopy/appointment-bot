@@ -3,27 +3,13 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from app.domain import policies
-from app.domain.models import ActionResult
-from app.graph.state import ConversationState, ensure_state_defaults
+from app.domain.models import ActionResult, Appointment
+from app.graph.state import ConversationState
 from app.observability import log_event
-
-
-def _serialize_appointments(appointments):
-    return [
-        {
-            "id": appointment.id,
-            "date": appointment.date,
-            "time": appointment.time,
-            "doctor": appointment.doctor,
-            "status": appointment.status.value,
-        }
-        for appointment in appointments
-    ]
 
 
 def make_list_node(appointment_service, logger):
     def list_appointments(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
         appointments = appointment_service.list_appointments(state["patient_id"])
         state["listed_appointments"] = appointments
         state["requested_action"] = "list_appointments"
@@ -37,28 +23,15 @@ def make_list_node(appointment_service, logger):
 
 def make_confirm_node(appointment_service, logger):
     def confirm_appointment(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
-        listed_appointments = state.get("listed_appointments") or []
-        reference = state.get("appointment_reference")
-        if reference and reference.isdigit() and not listed_appointments:
-            state["response_text"] = "Please ask to see your appointments first, then tell me which one you want to confirm."
-            state["error_code"] = "missing_list_context"
-            log_event(logger, "resolve_appointment_reference", state, outcome="missing_list_context")
-            return state
-
-        appointments = listed_appointments or appointment_service.list_appointments(state["patient_id"])
-        appointment = policies.resolve_appointment_reference(reference, appointments)
-        state["requested_action"] = "confirm_appointment"
+        appointment = _resolve_target_appointment(
+            state,
+            appointment_service,
+            logger,
+            action_name="confirm_appointment",
+            missing_list_context_message="Please ask to see your appointments first, then tell me which one you want to confirm.",
+            ambiguous_message="I couldn't tell which appointment you want to confirm. Please choose by number or date.",
+        )
         if appointment is None:
-            state["response_text"] = "I couldn't tell which appointment you want to confirm. Please choose by number or date."
-            state["error_code"] = "ambiguous_appointment_reference"
-            log_event(logger, "resolve_appointment_reference", state, outcome="ambiguous")
-            return state
-
-        if not policies.appointment_is_owned_by_patient(appointment, state.get("patient_id")):
-            state["response_text"] = "I couldn't complete that request. Please choose one of your appointments."
-            state["error_code"] = "appointment_not_owned"
-            log_event(logger, "confirm_appointment", state, outcome="not_owned")
             return state
 
         if not policies.can_confirm(appointment) and appointment.status.value != "confirmed":
@@ -83,28 +56,15 @@ def make_confirm_node(appointment_service, logger):
 
 def make_cancel_node(appointment_service, logger):
     def cancel_appointment(state: ConversationState) -> ConversationState:
-        state = ensure_state_defaults(state)
-        listed_appointments = state.get("listed_appointments") or []
-        reference = state.get("appointment_reference")
-        if reference and reference.isdigit() and not listed_appointments:
-            state["response_text"] = "Please ask to see your appointments first, then tell me which one you want to cancel."
-            state["error_code"] = "missing_list_context"
-            log_event(logger, "resolve_appointment_reference", state, outcome="missing_list_context")
-            return state
-
-        appointments = listed_appointments or appointment_service.list_appointments(state["patient_id"])
-        appointment = policies.resolve_appointment_reference(reference, appointments)
-        state["requested_action"] = "cancel_appointment"
+        appointment = _resolve_target_appointment(
+            state,
+            appointment_service,
+            logger,
+            action_name="cancel_appointment",
+            missing_list_context_message="Please ask to see your appointments first, then tell me which one you want to cancel.",
+            ambiguous_message="I couldn't tell which appointment you want to cancel. Please choose by number or date.",
+        )
         if appointment is None:
-            state["response_text"] = "I couldn't tell which appointment you want to cancel. Please choose by number or date."
-            state["error_code"] = "ambiguous_appointment_reference"
-            log_event(logger, "resolve_appointment_reference", state, outcome="ambiguous")
-            return state
-
-        if not policies.appointment_is_owned_by_patient(appointment, state.get("patient_id")):
-            state["response_text"] = "I couldn't complete that request. Please choose one of your appointments."
-            state["error_code"] = "appointment_not_owned"
-            log_event(logger, "cancel_appointment", state, outcome="not_owned")
             return state
 
         if not policies.can_cancel(appointment) and appointment.status.value != "canceled":
@@ -137,3 +97,39 @@ def _format_appointment_list(appointments) -> str:
             f"{index}. {appointment.date} at {appointment.time} with {appointment.doctor} ({appointment.status.value})"
         )
     return "\n".join(lines)
+
+
+def _resolve_target_appointment(
+    state: ConversationState,
+    appointment_service,
+    logger,
+    *,
+    action_name: str,
+    missing_list_context_message: str,
+    ambiguous_message: str,
+) -> Appointment | None:
+    listed_appointments = state.get("listed_appointments") or []
+    reference = state.get("appointment_reference")
+    if reference and reference.isdigit() and not listed_appointments:
+        state["requested_action"] = action_name
+        state["response_text"] = missing_list_context_message
+        state["error_code"] = "missing_list_context"
+        log_event(logger, "resolve_appointment_reference", state, outcome="missing_list_context")
+        return None
+
+    appointments = listed_appointments or appointment_service.list_appointments(state["patient_id"])
+    appointment = policies.resolve_appointment_reference(reference, appointments)
+    state["requested_action"] = action_name
+    if appointment is None:
+        state["response_text"] = ambiguous_message
+        state["error_code"] = "ambiguous_appointment_reference"
+        log_event(logger, "resolve_appointment_reference", state, outcome="ambiguous")
+        return None
+
+    if not policies.appointment_is_owned_by_patient(appointment, state.get("patient_id")):
+        state["response_text"] = "I couldn't complete that request. Please choose one of your appointments."
+        state["error_code"] = "appointment_not_owned"
+        log_event(logger, action_name, state, outcome="not_owned")
+        return None
+
+    return appointment
