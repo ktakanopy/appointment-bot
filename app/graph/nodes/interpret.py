@@ -18,14 +18,17 @@ def make_interpret_node(logger, provider=None):
                 state["provider_error"] = "interpret_failed"
                 state["error_code"] = state.get("error_code") or "provider_fallback"
         if provider_result is not None:
+            provider_phone = policies.extract_phone(provider_result.phone) if provider_result.phone else None
+            provider_dob = policies.normalize_dob(provider_result.dob) if provider_result.dob else None
+            provider_full_name = policies.normalize_name(provider_result.full_name).title() if provider_result.full_name else None
             if deterministic_action == "unknown" and provider_result.requested_action != "unknown":
                 requested_action = provider_result.requested_action
-            if state.get("provided_phone") is None and provider_result.phone:
-                state["provided_phone"] = provider_result.phone
-            if state.get("provided_dob") is None and provider_result.dob:
-                state["provided_dob"] = provider_result.dob
-            if state.get("provided_full_name") is None and provider_result.full_name:
-                state["provided_full_name"] = provider_result.full_name
+            if state.get("provided_phone") is None and provider_phone:
+                state["provided_phone"] = provider_phone
+            if state.get("provided_dob") is None and provider_dob:
+                state["provided_dob"] = provider_dob
+            if state.get("provided_full_name") is None and provider_full_name:
+                state["provided_full_name"] = provider_full_name
             if provider_result.appointment_reference:
                 state["appointment_reference"] = provider_result.appointment_reference
         state["requested_action"] = requested_action

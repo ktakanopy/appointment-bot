@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -17,11 +16,6 @@ def _env_int(name: str, default: int) -> int:
     if value is None:
         return default
     return int(value)
-
-
-def _env_path(name: str, default: str) -> Path:
-    value = os.getenv(name, default)
-    return Path(value).expanduser().resolve()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,8 +37,6 @@ class TracingSettings:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    checkpoint_database_path: Path
-    identity_database_path: Path
     remembered_identity_ttl_hours: int
     session_ttl_minutes: int
     max_verification_attempts: int
@@ -54,8 +46,6 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    checkpoint_database_path = _env_path("CHECKPOINT_DATABASE_PATH", ".data/checkpoints.sqlite")
-    identity_database_path = _env_path("IDENTITY_DATABASE_PATH", ".data/remembered_identity.sqlite")
     provider = ProviderSettings(
         provider_name=os.getenv("LLM_PROVIDER", "openai"),
         model_name=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
@@ -68,8 +58,6 @@ def load_settings() -> Settings:
     tracing_host = os.getenv("LANGFUSE_HOST")
     tracing_enabled = _env_flag("TRACING_ENABLED", bool(tracing_public_key and tracing_secret_key))
     settings = Settings(
-        checkpoint_database_path=checkpoint_database_path,
-        identity_database_path=identity_database_path,
         remembered_identity_ttl_hours=_env_int("REMEMBERED_IDENTITY_TTL_HOURS", 24),
         session_ttl_minutes=_env_int("SESSION_TTL_MINUTES", 60),
         max_verification_attempts=_env_int("MAX_VERIFICATION_ATTEMPTS", 3),
@@ -82,6 +70,4 @@ def load_settings() -> Settings:
             host=tracing_host,
         ),
     )
-    settings.checkpoint_database_path.parent.mkdir(parents=True, exist_ok=True)
-    settings.identity_database_path.parent.mkdir(parents=True, exist_ok=True)
     return settings

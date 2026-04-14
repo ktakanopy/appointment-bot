@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.domain.models import RememberedIdentity, RememberedIdentityStatus
-from app.repositories.sqlite_identity import SQLiteRememberedIdentityRepository
+from app.repositories.in_memory import InMemoryRememberedIdentityRepository
 
 
-def test_sqlite_identity_repository_round_trip(tmp_path):
-    repository = SQLiteRememberedIdentityRepository(tmp_path / "remembered_identity.sqlite")
+def test_in_memory_identity_repository_round_trip():
+    repository = InMemoryRememberedIdentityRepository()
     identity = RememberedIdentity(
         remembered_identity_id="rid-1",
         patient_id="p1",
@@ -27,8 +27,8 @@ def test_sqlite_identity_repository_round_trip(tmp_path):
     assert restored.status == RememberedIdentityStatus.ACTIVE
 
 
-def test_sqlite_identity_repository_revokes_identity(tmp_path):
-    repository = SQLiteRememberedIdentityRepository(tmp_path / "remembered_identity.sqlite")
+def test_in_memory_identity_repository_revokes_identity():
+    repository = InMemoryRememberedIdentityRepository()
     identity = RememberedIdentity(
         remembered_identity_id="rid-2",
         patient_id="p1",

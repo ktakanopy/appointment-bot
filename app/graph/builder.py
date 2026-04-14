@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.config import Settings, load_settings
@@ -31,7 +30,6 @@ def build_graph(
     provider: LLMProvider | None | object = _UNSET,
     verification_service: VerificationService | None = None,
     appointment_service: AppointmentService | None = None,
-    checkpoint_connection: sqlite3.Connection | None = None,
 ):
     settings = settings or load_settings()
     logger = logger or get_logger()
@@ -93,5 +91,4 @@ def build_graph(
     builder.add_edge("handle_help_or_unknown", "generate_response")
     builder.add_edge("generate_response", END)
 
-    connection = checkpoint_connection or sqlite3.connect(str(settings.checkpoint_database_path), check_same_thread=False)
-    return builder.compile(checkpointer=SqliteSaver(connection))
+    return builder.compile(checkpointer=InMemorySaver())

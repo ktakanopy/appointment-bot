@@ -20,15 +20,15 @@
 
 **Consequences:** Routing logic is testable without an LLM. The graph can be visualized as a diagram. State mutations are explicit and auditable, and the graph is compiled once and reused across requests.
 
-## ADR-003: SQLite Checkpoints over InMemorySaver
+## ADR-003: InMemorySaver for Conversation State
 
 **Status:** Accepted
 
-**Context:** LangGraph requires a checkpointer for thread-scoped state persistence. InMemorySaver loses state on restart. SQLite provides durable persistence without requiring a separate database server.
+**Context:** The project is intentionally scoped as a demo. Persisting conversation state across restarts adds extra code and operational concerns that are not necessary to demonstrate the verification and appointment flows.
 
-**Decision:** Use langgraph-checkpoint-sqlite with SqliteSaver.
+**Decision:** Use LangGraph `InMemorySaver` for thread-scoped state.
 
-**Consequences:** Conversation state survives process restarts. The checkpoint file is a single SQLite database. `check_same_thread=False` is required for multi-threaded access from async handlers.
+**Consequences:** The runtime is simpler and easier to explain. Conversation state is lost when the process restarts, which is acceptable for the current scope.
 
 ## ADR-004: In-Memory Domain Repositories
 
@@ -50,15 +50,15 @@
 
 **Consequences:** The system cannot be prompt-injected into skipping verification. Tests run without an API key. Provider failures degrade to deterministic responses rather than crashing.
 
-## ADR-006: Separate SQLite Store for Remembered Identity
+## ADR-006: In-Memory Remembered Identity Store
 
 **Status:** Accepted
 
-**Context:** Remembered identity has a different lifecycle than conversation state. It needs TTL, revocation, and cross-session lookup by patient_id. Storing it in the LangGraph checkpointer would conflate concerns.
+**Context:** Remembered identity has a different lifecycle than conversation state and still needs TTL and revocation semantics. For the current scope, a separate in-memory repository keeps those concerns isolated without adding persistence complexity.
 
-**Decision:** Use a separate SQLite database with a dedicated repository for remembered identity records.
+**Decision:** Use a dedicated in-memory repository for remembered identity records.
 
-**Consequences:** Identity records persist independently of conversation threads. Revocation is immediate. The schema can evolve independently of the checkpointer format.
+**Consequences:** Revocation and restore logic stay separate from the graph state. Remembered identities are cleared on process restart, which is acceptable for the current demo scope.
 
 ## ADR-007: Streamlit Frontend
 

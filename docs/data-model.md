@@ -99,9 +99,9 @@ stateDiagram-v2
 |------|---------|----------|
 | Patient records | In-memory (InMemoryPatientRepository) | Process lifetime |
 | Appointment records | In-memory (InMemoryAppointmentRepository) | Process lifetime |
-| Conversation state (per-thread) | SQLite via LangGraph SqliteSaver | Persists across restarts |
-| Remembered identity | SQLite (SQLiteRememberedIdentityRepository) | Persists across restarts, TTL + revoke |
+| Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
+| Remembered identity | In-memory (InMemoryRememberedIdentityRepository) | Process lifetime, TTL + revoke |
 | Session registry | In-memory (runtime.sessions dict) | Process lifetime, TTL-based cleanup |
 | Session bootstrap | In-memory (runtime.session_bootstrap dict) | 300s TTL |
 
-In-memory patient and appointment data is intentional for demo scope. A production system would back these with a database.
+In-memory storage is intentional for demo scope. A production system would back conversation state, remembered identity, patient data, and appointment data with external persistence.

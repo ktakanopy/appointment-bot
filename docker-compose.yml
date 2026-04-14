@@ -15,8 +15,6 @@ services:
       FRONTEND_API_BASE_URL: http://api:8000
     ports:
       - "8000:8000"
-    volumes:
-      - appointment_data:/app/.data
 
   frontend:
     build:
@@ -28,6 +26,3 @@ services:
       - api
     ports:
       - "8501:8501"
-
-volumes:
-  appointment_data:

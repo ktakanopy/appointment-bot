@@ -16,7 +16,7 @@ This document describes security-related behavior in the healthcare appointment 
 
 **Matching**: verification uses normalized comparison: case-insensitive name, digits-only phone, ISO date.
 
-**Failure handling**: on a failed match, all identity fields are cleared and the flow restarts from full name. The failure message is generic so the response does not reveal which field was incorrect.
+**Failure handling**: when a field format is invalid, the response explains which field is invalid and asks for that same field again without consuming a verification attempt. When all three fields are syntactically valid but do not match a patient record, the flow clears the collected identity fields, increments the verification failure counter, and restarts from full name with a mismatch explanation.
 
 ## 2. Session validation
 

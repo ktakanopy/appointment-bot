@@ -7,6 +7,7 @@ from app.api.routes import create_runtime
 from app.evals.judge import run_judge
 from app.evals.models import EvaluationResult
 from app.evals.scenarios.core_scenarios import CORE_SCENARIOS
+from app.runtime import close_runtime
 
 
 def run_scenarios(scenarios=None) -> list[EvaluationResult]:
@@ -56,7 +57,7 @@ def run_scenarios(scenarios=None) -> list[EvaluationResult]:
             )
         return results
     finally:
-        runtime.checkpoint_connection.close()
+        close_runtime(runtime)
 
 
 def main() -> None:

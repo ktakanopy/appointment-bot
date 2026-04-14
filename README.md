@@ -53,10 +53,10 @@ Key design decisions:
 - a single `POST /chat` endpoint
 - a `POST /sessions/new` bootstrap endpoint and a `POST /remembered-identity/forget` revoke endpoint
 - explicit workflow orchestration with `LangGraph StateGraph`
-- SQLite-backed short-term conversation memory keyed by `thread_id`
+- in-memory conversation state keyed by `thread_id`
 - deterministic safety gates for verification and protected actions
 - a lightweight Streamlit frontend for patient chat
-- in-memory patient and appointment repositories with uv run uvicorn app.main:app SQLite-backed remembered identity
+- in-memory repositories for patients, appointments, and remembered identity
 
 Main structure:
 
@@ -204,8 +204,7 @@ curl -X POST http://localhost:8000/sessions/new \
 ## Sample Data
 
 The project uses in-memory patient and appointment repositories defined in
-`app/repositories/in_memory.py`, plus SQLite files for LangGraph checkpoints
-and remembered identity.
+`app/repositories/in_memory.py`.
 
 Valid manual test example:
 
@@ -264,21 +263,19 @@ Specification artifacts:
 - The project is intentionally scoped to the exercise and uses simplified
   identity verification.
 - There is no real EHR/EMR integration.
-- Appointment and patient sample data remains in memory.
-- Conversation checkpoints and remembered identity are persisted to SQLite.
+- Appointment, session, conversation, and remembered identity data remain in memory.
 
-## Standout Additions
+## Scaling Ideas
 
-- import-time runtime wiring was replaced with request-time runtime access plus
-  FastAPI lifespan management
-- `/chat` now rejects unknown or expired session ids instead of silently
-  accepting arbitrary thread ids
-- verification attempts are capped per session, with automatic lockout after
-  repeated failures
-- the Streamlit frontend now uses the same `POST /chat` flow as the public API,
-  which keeps the client and backend simpler
-- the eval suite now covers retry recovery and missing-list-context flows
-- graph-level concurrency coverage verifies parallel thread isolation
+If this application needed to move beyond demo scope, the next improvements would be:
+
+- stream token output from the backend to the frontend instead of waiting for full responses
+- replace in-memory state with an external database or cache so sessions and remembered identity survive restarts
+- move patient and appointment data to a real persistence layer instead of seeded demo data
+- add background workers and queueing for slower downstream operations or audits
+- add stronger auth, rate limiting, and production-grade observability around protected flows
+
+
 
 ## Docker
 

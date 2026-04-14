@@ -11,6 +11,12 @@ PROMPTS = {
     "dob": "Thanks. What is your date of birth? Use YYYY-MM-DD.",
 }
 
+INVALID_RESPONSES = {
+    "full_name": ("That full name looks invalid. Please enter your first and last name.", "invalid_full_name"),
+    "phone": ("That phone number looks invalid. Please enter at least 10 digits.", "invalid_phone"),
+    "dob": ("That date of birth looks invalid. Please use YYYY-MM-DD.", "invalid_dob"),
+}
+
 
 def make_verification_node(verification_service, logger, max_verification_attempts: int):
     def verify(state: ConversationState) -> ConversationState:
@@ -22,14 +28,19 @@ def make_verification_node(verification_service, logger, max_verification_attemp
             log_event(logger, "verify_identity", state, outcome="locked")
             return state
 
+        previous_status = state.get("verification_status")
         state["missing_verification_fields"] = policies.missing_verification_fields(state)
 
         if state["missing_verification_fields"]:
             next_field = state["missing_verification_fields"][0]
             state["verification_status"] = "collecting"
             state["requested_action"] = "verify_identity"
-            state["response_text"] = PROMPTS[next_field]
-            state["error_code"] = None
+            invalid_response = _invalid_response_for_field(state, next_field, previous_status)
+            if invalid_response is None:
+                state["response_text"] = PROMPTS[next_field]
+                state["error_code"] = None
+            else:
+                state["response_text"], state["error_code"] = invalid_response
             log_event(logger, "collect_missing_verification_fields", state)
             return state
 
@@ -55,7 +66,7 @@ def make_verification_node(verification_service, logger, max_verification_attemp
                 state["error_code"] = "verification_locked"
                 log_event(logger, "verify_identity", state, outcome="locked")
                 return state
-            state["response_text"] = "I couldn't verify your identity with those details. Let's try again. What is your full name?"
+            state["response_text"] = "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?"
             state["error_code"] = "invalid_identity"
             log_event(logger, "verify_identity", state, outcome="failed")
             return state
@@ -73,3 +84,25 @@ def make_verification_node(verification_service, logger, max_verification_attemp
         return state
 
     return verify
+
+
+def _invalid_response_for_field(
+    state: ConversationState,
+    field_name: str,
+    previous_status: str | None,
+) -> tuple[str, str] | None:
+    if previous_status not in {"collecting", "failed"}:
+        return None
+    message = (state.get("incoming_message") or "").strip()
+    if not message:
+        return None
+    parsed_name = policies.extract_full_name(message)
+    parsed_phone = policies.extract_phone(message)
+    parsed_dob = policies.extract_dob(message)
+    if field_name == "full_name" and parsed_name is None and parsed_phone is None and parsed_dob is None:
+        return INVALID_RESPONSES[field_name]
+    if field_name == "phone" and parsed_phone is None and parsed_name is None and parsed_dob is None:
+        return INVALID_RESPONSES[field_name]
+    if field_name == "dob" and parsed_dob is None and parsed_name is None and parsed_phone is None:
+        return INVALID_RESPONSES[field_name]
+    return None

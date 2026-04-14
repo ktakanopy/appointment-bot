@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-import sqlite3
-import time
 from typing import Any, Protocol
 
 from app.config import Settings, load_settings
@@ -12,7 +10,7 @@ from app.graph.builder import build_graph
 from app.llm.base import LLMProvider
 from app.llm.factory import build_provider
 from app.observability import build_tracer, get_logger
-from app.repositories.sqlite_identity import SQLiteRememberedIdentityRepository
+from app.repositories.in_memory import InMemoryRememberedIdentityRepository
 
 
 class InvokableGraph(Protocol):
@@ -41,7 +39,6 @@ class RuntimeContext:
     tracer: object | None
     graph: InvokableGraph
     provider: LLMProvider | None
-    checkpoint_connection: sqlite3.Connection
     identity_service: RememberedIdentityService
     session_bootstrap: dict[str, SessionBootstrap] = field(default_factory=dict)
     sessions: dict[str, SessionRecord] = field(default_factory=dict)
@@ -52,15 +49,13 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
     logger = get_logger()
     tracer = build_tracer(settings)
     provider = build_provider(settings, logger, tracer=tracer)
-    checkpoint_connection = sqlite3.connect(str(settings.checkpoint_database_path), check_same_thread=False)
-    identity_repository = SQLiteRememberedIdentityRepository(settings.identity_database_path)
+    identity_repository = InMemoryRememberedIdentityRepository()
     identity_service = RememberedIdentityService(identity_repository, settings.remembered_identity_ttl_hours)
     graph = build_graph(
         settings=settings,
         logger=logger,
         tracer=tracer,
         provider=provider,
-        checkpoint_connection=checkpoint_connection,
     )
     return RuntimeContext(
         settings=settings,
@@ -68,12 +63,9 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
         tracer=tracer,
         graph=graph,
         provider=provider,
-        checkpoint_connection=checkpoint_connection,
         identity_service=identity_service,
     )
 
 
 def close_runtime(runtime: RuntimeContext | None) -> None:
-    if runtime is None:
-        return
-    runtime.checkpoint_connection.close()
+    return None

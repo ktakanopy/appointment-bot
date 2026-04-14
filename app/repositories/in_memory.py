@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from dataclasses import replace
 
-from app.domain.models import Appointment, AppointmentStatus, Patient
+from app.domain.models import Appointment, AppointmentStatus, Patient, RememberedIdentity, RememberedIdentityStatus
 
 
 class InMemoryPatientRepository:
@@ -57,3 +58,41 @@ class InMemoryAppointmentRepository:
             appointment = replace(appointment, status=AppointmentStatus.CANCELED)
             self._appointments[appointment_id] = appointment
         return appointment
+
+
+class InMemoryRememberedIdentityRepository:
+    def __init__(self, identities: list[RememberedIdentity] | None = None):
+        self._identities = {
+            identity.remembered_identity_id: identity
+            for identity in (identities or [])
+        }
+
+    def get_by_id(self, remembered_identity_id: str) -> RememberedIdentity | None:
+        return self._identities.get(remembered_identity_id)
+
+    def get_active_by_patient_id(self, patient_id: str) -> RememberedIdentity | None:
+        active_identities = [
+            identity
+            for identity in self._identities.values()
+            if identity.patient_id == patient_id
+            and identity.status == RememberedIdentityStatus.ACTIVE
+            and identity.revoked_at is None
+        ]
+        if not active_identities:
+            return None
+        return max(active_identities, key=lambda identity: identity.issued_at)
+
+    def save(self, identity: RememberedIdentity) -> RememberedIdentity:
+        self._identities[identity.remembered_identity_id] = identity
+        return identity
+
+    def revoke(self, remembered_identity_id: str) -> bool:
+        identity = self._identities.get(remembered_identity_id)
+        if identity is None or identity.revoked_at is not None:
+            return False
+        self._identities[remembered_identity_id] = replace(
+            identity,
+            revoked_at=datetime.now(UTC),
+            status=RememberedIdentityStatus.REVOKED,
+        )
+        return True
