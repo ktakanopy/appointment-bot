@@ -27,7 +27,6 @@ class ConversationState(TypedDict, total=False):
     last_action_result: dict[str, str | None] | None
     response_text: str | None
     error_code: str | None
-    provider_error: str | None
     remembered_identity_id: str | None
     remembered_identity_status: dict[str, str | None] | None
 
@@ -51,7 +50,6 @@ def ensure_state_defaults(state: ConversationState) -> ConversationState:
     state.setdefault("last_action_result", None)
     state.setdefault("response_text", None)
     state.setdefault("error_code", None)
-    state.setdefault("provider_error", None)
     state.setdefault("remembered_identity_id", None)
     state.setdefault("remembered_identity_status", None)
     return state

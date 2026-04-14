@@ -25,25 +25,15 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 ## 3. Factory pattern
 
-`build_provider` in `app/llm/factory.py` constructs a concrete provider from `Settings`. It returns `OpenAIProvider` only when `ProviderSettings.provider_name` is `"openai"` and `ProviderSettings.api_key` is set. Those values come from environment configuration (`LLM_PROVIDER` defaults to `openai`; `OPENAI_API_KEY` supplies the key). In all other cases the function returns `None`.
+`build_provider` in `app/llm/factory.py` constructs a concrete provider from `Settings`. It returns `OpenAIProvider` when `ProviderSettings.provider_name` is `"openai"` and `ProviderSettings.api_key` is present. Those values come from environment configuration (`LLM_PROVIDER` defaults to `openai`; `OPENAI_API_KEY` supplies the key). If configuration is missing or unsupported, the factory raises and runtime startup fails fast.
 
-When `build_provider` returns `None`, the graph is wired with no provider. Behavior is unchanged in structure: the same nodes run; only the optional LLM branches are skipped.
+## 4. Runtime behavior
 
-## 4. Deterministic fallback
+- **`parse_intent_and_entities`** delegates action and entity extraction to the configured provider.
+- **`generate_response`** sends the current response text and state context to the provider for the final patient-facing wording.
+- Verification, appointment ownership, idempotency, and graph routing stay in deterministic Python code outside the provider.
 
-### No provider (`provider is None`)
-
-- **`parse_intent_and_entities`** uses `policies.extract_requested_action` in `app/domain/policies.py` for the action label, plus `extract_phone`, `extract_dob`, `extract_full_name`, and (when the flow needs it) `extract_appointment_reference` for entities. No model call.
-- **`generate_response`** leaves `response_text` as produced by upstream nodes (the deterministic template). No polishing.
-
-The test suite runs with `provider=None`, which demonstrates that listing, verification, confirm, cancel, and help paths complete end-to-end without any LLM.
-
-### With a provider
-
-- **`parse_intent_and_entities`**: Deterministic `extract_requested_action` runs first. If it yields `unknown`, the provider may set a different `requested_action`. The provider may also supply PII or `appointment_reference` when deterministic extraction or state did not already fill those fields. Regex-based extraction in the same node still runs and can fill gaps the model missed.
-- **`generate_response`**: The provider receives the current deterministic `response_text` as `fallback_text` and returns polished text. Prompting instructs the model not to invent actions, permissions, or workflow outcomes; the OpenAI implementation also appends a line reinforcing that constraint.
-
-Both nodes wrap provider calls in `try/except` for broad `Exception`. On failure, `provider_error` is set (`interpret_failed` or `response_failed`), `error_code` is set to `provider_fallback` if not already set, and the workflow continues with the deterministic values already on state.
+Provider calls are no longer wrapped in local fallback logic. If the provider raises, the failure propagates instead of silently degrading to deterministic behavior.
 
 ## 5. Prompt design
 
@@ -75,11 +65,11 @@ Do not invent new actions, permissions, or workflow outcomes.
 
 ## 6. LLM vs deterministic node map
 
-Only two LangGraph nodes may invoke the provider. All nodes still execute deterministic logic first or exclusively.
+Only two LangGraph nodes invoke the provider directly.
 
 ```mermaid
 flowchart LR
-  subgraph optional_llm["Optional LLM"]
+  subgraph llm_nodes["LLM-backed"]
     A[parse_intent_and_entities]
     B[generate_response]
   end
@@ -96,16 +86,14 @@ flowchart LR
 | Node | LLM | Deterministic |
 |------|-----|---------------|
 | ingest_user_message | No | Yes |
-| parse_intent_and_entities | Optional | Yes (always runs) |
+| parse_intent_and_entities | Yes | No |
 | verification_subgraph | No | Yes |
 | list_appointments | No | Yes |
 | confirm_appointment | No | Yes |
 | cancel_appointment | No | Yes |
 | handle_help_or_unknown | No | Yes |
-| generate_response | Optional | Yes (fallback) |
+| generate_response | Yes | Yes (upstream business outcome only) |
 
 ## 7. Error isolation
 
-Provider failures do not abort the graph. The `interpret` and `generate_response` node implementations catch exceptions from the provider, record `provider_error`, and preserve deterministic state and `response_text` as described above.
-
-The API exposes `error_code` from the final graph state (for example `provider_fallback` when the provider failed and the run fell back). Clients can use that field to detect degraded LLM availability without treating the request as a hard failure.
+Tracing failures do not abort the graph, but provider failures now do. The `interpret` and `generate_response` node implementations call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.

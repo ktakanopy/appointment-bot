@@ -27,7 +27,7 @@ def build_graph(
     logger: logging.Logger | None = None,
     settings: Settings | None = None,
     tracer: object = _UNSET,
-    provider: LLMProvider | None | object = _UNSET,
+    provider: LLMProvider | object = _UNSET,
     verification_service: VerificationService | None = None,
     appointment_service: AppointmentService | None = None,
 ):

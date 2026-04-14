@@ -11,9 +11,9 @@ def build_provider(
     settings: Settings,
     logger: logging.Logger,
     tracer: object | None = None,
-) -> LLMProvider | None:
+) -> LLMProvider:
     if settings.provider.provider_name != "openai":
-        return None
+        raise ValueError(f"Unsupported LLM provider: {settings.provider.provider_name}")
     if not settings.provider.api_key:
-        return None
+        raise ValueError("OPENAI_API_KEY is required")
     return OpenAIProvider(settings.provider, logger, tracer=tracer)

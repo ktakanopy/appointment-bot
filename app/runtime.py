@@ -65,7 +65,7 @@ class RuntimeContext:
     logger: logging.Logger
     tracer: object | None
     graph: InvokableGraph
-    provider: LLMProvider | None
+    provider: LLMProvider
     identity_service: RememberedIdentityService
     sessions: dict[str, SessionRecord] = field(default_factory=dict)
 

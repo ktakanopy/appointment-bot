@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios against the compiled graph and judges outcomes either deterministically or via LLM-as-judge.
+The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios against the compiled graph and uses the configured LLM provider as the judge.
 
 ## 2. Framework Components
 
@@ -33,10 +33,9 @@ Pydantic model with fields:
 
 ### Judge (`app/evals/judge.py`)
 
-Two modes:
+Judge mode:
 
-1. **Deterministic** (`provider=None`): Checks that every key in `expected_outcomes` matches the corresponding key in `observed_outcomes`. Exact equality. Returns pass/fail with score `1.0` or `0.0`.
-2. **LLM-as-judge** (`provider` exists): Calls `provider.judge(scenario.model_dump(), transcript, observed_outcomes)`, which sends the full context to the LLM asking for JSON with status, summary, and score. Exceptions return `status="error"`.
+1. **LLM-as-judge**: Calls `provider.judge(scenario.model_dump(), transcript, observed_outcomes)`, which sends the full context to the LLM asking for JSON with status, summary, and score. Exceptions return `status="error"`.
 
 ## 3. Core Scenarios
 

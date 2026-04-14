@@ -24,7 +24,6 @@ class ProviderSettings:
     model_name: str
     api_key: str | None
     timeout_seconds: int
-    fallback_mode: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +50,6 @@ def load_settings() -> Settings:
         model_name=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         api_key=os.getenv("OPENAI_API_KEY"),
         timeout_seconds=_env_int("OPENAI_TIMEOUT_SECONDS", 20),
-        fallback_mode=os.getenv("LLM_FALLBACK_MODE", "deterministic"),
     )
     tracing_public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     tracing_secret_key = os.getenv("LANGFUSE_SECRET_KEY")

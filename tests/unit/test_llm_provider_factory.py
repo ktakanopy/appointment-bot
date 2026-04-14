@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import logging
+import pytest
 
 from app.config import load_settings
 from app.llm.factory import build_provider
 
 
-def test_build_provider_returns_none_without_api_key(monkeypatch):
+def test_build_provider_requires_api_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    provider = build_provider(load_settings(), logging.getLogger("appointment_bot"))
-
-    assert provider is None
+    with pytest.raises(ValueError, match="OPENAI_API_KEY is required"):
+        build_provider(load_settings(), logging.getLogger("appointment_bot"))
 
 
 def test_build_provider_returns_openai_provider_with_api_key(monkeypatch):

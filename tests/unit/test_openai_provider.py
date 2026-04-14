@@ -33,7 +33,6 @@ def _provider() -> OpenAIProvider:
             model_name="gpt-4o-mini",
             api_key="test-key",
             timeout_seconds=20,
-            fallback_mode="deterministic",
         ),
         logger=logging.getLogger("appointment_bot"),
     )

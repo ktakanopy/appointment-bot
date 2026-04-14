@@ -89,7 +89,6 @@ stateDiagram-v2
 | last_action_result | dict or None | Outcome of the last appointment action |
 | response_text | str or None | Text to return to the patient |
 | error_code | str or None | Machine-readable error code for the current turn |
-| provider_error | str or None | LLM provider error if one occurred |
 | remembered_identity_id | str or None | Active remembered identity token |
 | remembered_identity_status | dict or None | Summary of remembered identity state |
 

@@ -4,7 +4,13 @@ from app.evals.judge import run_judge
 from app.evals.models import EvaluationScenario
 
 
-def test_run_judge_uses_deterministic_fallback_without_provider():
+def test_run_judge_uses_provider_result():
+    class WorkingProvider:
+        def judge(self, scenario, transcript, observed_outcomes):
+            from app.llm.schemas import JudgeResult
+
+            return JudgeResult(status="pass", summary="Judge completed.", score=1.0)
+
     scenario = EvaluationScenario(
         scenario_id="s1",
         title="Scenario",
@@ -14,7 +20,7 @@ def test_run_judge_uses_deterministic_fallback_without_provider():
         category="verification",
     )
 
-    result = run_judge(None, scenario, [], {"verified": True})
+    result = run_judge(WorkingProvider(), scenario, [], {"verified": True})
 
     assert result.status == "pass"
 

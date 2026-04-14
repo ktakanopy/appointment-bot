@@ -8,7 +8,7 @@ Log lines are JSON objects written to stdout. The formatter is message-only; the
 
 The default log level is INFO.
 
-`log_event(logger, node, state, **extra)` emits one JSON object per graph node execution. Standard fields are: `thread_id`, `node`, `requested_action`, `verified`, `verification_status`, `error_code`, plus any node-specific extras (for example `appointment_count`, `outcome`, `appointment_id`, `provider_error`).
+`log_event(logger, node, state, **extra)` emits one JSON object per graph node execution. Standard fields are: `thread_id`, `node`, `requested_action`, `verified`, `verification_status`, `error_code`, plus any node-specific extras (for example `appointment_count`, `outcome`, and `appointment_id`).
 
 ## 2. Trace Event Catalog
 
@@ -25,7 +25,7 @@ Events emitted through `record_trace_event` and `record_provider_event`:
 Per-node log events (via `log_event`, not `record_trace_event`):
 
 - ingest_user_message
-- parse_intent_and_entities (plus `appointment_reference`, `provider_error`)
+- parse_intent_and_entities (plus `appointment_reference`)
 - collect_missing_verification_fields
 - verify_identity (plus `outcome`: verified, failed, or locked)
 - list_appointments (plus `appointment_count`)
@@ -33,7 +33,7 @@ Per-node log events (via `log_event`, not `record_trace_event`):
 - cancel_appointment (plus `outcome`, `appointment_id`)
 - resolve_appointment_reference (plus `outcome`: ambiguous or missing_list_context)
 - handle_help_or_unknown
-- generate_response (plus `provider_error`)
+- generate_response
 
 ## 3. Langfuse Integration
 

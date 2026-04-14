@@ -57,7 +57,7 @@ flowchart TB
 
 ### LLM boundary
 
-`app/llm/` exposes an `LLMProvider` protocol with an `OpenAIProvider` implementation. The provider is used for intent extraction and response polishing in graph nodes, not for direct HTTP handling. When the provider is unavailable or configured for deterministic fallback, the system still runs end-to-end. See `docs/llm-boundary.md` for scope and constraints.
+`app/llm/` exposes an `LLMProvider` protocol with an `OpenAIProvider` implementation. The provider is used for intent extraction and response polishing in graph nodes, not for direct HTTP handling. The runtime requires a configured provider and fails fast at startup if the provider cannot be built. See `docs/llm-boundary.md` for scope and constraints.
 
 ## 3. Request Lifecycle
 
@@ -142,7 +142,7 @@ Steps:
 
 ## 4. Runtime Lifecycle
 
-`create_runtime()` in `app/runtime.py` loads `Settings` via `load_settings()`, constructs the logger (`get_logger`), optional Langfuse-backed tracer (`build_tracer`), optional LLM provider (`build_provider`), wires `InMemoryRememberedIdentityRepository` and `RememberedIdentityService`, and compiles the graph via `build_graph(...)`. The result is a `RuntimeContext` dataclass holding settings, logger, tracer, graph, provider, identity service, and an empty `sessions` map.
+`create_runtime()` in `app/runtime.py` loads `Settings` via `load_settings()`, constructs the logger (`get_logger`), optional Langfuse-backed tracer (`build_tracer`), required LLM provider (`build_provider`), wires `InMemoryRememberedIdentityRepository` and `RememberedIdentityService`, and compiles the graph via `build_graph(...)`. The result is a `RuntimeContext` dataclass holding settings, logger, tracer, graph, provider, identity service, and an empty `sessions` map.
 
 `app/main.py` registers an async lifespan: on startup it assigns `create_runtime()` to `app.state.runtime`; on shutdown it calls `close_runtime`.
 

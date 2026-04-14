@@ -46,9 +46,9 @@
 
 **Context:** In a healthcare context, the LLM must not control access to patient data or appointment mutations. Prompt injection and hallucination are real risks.
 
-**Decision:** Limit the LLM to intent extraction and response polishing. All authorization, routing, and state mutation logic is deterministic Python. The system works fully without an LLM.
+**Decision:** Limit the LLM to intent extraction and response polishing. All authorization, routing, and state mutation logic is deterministic Python, while a configured provider is required for runtime startup.
 
-**Consequences:** The system cannot be prompt-injected into skipping verification. Tests run without an API key. Provider failures degrade to deterministic responses rather than crashing.
+**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors instead of silently degrading to deterministic responses.
 
 ## ADR-006: In-Memory Remembered Identity Store
 
