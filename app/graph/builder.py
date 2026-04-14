@@ -58,7 +58,7 @@ def build_graph(
     builder.add_node("ingest_user_message", make_ingest_node(logger))
     builder.add_node("parse_intent_and_entities", make_interpret_node(logger, provider=provider))
     builder.add_node(
-        "verify_or_prompt",
+        "verify",
         make_verification_node(
             verification_service,
             logger,
@@ -79,8 +79,8 @@ def build_graph(
 
     builder.add_edge(START, "ingest_user_message")
     builder.add_edge("ingest_user_message", "parse_intent_and_entities")
-    builder.add_edge("parse_intent_and_entities", "verify_or_prompt")
-    builder.add_edge("verify_or_prompt", "execute_action")
+    builder.add_edge("parse_intent_and_entities", "verify")
+    builder.add_edge("verify", "execute_action")
     builder.add_edge("execute_action", "generate_response")
     builder.add_edge("generate_response", END)
 

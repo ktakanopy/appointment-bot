@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import streamlit as st
 
 from app.config import load_settings
 from frontend.lib.api_client import BackendClient
+
+BOT_NAME = "CAPY"
+BOT_IMAGE = Path(__file__).resolve().parent.parent / "capy.png"
 
 
 def _client() -> BackendClient:
@@ -98,10 +103,12 @@ def _render_guidance() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Appointment Bot", page_icon=":hospital:")
+    st.set_page_config(page_title=BOT_NAME, page_icon=":leafy_green:")
     _ensure_state()
 
-    st.title("Appointment Bot")
+    st.image(str(BOT_IMAGE), width=240)
+    st.title(BOT_NAME)
+    st.write(f"{BOT_NAME} is your capybara chatbot.")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Start new session", use_container_width=True):

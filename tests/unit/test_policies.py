@@ -2,7 +2,13 @@ from app.domain import policies
 
 
 def test_missing_verification_fields_tracks_unset_values():
-    state = {"provided_full_name": "Ana Silva", "provided_phone": None, "provided_dob": None}
+    state = {
+        "verification": {
+            "provided_full_name": "Ana Silva",
+            "provided_phone": None,
+            "provided_dob": None,
+        }
+    }
 
     assert policies.missing_verification_fields(state) == ["phone", "dob"]
 

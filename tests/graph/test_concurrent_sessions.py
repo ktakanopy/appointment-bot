@@ -17,6 +17,6 @@ def test_graph_keeps_parallel_sessions_isolated():
     with ThreadPoolExecutor(max_workers=5) as executor:
         results = list(executor.map(run_flow, range(5)))
 
-    assert all(result["verified"] is True for result in results)
-    assert all(result["requested_action"] == "list_appointments" for result in results)
-    assert all(len(result["listed_appointments"]) == 2 for result in results)
+    assert all(result["verification"]["verified"] is True for result in results)
+    assert all(result["turn"]["requested_action"] == "list_appointments" for result in results)
+    assert all(len(result["appointments"]["listed_appointments"]) == 2 for result in results)

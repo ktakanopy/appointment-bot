@@ -58,6 +58,10 @@ Key design decisions:
 - a lightweight Streamlit frontend for patient chat
 - in-memory repositories for patients, appointments, and remembered identity
 
+One alternative here would have been to use a ReAct-style agent. I chose an
+explicit workflow instead because it gave me a simpler execution model and more
+control over verification, routing, and protected appointment actions.
+
 Main structure:
 
 ```text

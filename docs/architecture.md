@@ -45,7 +45,7 @@ flowchart TB
 
 ### Graph orchestration
 
-`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. The runtime graph is intentionally linear: `ingest_user_message`, `parse_intent_and_entities`, `verify_or_prompt`, `execute_action`, and `generate_response`. Verification and action dispatch still use deterministic helpers in `app/graph/routing.py`, but branching no longer happens at the graph-edge level. The graph remains the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
+`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. The runtime graph is intentionally linear: `ingest_user_message`, `parse_intent_and_entities`, `verify`, `execute_action`, and `generate_response`. Verification and action dispatch still use deterministic helpers in `app/graph/routing.py`, but branching no longer happens at the graph-edge level. The graph remains the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
 
 ### Domain services
 

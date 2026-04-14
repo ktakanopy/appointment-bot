@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.graph.state import ConversationState, ensure_state_defaults
+from app.graph.state import ConversationState, ensure_state_defaults, turn_state
 from app.observability import log_event
 
 
@@ -19,10 +19,11 @@ def make_ingest_node(logger):
         parsing, verification, and action handling in the rest of the workflow.
         """
         state = ensure_state_defaults(state)
+        turn = turn_state(state)
         message = (state.get("incoming_message") or "").strip()
-        state["error_code"] = None
-        state["response_text"] = None
-        state["last_action_result"] = None
+        turn["error_code"] = None
+        turn["response_text"] = None
+        turn["last_action_result"] = None
         if message:
             state["messages"].append({"role": "user", "content": message})
         log_event(logger, "ingest_user_message", state)

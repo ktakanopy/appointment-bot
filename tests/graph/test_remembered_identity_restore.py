@@ -11,13 +11,15 @@ def test_graph_allows_list_action_when_session_bootstraps_verified_patient():
         {
             "thread_id": "graph-remembered-restore",
             "incoming_message": "show my appointments",
-            "verified": True,
-            "verification_status": "verified",
-            "patient_id": "p1",
+            "verification": {
+                "verified": True,
+                "verification_status": "verified",
+                "patient_id": "p1",
+            },
         },
         config,
     )
 
-    assert result["verified"] is True
-    assert result["requested_action"] == "list_appointments"
-    assert len(result["listed_appointments"]) == 2
+    assert result["verification"]["verified"] is True
+    assert result["turn"]["requested_action"] == "list_appointments"
+    assert len(result["appointments"]["listed_appointments"]) == 2

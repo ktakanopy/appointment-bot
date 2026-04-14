@@ -13,5 +13,5 @@ def test_graph_locks_session_after_three_failed_verification_attempts():
         final = graph.invoke({"thread_id": "graph-lock", "incoming_message": "1999-01-01"}, config)
 
     assert final is not None
-    assert final["verification_status"] == "locked"
-    assert final["error_code"] == "verification_locked"
+    assert final["verification"]["verification_status"] == "locked"
+    assert final["turn"]["error_code"] == "verification_locked"

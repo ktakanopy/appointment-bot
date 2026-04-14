@@ -16,6 +16,6 @@ def test_cancel_then_reroute_back_to_list():
     canceled = graph.invoke({"thread_id": "graph-cancel", "incoming_message": "cancel the first one"}, config)
     refreshed = graph.invoke({"thread_id": "graph-cancel", "incoming_message": "show me my appointments again"}, config)
 
-    assert canceled["last_action_result"]["outcome"] == "canceled"
-    assert refreshed["requested_action"] == "list_appointments"
-    assert refreshed["listed_appointments"][0].status.value == "canceled"
+    assert canceled["turn"]["last_action_result"]["outcome"] == "canceled"
+    assert refreshed["turn"]["requested_action"] == "list_appointments"
+    assert refreshed["appointments"]["listed_appointments"][0].status.value == "canceled"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.graph.state import ConversationState
+from app.graph.state import ConversationState, turn_state, verification_state
 from app.observability import log_event
 
 
@@ -8,13 +8,15 @@ def make_help_node(logger):
     """Build the node that returns the deterministic help fallback."""
 
     def help_or_unknown(state: ConversationState) -> ConversationState:
-        state["requested_action"] = "help"
-        if state.get("verified"):
-            state["response_text"] = (
-                "You are verified. You can ask me to list your appointments, confirm one, or cancel one."
+        verification = verification_state(state)
+        turn = turn_state(state)
+        turn["requested_action"] = "help"
+        if verification.get("verified"):
+            turn["response_text"] = (
+                "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one."
             )
         else:
-            state["response_text"] = "I need to verify your identity first. Please tell me your full name."
+            turn["response_text"] = "I'm CAPY. I need to verify your identity first. Please tell me your full name."
         log_event(logger, "handle_help_or_unknown", state)
         return state
 
@@ -25,11 +27,12 @@ def make_response_node(logger, provider):
     """Build the node that turns fallback text into the final assistant reply."""
 
     def generate_response(state: ConversationState) -> ConversationState:
-        if not state.get("response_text"):
-            state["response_text"] = "I couldn't complete that request right now. Please try again."
-        generated = provider.generate_response(state, state["response_text"])
-        state["response_text"] = generated.response_text
-        state["messages"].append({"role": "assistant", "content": state["response_text"]})
+        turn = turn_state(state)
+        if not turn.get("response_text"):
+            turn["response_text"] = "I couldn't complete that request right now. Please try again."
+        generated = provider.generate_response(state, turn["response_text"])
+        turn["response_text"] = generated.response_text
+        state["messages"].append({"role": "assistant", "content": turn["response_text"]})
         log_event(logger, "generate_response", state)
         return state
 

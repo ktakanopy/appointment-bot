@@ -12,6 +12,6 @@ def test_in_memory_checkpointer_preserves_thread_state_within_runtime():
     second_result = graph.invoke({"thread_id": "in-memory-thread", "incoming_message": "11999998888"}, config)
     final_result = graph.invoke({"thread_id": "in-memory-thread", "incoming_message": "1990-05-10"}, config)
 
-    assert "date of birth" in second_result["response_text"].lower()
-    assert final_result["verified"] is True
-    assert len(final_result["listed_appointments"]) == 2
+    assert "date of birth" in second_result["turn"]["response_text"].lower()
+    assert final_result["verification"]["verified"] is True
+    assert len(final_result["appointments"]["listed_appointments"]) == 2

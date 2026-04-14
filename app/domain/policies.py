@@ -43,12 +43,13 @@ def requires_verification(action: str | None) -> bool:
 
 
 def missing_verification_fields(state: dict) -> list[str]:
+    verification = state.get("verification", {})
     missing = []
-    if not state.get("provided_full_name"):
+    if not verification.get("provided_full_name"):
         missing.append("full_name")
-    if not state.get("provided_phone"):
+    if not verification.get("provided_phone"):
         missing.append("phone")
-    if not state.get("provided_dob"):
+    if not verification.get("provided_dob"):
         missing.append("dob")
     return missing
 
@@ -98,8 +99,9 @@ def extract_requested_action(message: str, state: dict) -> str:
         return "list_appointments"
     if is_help_request(lowered):
         return "help"
-    if state.get("deferred_action"):
-        return state["deferred_action"]
+    deferred_action = state.get("turn", {}).get("deferred_action")
+    if deferred_action:
+        return deferred_action
     return "unknown"
 
 

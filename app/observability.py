@@ -36,13 +36,15 @@ def get_logger() -> logging.Logger:
 
 
 def log_event(logger: logging.Logger, node: str, state: dict, **extra: object) -> None:
+    verification = state.get("verification", {})
+    turn = state.get("turn", {})
     payload = {
         "thread_id": state.get("thread_id"),
         "node": node,
-        "requested_action": state.get("requested_action"),
-        "verified": state.get("verified"),
-        "verification_status": state.get("verification_status"),
-        "error_code": state.get("error_code"),
+        "requested_action": turn.get("requested_action"),
+        "verified": verification.get("verified"),
+        "verification_status": verification.get("verification_status"),
+        "error_code": turn.get("error_code"),
     }
     payload.update(extra)
     logger.info(json.dumps(payload, ensure_ascii=True, default=str))

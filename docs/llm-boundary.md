@@ -75,7 +75,7 @@ flowchart LR
   end
   subgraph deterministic_only["Deterministic only"]
     C[ingest_user_message]
-    D[verify_or_prompt]
+    D[verify]
     E[execute_action]
   end
 ```
@@ -84,7 +84,7 @@ flowchart LR
 |------|-----|---------------|
 | ingest_user_message | No | Yes |
 | parse_intent_and_entities | Yes | No |
-| verify_or_prompt | No | Yes |
+| verify | No | Yes |
 | execute_action | No | Yes |
 | generate_response | Yes | Yes (upstream business outcome only) |
 

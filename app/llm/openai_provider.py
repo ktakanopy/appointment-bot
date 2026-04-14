@@ -25,12 +25,14 @@ class OpenAIProvider:
         self.client = client or OpenAI(api_key=settings.api_key, timeout=settings.timeout_seconds)
 
     def interpret(self, message: str, state: dict[str, Any]) -> IntentPrediction:
+        verification = state.get("verification", {})
+        turn = state.get("turn", {})
         payload = {
             "message": message,
             "state": {
-                "verified": state.get("verified", False),
-                "requested_action": state.get("requested_action"),
-                "deferred_action": state.get("deferred_action"),
+                "verified": verification.get("verified", False),
+                "requested_action": turn.get("requested_action"),
+                "deferred_action": turn.get("deferred_action"),
                 "missing_verification_fields": state.get("missing_verification_fields", []),
             },
         }
@@ -42,12 +44,14 @@ class OpenAIProvider:
         )
 
     def generate_response(self, state: dict[str, Any], fallback_text: str) -> AssistantResponse:
+        verification = state.get("verification", {})
+        turn = state.get("turn", {})
         payload = {
             "fallback_text": fallback_text,
-            "requested_action": state.get("requested_action"),
-            "verified": state.get("verified"),
-            "error_code": state.get("error_code"),
-            "last_action_result": state.get("last_action_result"),
+            "requested_action": turn.get("requested_action"),
+            "verified": verification.get("verified"),
+            "error_code": turn.get("error_code"),
+            "last_action_result": turn.get("last_action_result"),
         }
         return self._complete_model(
             event_name="generate_response",

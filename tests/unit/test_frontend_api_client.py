@@ -20,7 +20,7 @@ def test_frontend_client_posts_new_session_payload():
                     "display_name": None,
                     "expires_at": None,
                 },
-                "response": "New session started.",
+                "response": "Hello, I'm CAPY. I can help you with your appointments.",
             },
         )
 

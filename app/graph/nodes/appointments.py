@@ -6,7 +6,7 @@ from typing import Callable
 from app.domain import policies
 from app.domain.models import ActionResult, Appointment
 from app.graph.routing import should_skip_action_execution
-from app.graph.state import ConversationState
+from app.graph.state import ConversationState, appointment_state, turn_state, verification_state
 from app.observability import log_event
 
 
@@ -14,11 +14,14 @@ def make_list_node(appointment_service, logger):
     """Build the node that lists appointments for the verified patient."""
 
     def list_appointments(state: ConversationState) -> ConversationState:
-        appointments = appointment_service.list_appointments(state["patient_id"])
-        state["listed_appointments"] = appointments
-        state["requested_action"] = "list_appointments"
-        state["last_action_result"] = asdict(ActionResult("list_appointments", "listed"))
-        state["response_text"] = _format_appointment_list(appointments)
+        verification = verification_state(state)
+        appointments_state = appointment_state(state)
+        turn = turn_state(state)
+        appointments = appointment_service.list_appointments(verification["patient_id"])
+        appointments_state["listed_appointments"] = appointments
+        turn["requested_action"] = "list_appointments"
+        turn["last_action_result"] = asdict(ActionResult("list_appointments", "listed"))
+        turn["response_text"] = _format_appointment_list(appointments)
         log_event(logger, "list_appointments", state, appointment_count=len(appointments))
         return state
 
@@ -29,6 +32,9 @@ def make_confirm_node(appointment_service, logger):
     """Build the node that confirms a selected appointment."""
 
     def confirm_appointment(state: ConversationState) -> ConversationState:
+        verification = verification_state(state)
+        appointments_state = appointment_state(state)
+        turn = turn_state(state)
         appointment = _resolve_target_appointment(
             state,
             appointment_service,
@@ -41,18 +47,18 @@ def make_confirm_node(appointment_service, logger):
             return state
 
         if not policies.can_confirm(appointment) and appointment.status.value != "confirmed":
-            state["response_text"] = "I couldn't confirm that appointment. Please choose a scheduled appointment."
-            state["error_code"] = "appointment_not_confirmable"
+            turn["response_text"] = "I couldn't confirm that appointment. Please choose a scheduled appointment."
+            turn["error_code"] = "appointment_not_confirmable"
             log_event(logger, "confirm_appointment", state, outcome="not_confirmable")
             return state
 
-        updated, action_result = appointment_service.confirm_appointment(state["patient_id"], appointment.id)
-        state["last_action_result"] = asdict(action_result)
-        state["listed_appointments"] = appointment_service.list_appointments(state["patient_id"])
+        updated, action_result = appointment_service.confirm_appointment(verification["patient_id"], appointment.id)
+        turn["last_action_result"] = asdict(action_result)
+        appointments_state["listed_appointments"] = appointment_service.list_appointments(verification["patient_id"])
         if action_result.outcome == "already_confirmed":
-            state["response_text"] = f"That appointment was already confirmed for {updated.date} at {updated.time}."
+            turn["response_text"] = f"That appointment was already confirmed for {updated.date} at {updated.time}."
         else:
-            state["response_text"] = f"Your appointment for {updated.date} at {updated.time} is now confirmed."
+            turn["response_text"] = f"Your appointment for {updated.date} at {updated.time} is now confirmed."
         log_event(logger, "confirm_appointment", state, outcome=action_result.outcome, appointment_id=appointment.id)
         return state
 
@@ -63,6 +69,9 @@ def make_cancel_node(appointment_service, logger):
     """Build the node that cancels a selected appointment."""
 
     def cancel_appointment(state: ConversationState) -> ConversationState:
+        verification = verification_state(state)
+        appointments_state = appointment_state(state)
+        turn = turn_state(state)
         appointment = _resolve_target_appointment(
             state,
             appointment_service,
@@ -75,18 +84,18 @@ def make_cancel_node(appointment_service, logger):
             return state
 
         if not policies.can_cancel(appointment) and appointment.status.value != "canceled":
-            state["response_text"] = "I couldn't cancel that appointment. Please choose a scheduled or confirmed appointment."
-            state["error_code"] = "appointment_not_cancelable"
+            turn["response_text"] = "I couldn't cancel that appointment. Please choose a scheduled or confirmed appointment."
+            turn["error_code"] = "appointment_not_cancelable"
             log_event(logger, "cancel_appointment", state, outcome="not_cancelable")
             return state
 
-        updated, action_result = appointment_service.cancel_appointment(state["patient_id"], appointment.id)
-        state["last_action_result"] = asdict(action_result)
-        state["listed_appointments"] = appointment_service.list_appointments(state["patient_id"])
+        updated, action_result = appointment_service.cancel_appointment(verification["patient_id"], appointment.id)
+        turn["last_action_result"] = asdict(action_result)
+        appointments_state["listed_appointments"] = appointment_service.list_appointments(verification["patient_id"])
         if action_result.outcome == "already_canceled":
-            state["response_text"] = f"That appointment was already canceled for {updated.date} at {updated.time}."
+            turn["response_text"] = f"That appointment was already canceled for {updated.date} at {updated.time}."
         else:
-            state["response_text"] = f"Your appointment for {updated.date} at {updated.time} has been canceled."
+            turn["response_text"] = f"Your appointment for {updated.date} at {updated.time} has been canceled."
         log_event(logger, "cancel_appointment", state, outcome=action_result.outcome, appointment_id=appointment.id)
         return state
 
@@ -107,7 +116,7 @@ def make_execute_action_node(
         if should_skip_action_execution(state):
             log_event(logger, "execute_action", state, outcome="skipped")
             return state
-        action = state.get("requested_action")
+        action = turn_state(state).get("requested_action")
         if action == "list_appointments":
             return list_node(state)
         if action == "confirm_appointment":
@@ -142,27 +151,30 @@ def _resolve_target_appointment(
     ambiguous_message: str,
 ) -> Appointment | None:
     """Resolve the appointment targeted by the current patient request."""
-    listed_appointments = state.get("listed_appointments") or []
-    reference = state.get("appointment_reference")
+    appointments_state = appointment_state(state)
+    turn = turn_state(state)
+    verification = verification_state(state)
+    listed_appointments = appointments_state.get("listed_appointments") or []
+    reference = appointments_state.get("appointment_reference")
     if reference and reference.isdigit() and not listed_appointments:
-        state["requested_action"] = action_name
-        state["response_text"] = missing_list_context_message
-        state["error_code"] = "missing_list_context"
+        turn["requested_action"] = action_name
+        turn["response_text"] = missing_list_context_message
+        turn["error_code"] = "missing_list_context"
         log_event(logger, "resolve_appointment_reference", state, outcome="missing_list_context")
         return None
 
-    appointments = listed_appointments or appointment_service.list_appointments(state["patient_id"])
+    appointments = listed_appointments or appointment_service.list_appointments(verification["patient_id"])
     appointment = policies.resolve_appointment_reference(reference, appointments)
-    state["requested_action"] = action_name
+    turn["requested_action"] = action_name
     if appointment is None:
-        state["response_text"] = ambiguous_message
-        state["error_code"] = "ambiguous_appointment_reference"
+        turn["response_text"] = ambiguous_message
+        turn["error_code"] = "ambiguous_appointment_reference"
         log_event(logger, "resolve_appointment_reference", state, outcome="ambiguous")
         return None
 
-    if not policies.appointment_is_owned_by_patient(appointment, state.get("patient_id")):
-        state["response_text"] = "I couldn't complete that request. Please choose one of your appointments."
-        state["error_code"] = "appointment_not_owned"
+    if not policies.appointment_is_owned_by_patient(appointment, verification.get("patient_id")):
+        turn["response_text"] = "I couldn't complete that request. Please choose one of your appointments."
+        turn["error_code"] = "appointment_not_owned"
         log_event(logger, action_name, state, outcome="not_owned")
         return None
 

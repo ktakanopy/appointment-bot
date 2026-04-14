@@ -8,7 +8,7 @@ This document describes security-related behavior in the healthcare appointment 
 
 **Verification-first actions** (`VERIFICATION_FIRST_ACTIONS` in `app/graph/routing.py`): `help`, `unknown`, `verify_identity`.
 
-**Verification gate** (`verification_required` in `app/graph/routing.py`): every turn passes through `verify_or_prompt`, which checks whether the interpreted action is protected, is verification-first, or already has a `deferred_action`. When none of those conditions apply for an unverified user, verification becomes a no-op for that turn.
+**Verification gate** (`verification_required` in `app/graph/routing.py`): every turn passes through `verify`, which checks whether the interpreted action is protected, is verification-first, or already has a `deferred_action`. When none of those conditions apply for an unverified user, verification becomes a no-op for that turn.
 
 **Deferred action**: when a protected action is requested while the user is unverified, `deferred_action` is stored. After successful verification, `requested_action` is restored from `deferred_action` so the patient does not need to repeat the original request.
 

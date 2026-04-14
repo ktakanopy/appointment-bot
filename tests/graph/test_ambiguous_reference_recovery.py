@@ -14,5 +14,5 @@ def test_confirm_ordinal_without_current_list_asks_for_list_first():
 
     result = graph.invoke({"thread_id": "graph-ambiguous", "incoming_message": "confirm the first one"}, config)
 
-    assert result["error_code"] == "missing_list_context"
-    assert "see your appointments first" in result["response_text"]
+    assert result["turn"]["error_code"] == "missing_list_context"
+    assert "see your appointments first" in result["turn"]["response_text"]
