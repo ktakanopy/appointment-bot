@@ -57,16 +57,17 @@ async def create_session(
     session_id = str(uuid4())
     thread_id = session_id
     now = time.monotonic()
-    runtime.sessions[session_id] = SessionRecord(
+    session = SessionRecord(
         session_id=session_id,
         thread_id=thread_id,
         created_at=now,
         last_seen_at=now,
     )
+    runtime.sessions[session_id] = session
     restored_verification, remembered_identity_status, response_text = _prepare_new_session_restore(
         runtime,
         request,
-        session_id,
+        session,
         now,
     )
     return NewSessionResponse(
@@ -122,17 +123,19 @@ def _build_chat_payload(runtime: RuntimeContext, request: ChatRequest) -> dict[s
     404 if the session is unknown or has already been cleaned up.
 
     Bootstrap state is used to inject restored identity context into the next
-    eligible chat turn. If a bootstrap entry was prepared when the session was
-    created, it is consumed here with `pop()` so it only affects the first
-    relevant request. If no bootstrap entry is cached but the request includes a
-    remembered identity id, the function rebuilds the bootstrap state on demand.
+    eligible chat turn. If bootstrap state was prepared when the session was
+    created, it is consumed here from the session record so it only affects the
+    first relevant request. If no bootstrap state is cached but the request
+    includes a remembered identity id, the function rebuilds the bootstrap state
+    on demand.
     The final payload always includes the thread id and incoming message, and it
     is extended with bootstrap state when available so the graph can resume with
     the correct verification context.
     """
     _cleanup_expired_runtime_entries(runtime)
-    _require_session(runtime, request.session_id)
-    bootstrap = runtime.session_bootstrap.pop(request.session_id, None)
+    session = _require_session(runtime, request.session_id)
+    bootstrap = session.bootstrap
+    session.bootstrap = None
     if bootstrap is None and request.remembered_identity_id:
         restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id)
         bootstrap = SessionBootstrap(
@@ -242,7 +245,7 @@ def _build_identity_summary(
 def _prepare_new_session_restore(
     runtime: RuntimeContext,
     request: NewSessionRequest | None,
-    session_id: str,
+    session: SessionRecord,
     now: float,
 ) -> tuple[bool, RememberedIdentitySummary, str]:
     """Restore remembered identity state for a newly created session when possible."""
@@ -254,7 +257,7 @@ def _prepare_new_session_restore(
         request.remembered_identity_id if request else None,
     )
     if restored_verification:
-        runtime.session_bootstrap[session_id] = SessionBootstrap(
+        session.bootstrap = SessionBootstrap(
             state=_build_bootstrap_state(restored_identity, remembered_identity_status),
             created_at=now,
         )
@@ -269,17 +272,13 @@ def _prepare_new_session_restore(
 def _cleanup_expired_runtime_entries(runtime: RuntimeContext) -> None:
     """Remove expired in-memory runtime entries before handling a request.
 
-    This drops one-time bootstrap state whose TTL has elapsed and removes
+    This clears one-time bootstrap state whose TTL has elapsed and removes
     sessions that have been idle longer than the configured session timeout.
     """
     now = time.monotonic()
-    expired_bootstrap_session_ids = [
-        session_id
-        for session_id, bootstrap in runtime.session_bootstrap.items()
-        if now - bootstrap.created_at > SESSION_BOOTSTRAP_TTL_SECONDS
-    ]
-    for session_id in expired_bootstrap_session_ids:
-        del runtime.session_bootstrap[session_id]
+    for session in runtime.sessions.values():
+        if session.bootstrap and now - session.bootstrap.created_at > SESSION_BOOTSTRAP_TTL_SECONDS:
+            session.bootstrap = None
 
     session_ttl_seconds = runtime.settings.session_ttl_minutes * 60
     expired_session_ids = [

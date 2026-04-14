@@ -102,6 +102,6 @@ stateDiagram-v2
 | Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
 | Remembered identity | In-memory (InMemoryRememberedIdentityRepository) | Process lifetime, TTL + revoke |
 | Session registry | In-memory (runtime.sessions dict) | Process lifetime, TTL-based cleanup |
-| Session bootstrap | In-memory (runtime.session_bootstrap dict) | 300s TTL |
+| Session bootstrap | In-memory on each `SessionRecord` | 300s TTL |
 
 In-memory storage is intentional for demo scope. A production system would back conversation state, remembered identity, patient data, and appointment data with external persistence.

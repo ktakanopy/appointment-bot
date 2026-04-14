@@ -124,6 +124,9 @@ export LANGFUSE_SECRET_KEY=your_secret_key
 export LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
+When running the full Docker Compose stack, local Langfuse credentials are
+bootstrapped automatically unless you override them.
+
 ## Running the Service
 
 Start the API locally with:
@@ -206,11 +209,18 @@ curl -X POST http://localhost:8000/sessions/new \
 The project uses in-memory patient and appointment repositories defined in
 `app/repositories/in_memory.py`.
 
-Valid manual test example:
+Valid manual test identities:
 
 - Name: `Ana Silva`
 - Phone: `11999998888`
 - Date of birth: `1990-05-10`
+- Name: `Carlos Souza`
+- Phone: `11911112222`
+- Date of birth: `1985-09-22`
+
+The bot only verifies identity when the full name, phone number, and date of
+birth all match the same seeded patient record. Any other combination will
+return `invalid_identity` and restart the verification flow.
 
 ## Running Tests
 
@@ -282,6 +292,12 @@ If this application needed to move beyond demo scope, the next improvements woul
 Build and run everything with Docker Compose:
 
 ```bash
+docker-compose up --build
+```
+
+If your Docker installation supports the plugin-based CLI, this works too:
+
+```bash
 docker compose up --build
 ```
 
@@ -290,6 +306,30 @@ Then open:
 - API: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 - Streamlit: `http://localhost:8501`
+- Langfuse: `http://localhost:3000`
+
+The Compose stack starts:
+
+- `api`
+- `frontend`
+- `langfuse-web`
+- `langfuse-worker`
+- `langfuse-postgres`
+- `langfuse-clickhouse`
+- `langfuse-minio`
+- `langfuse-redis`
+
+Default local Langfuse bootstrap values:
+
+- Email: `admin@appointment-bot.local`
+- Password: `appointment-bot-dev`
+- Public key: `lf_pk_local_dev_key`
+- Secret key: `lf_sk_local_dev_key`
+
+By default, the API container points tracing at the local Langfuse instance via
+`http://langfuse-web:3000`. Override `TRACING_ENABLED`, `LANGFUSE_HOST`,
+`LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY` if you want to disable tracing
+or send traces somewhere else.
 
 ## Additional Docs
 

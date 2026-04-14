@@ -38,15 +38,16 @@ class SessionRecord:
     """Tracks a live API session registered in the in-memory runtime.
 
     The record keeps the public session identifier, the graph thread identifier,
-    and monotonic timestamps for creation and last activity. These timestamps are
-    used to validate active sessions and to evict idle sessions after the
-    configured timeout.
+    monotonic timestamps for creation and last activity, and optional bootstrap
+    state for the next eligible chat turn. These timestamps are used to validate
+    active sessions and to evict idle sessions after the configured timeout.
     """
 
     session_id: str
     thread_id: str
     created_at: float
     last_seen_at: float
+    bootstrap: SessionBootstrap | None = None
 
 
 @dataclass(slots=True)
@@ -66,7 +67,6 @@ class RuntimeContext:
     graph: InvokableGraph
     provider: LLMProvider | None
     identity_service: RememberedIdentityService
-    session_bootstrap: dict[str, SessionBootstrap] = field(default_factory=dict)
     sessions: dict[str, SessionRecord] = field(default_factory=dict)
 
 
