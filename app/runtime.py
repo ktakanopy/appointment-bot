@@ -38,15 +38,17 @@ class SessionRecord:
     """Tracks a live API session registered in the in-memory runtime.
 
     The record keeps the public session identifier, the graph thread identifier,
-    monotonic timestamps for creation and last activity, and optional bootstrap
-    state for the next eligible chat turn. These timestamps are used to validate
-    active sessions and to evict idle sessions after the configured timeout.
+    monotonic timestamps for creation and last activity, the latest remembered
+    identity id associated with the session, and optional bootstrap state for
+    the next eligible chat turn. These timestamps are used to validate active
+    sessions and to evict idle sessions after the configured timeout.
     """
 
     session_id: str
     thread_id: str
     created_at: float
     last_seen_at: float
+    remembered_identity_id: str | None = None
     bootstrap: SessionBootstrap | None = None
 
 

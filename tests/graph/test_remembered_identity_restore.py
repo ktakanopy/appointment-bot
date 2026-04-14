@@ -14,7 +14,6 @@ def test_graph_allows_list_action_when_session_bootstraps_verified_patient():
             "verified": True,
             "verification_status": "verified",
             "patient_id": "p1",
-            "remembered_identity_id": "rid-1",
         },
         config,
     )

@@ -5,32 +5,19 @@ from app.domain.policies import PROTECTED_ACTIONS
 VERIFICATION_FIRST_ACTIONS = {"help", "unknown", "verify_identity"}
 
 
-def route_after_interpret(state: dict) -> str:
+def verification_required(state: dict) -> bool:
+    """Return whether the current turn must pass through identity verification."""
     action = state.get("requested_action")
-    if not state.get("verified") and (
-        action in PROTECTED_ACTIONS
-        or action in VERIFICATION_FIRST_ACTIONS
-        or state.get("deferred_action")
-    ):
-        return "verification_subgraph"
-    if action == "list_appointments":
-        return "list_appointments"
-    if action == "confirm_appointment":
-        return "confirm_appointment"
-    if action == "cancel_appointment":
-        return "cancel_appointment"
-    return "handle_help_or_unknown"
+    return bool(
+        not state.get("verified")
+        and (
+            action in PROTECTED_ACTIONS
+            or action in VERIFICATION_FIRST_ACTIONS
+            or state.get("deferred_action")
+        )
+    )
 
 
-def route_after_verification(state: dict) -> str:
-    if state.get("response_text") and not state.get("verified"):
-        return "generate_response"
-
-    action = state.get("requested_action")
-    if action == "list_appointments":
-        return "list_appointments"
-    if action == "confirm_appointment":
-        return "confirm_appointment"
-    if action == "cancel_appointment":
-        return "cancel_appointment"
-    return "handle_help_or_unknown"
+def should_skip_action_execution(state: dict) -> bool:
+    """Return whether a prior node already produced the user-facing response."""
+    return bool(state.get("response_text"))

@@ -5,6 +5,8 @@ from app.observability import log_event
 
 
 def make_help_node(logger):
+    """Build the node that returns the deterministic help fallback."""
+
     def help_or_unknown(state: ConversationState) -> ConversationState:
         state["requested_action"] = "help"
         if state.get("verified"):
@@ -20,6 +22,8 @@ def make_help_node(logger):
 
 
 def make_response_node(logger, provider):
+    """Build the node that turns fallback text into the final assistant reply."""
+
     def generate_response(state: ConversationState) -> ConversationState:
         if not state.get("response_text"):
             state["response_text"] = "I couldn't complete that request right now. Please try again."

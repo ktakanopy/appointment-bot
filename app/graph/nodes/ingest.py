@@ -5,6 +5,8 @@ from app.observability import log_event
 
 
 def make_ingest_node(logger):
+    """Build the node that normalizes the incoming turn before orchestration."""
+
     def ingest(state: ConversationState) -> ConversationState:
         """Normalize the incoming turn and prepare state for downstream nodes.
 

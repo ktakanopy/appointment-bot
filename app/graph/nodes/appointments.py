@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import Callable
 
 from app.domain import policies
 from app.domain.models import ActionResult, Appointment
+from app.graph.routing import should_skip_action_execution
 from app.graph.state import ConversationState
 from app.observability import log_event
 
 
 def make_list_node(appointment_service, logger):
+    """Build the node that lists appointments for the verified patient."""
+
     def list_appointments(state: ConversationState) -> ConversationState:
         appointments = appointment_service.list_appointments(state["patient_id"])
         state["listed_appointments"] = appointments
@@ -22,6 +26,8 @@ def make_list_node(appointment_service, logger):
 
 
 def make_confirm_node(appointment_service, logger):
+    """Build the node that confirms a selected appointment."""
+
     def confirm_appointment(state: ConversationState) -> ConversationState:
         appointment = _resolve_target_appointment(
             state,
@@ -41,7 +47,6 @@ def make_confirm_node(appointment_service, logger):
             return state
 
         updated, action_result = appointment_service.confirm_appointment(state["patient_id"], appointment.id)
-        state["selected_appointment_id"] = appointment.id
         state["last_action_result"] = asdict(action_result)
         state["listed_appointments"] = appointment_service.list_appointments(state["patient_id"])
         if action_result.outcome == "already_confirmed":
@@ -55,6 +60,8 @@ def make_confirm_node(appointment_service, logger):
 
 
 def make_cancel_node(appointment_service, logger):
+    """Build the node that cancels a selected appointment."""
+
     def cancel_appointment(state: ConversationState) -> ConversationState:
         appointment = _resolve_target_appointment(
             state,
@@ -74,7 +81,6 @@ def make_cancel_node(appointment_service, logger):
             return state
 
         updated, action_result = appointment_service.cancel_appointment(state["patient_id"], appointment.id)
-        state["selected_appointment_id"] = appointment.id
         state["last_action_result"] = asdict(action_result)
         state["listed_appointments"] = appointment_service.list_appointments(state["patient_id"])
         if action_result.outcome == "already_canceled":
@@ -87,7 +93,34 @@ def make_cancel_node(appointment_service, logger):
     return cancel_appointment
 
 
+def make_execute_action_node(
+    logger,
+    *,
+    list_node: Callable[[ConversationState], ConversationState],
+    confirm_node: Callable[[ConversationState], ConversationState],
+    cancel_node: Callable[[ConversationState], ConversationState],
+    help_node: Callable[[ConversationState], ConversationState],
+):
+    """Build the node that executes the resolved action after verification."""
+
+    def execute_action(state: ConversationState) -> ConversationState:
+        if should_skip_action_execution(state):
+            log_event(logger, "execute_action", state, outcome="skipped")
+            return state
+        action = state.get("requested_action")
+        if action == "list_appointments":
+            return list_node(state)
+        if action == "confirm_appointment":
+            return confirm_node(state)
+        if action == "cancel_appointment":
+            return cancel_node(state)
+        return help_node(state)
+
+    return execute_action
+
+
 def _format_appointment_list(appointments) -> str:
+    """Render appointment summaries into the deterministic fallback response."""
     if not appointments:
         return "You do not have any appointments right now."
 
@@ -108,6 +141,7 @@ def _resolve_target_appointment(
     missing_list_context_message: str,
     ambiguous_message: str,
 ) -> Appointment | None:
+    """Resolve the appointment targeted by the current patient request."""
     listed_appointments = state.get("listed_appointments") or []
     reference = state.get("appointment_reference")
     if reference and reference.isdigit() and not listed_appointments:

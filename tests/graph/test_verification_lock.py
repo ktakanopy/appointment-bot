@@ -14,5 +14,4 @@ def test_graph_locks_session_after_three_failed_verification_attempts():
 
     assert final is not None
     assert final["verification_status"] == "locked"
-    assert final["verification_locked"] is True
     assert final["error_code"] == "verification_locked"

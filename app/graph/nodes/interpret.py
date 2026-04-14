@@ -8,9 +8,13 @@ APPOINTMENT_ACTIONS = {"confirm_appointment", "cancel_appointment"}
 
 
 def make_interpret_node(logger, provider):
+    """Build the node that extracts intent and structured entities from a turn."""
+
     def interpret(state: ConversationState) -> ConversationState:
         message = (state.get("incoming_message") or "").strip()
-        result = provider.interpret(message, state)
+        provider_state = dict(state)
+        provider_state["missing_verification_fields"] = policies.missing_verification_fields(state)
+        result = provider.interpret(message, provider_state)
         requested_action = result.requested_action
 
         _fill_missing_identity_fields(
@@ -23,8 +27,6 @@ def make_interpret_node(logger, provider):
         state["requested_action"] = requested_action
         _update_deferred_action(state, requested_action)
         _update_appointment_reference(state, requested_action, result.appointment_reference)
-
-        state["missing_verification_fields"] = policies.missing_verification_fields(state)
         log_event(
             logger,
             "parse_intent_and_entities",
@@ -43,6 +45,7 @@ def _fill_missing_identity_fields(
     dob: str | None,
     full_name: str | None,
 ) -> None:
+    """Persist newly extracted identity fields without overwriting prior inputs."""
     if state.get("provided_phone") is None and phone:
         state["provided_phone"] = phone
     if state.get("provided_dob") is None and dob:
@@ -52,6 +55,7 @@ def _fill_missing_identity_fields(
 
 
 def _update_deferred_action(state: ConversationState, requested_action: str) -> None:
+    """Remember protected actions until verification completes."""
     if requested_action in policies.PROTECTED_ACTIONS and not state.get("verified"):
         state["deferred_action"] = requested_action
 
@@ -61,6 +65,7 @@ def _update_appointment_reference(
     requested_action: str,
     appointment_reference: str | None,
 ) -> None:
+    """Keep appointment references only for confirm and cancel flows."""
     if requested_action not in APPOINTMENT_ACTIONS:
         state["appointment_reference"] = None
         return

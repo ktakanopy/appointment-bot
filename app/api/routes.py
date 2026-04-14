@@ -134,15 +134,14 @@ def _build_chat_payload(runtime: RuntimeContext, request: ChatRequest) -> dict[s
     """
     _cleanup_expired_runtime_entries(runtime)
     session = _require_session(runtime, request.session_id)
+    if request.remembered_identity_id:
+        session.remembered_identity_id = request.remembered_identity_id
     bootstrap = session.bootstrap
     session.bootstrap = None
     if bootstrap is None and request.remembered_identity_id:
         restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id)
         bootstrap = SessionBootstrap(
-            state=_build_bootstrap_state(
-                restored_identity,
-                _build_identity_summary(runtime, restored_identity, request.remembered_identity_id),
-            ),
+            state=_build_bootstrap_state(restored_identity),
             created_at=time.monotonic(),
         )
     payload = {"thread_id": request.session_id, "incoming_message": request.message}
@@ -152,6 +151,7 @@ def _build_chat_payload(runtime: RuntimeContext, request: ChatRequest) -> dict[s
 
 
 def _build_chat_response(runtime: RuntimeContext, request: ChatRequest, result: dict[str, Any]) -> ChatResponse:
+    session = _require_session(runtime, request.session_id)
     appointments = None
     if result.get("requested_action") == "list_appointments" and result.get("listed_appointments"):
         appointments = [
@@ -169,11 +169,11 @@ def _build_chat_response(runtime: RuntimeContext, request: ChatRequest, result: 
     if result.get("last_action_result"):
         last_action_result = ActionResultResponse(**result["last_action_result"])
 
-    remembered_identity = _ensure_remembered_identity(runtime, result)
+    remembered_identity = _ensure_remembered_identity(runtime, session, request.remembered_identity_id, result)
     remembered_identity_status = _build_identity_summary(
         runtime,
         remembered_identity,
-        request.remembered_identity_id,
+        request.remembered_identity_id or session.remembered_identity_id,
     )
 
     current_action = result.get("requested_action") or "unknown"
@@ -192,10 +192,18 @@ def _build_chat_response(runtime: RuntimeContext, request: ChatRequest, result: 
     )
 
 
-def _ensure_remembered_identity(runtime: RuntimeContext, result: dict[str, Any]) -> RememberedIdentity | None:
+def _ensure_remembered_identity(
+    runtime: RuntimeContext,
+    session: SessionRecord,
+    requested_identity_id: str | None,
+    result: dict[str, Any],
+) -> RememberedIdentity | None:
     if not result.get("verified") or not result.get("patient_id"):
-        remembered_identity_id = result.get("remembered_identity_id")
-        return runtime.identity_service.restore_identity(remembered_identity_id)
+        identity_id = requested_identity_id or session.remembered_identity_id
+        identity = runtime.identity_service.restore_identity(identity_id)
+        if identity is not None:
+            session.remembered_identity_id = identity.remembered_identity_id
+        return identity
     fingerprint = runtime.identity_service.build_fingerprint(
         result.get("provided_full_name"),
         result.get("provided_phone"),
@@ -207,23 +215,19 @@ def _ensure_remembered_identity(runtime: RuntimeContext, result: dict[str, Any])
         display_name=result.get("provided_full_name"),
         verification_fingerprint=fingerprint,
     )
-    result["remembered_identity_id"] = identity.remembered_identity_id
-    result["remembered_identity_status"] = runtime.identity_service.summary_for_identity(identity)
+    session.remembered_identity_id = identity.remembered_identity_id
     return identity
 
 
 def _build_bootstrap_state(
     identity: RememberedIdentity | None,
-    remembered_identity_status: RememberedIdentitySummary,
 ) -> ConversationState:
     if identity is None or identity.status != RememberedIdentityStatus.ACTIVE:
-        return {"remembered_identity_status": remembered_identity_status.model_dump()}
+        return {}
     return {
         "verified": True,
         "verification_status": "verified",
         "patient_id": identity.patient_id,
-        "remembered_identity_id": identity.remembered_identity_id,
-        "remembered_identity_status": remembered_identity_status.model_dump(),
     }
 
 
@@ -250,6 +254,11 @@ def _prepare_new_session_restore(
 ) -> tuple[bool, RememberedIdentitySummary, str]:
     """Restore remembered identity state for a newly created session when possible."""
     restored_identity = runtime.identity_service.restore_identity(request.remembered_identity_id if request else None)
+    session.remembered_identity_id = (
+        restored_identity.remembered_identity_id
+        if restored_identity
+        else request.remembered_identity_id if request else None
+    )
     restored_verification = bool(restored_identity and restored_identity.status == RememberedIdentityStatus.ACTIVE)
     remembered_identity_status = _build_identity_summary(
         runtime,
@@ -258,7 +267,7 @@ def _prepare_new_session_restore(
     )
     if restored_verification:
         session.bootstrap = SessionBootstrap(
-            state=_build_bootstrap_state(restored_identity, remembered_identity_status),
+            state=_build_bootstrap_state(restored_identity),
             created_at=now,
         )
         return (

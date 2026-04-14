@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.domain import policies
+from app.graph.routing import verification_required
 from app.graph.state import ConversationState
 from app.observability import log_event
 
@@ -19,9 +20,13 @@ INVALID_RESPONSES = {
 
 
 def make_verification_node(verification_service, logger, max_verification_attempts: int):
+    """Build the node that gates protected actions behind identity verification."""
+
     def verify(state: ConversationState) -> ConversationState:
-        if state.get("verification_locked"):
-            state["verification_status"] = "locked"
+        if not verification_required(state):
+            return state
+
+        if state.get("verification_status") == "locked":
             state["requested_action"] = "verify_identity"
             state["response_text"] = "For your security, this session is locked after too many failed verification attempts. Please start a new session."
             state["error_code"] = "verification_locked"
@@ -29,10 +34,10 @@ def make_verification_node(verification_service, logger, max_verification_attemp
             return state
 
         previous_status = state.get("verification_status")
-        state["missing_verification_fields"] = policies.missing_verification_fields(state)
+        missing_fields = policies.missing_verification_fields(state)
 
-        if state["missing_verification_fields"]:
-            next_field = state["missing_verification_fields"][0]
+        if missing_fields:
+            next_field = missing_fields[0]
             state["verification_status"] = "collecting"
             state["requested_action"] = "verify_identity"
             invalid_response = _invalid_response_for_field(state, next_field, previous_status)
@@ -57,11 +62,9 @@ def make_verification_node(verification_service, logger, max_verification_attemp
             state["provided_full_name"] = None
             state["provided_phone"] = None
             state["provided_dob"] = None
-            state["missing_verification_fields"] = ["full_name", "phone", "dob"]
             state["requested_action"] = "verify_identity"
             if state["verification_failures"] >= max_verification_attempts:
                 state["verification_status"] = "locked"
-                state["verification_locked"] = True
                 state["response_text"] = "I couldn't verify your identity. For your security, this session is now locked. Please start a new session to try again."
                 state["error_code"] = "verification_locked"
                 log_event(logger, "verify_identity", state, outcome="locked")
@@ -74,7 +77,6 @@ def make_verification_node(verification_service, logger, max_verification_attemp
         state["verification_status"] = "verified"
         state["verified"] = True
         state["verification_failures"] = 0
-        state["verification_locked"] = False
         state["patient_id"] = patient.id
         state["error_code"] = None
         if state.get("deferred_action"):
@@ -91,6 +93,7 @@ def _invalid_response_for_field(
     field_name: str,
     previous_status: str | None,
 ) -> tuple[str, str] | None:
+    """Return a field-specific validation message for repeated verification prompts."""
     if previous_status not in {"collecting", "failed"}:
         return None
     message = (state.get("incoming_message") or "").strip()
