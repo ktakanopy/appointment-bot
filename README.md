@@ -127,7 +127,79 @@ export LANGFUSE_HOST=https://cloud.langfuse.com
 When running the full Docker Compose stack, local Langfuse credentials are
 bootstrapped automatically unless you override them.
 
-## Running the Service
+## Quickstart
+
+### Run the full stack with Docker Compose
+
+Make sure `OPENAI_API_KEY` is available in your shell, then start the stack:
+
+```bash
+docker-compose up --build
+```
+
+If your Docker installation supports the plugin-based CLI, this works too:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- Streamlit: `http://localhost:8501`
+- Langfuse: `http://localhost:3000`
+
+The Compose stack starts:
+
+- `api`
+- `frontend`
+- `langfuse-web`
+- `langfuse-worker`
+- `langfuse-postgres`
+- `langfuse-clickhouse`
+- `langfuse-minio`
+- `langfuse-redis`
+
+Default local Langfuse bootstrap values:
+
+- Email: `admin@appointment-bot.local`
+- Password: `appointment-bot-dev`
+- Public key: `lf_pk_local_dev_key`
+- Secret key: `lf_sk_local_dev_key`
+
+By default, the API container points tracing at the local Langfuse instance via
+`http://langfuse-web:3000`. Override `TRACING_ENABLED`, `LANGFUSE_HOST`,
+`LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY` if you want to disable tracing
+or send traces somewhere else.
+
+### Valid chatbot inputs
+
+The project uses seeded in-memory patient data from `app/repositories/in_memory.py`.
+To complete identity verification in the chat UI, provide one of these exact
+combinations when the bot asks for them:
+
+- `Ana Silva` / `11999998888` / `1990-05-10`
+- `Carlos Souza` / `11911112222` / `1985-09-22`
+
+Example conversation for a successful verification:
+
+1. `I want to see my appointments`
+2. `Ana Silva`
+3. `11999998888`
+4. `1990-05-10`
+
+After that, you can continue with messages like:
+
+- `list my appointments`
+- `confirm the first one`
+- `cancel the first one`
+
+If the full name, phone number, and date of birth do not match the same seeded
+patient record, the bot returns `invalid_identity` and restarts the verification
+flow.
+
+### Run locally without Docker
 
 Start the API locally with:
 
@@ -135,92 +207,11 @@ Start the API locally with:
 uv run uvicorn app.main:app --reload
 ```
 
-Then open:
-
-- API: `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-
 Start the frontend with:
 
 ```bash
 uv run streamlit run frontend/streamlit_app.py
 ```
-
-Then open the Streamlit URL shown in the terminal.
-
-## Example Usage
-
-Create a new session:
-
-```bash
-curl -X POST http://localhost:8000/sessions/new
-```
-
-Then use the returned `session_id` for chat turns:
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"I want to see my appointments"}'
-```
-
-Continue the same conversation:
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"Ana Silva"}'
-
-curl -X POST http://localhost:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"11999998888"}'
-
-curl -X POST http://localhost:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"1990-05-10"}'
-```
-
-After the appointment list is returned, the patient can continue with:
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"confirm the first one"}'
-```
-
-or:
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"cancel the first one"}'
-```
-
-If a response includes an active `remembered_identity_status.remembered_identity_id`, you can restore it in a new session:
-
-```bash
-curl -X POST http://localhost:8000/sessions/new \
-  -H 'Content-Type: application/json' \
-  -d '{"remembered_identity_id":"<remembered-identity-id>"}'
-```
-
-## Sample Data
-
-The project uses in-memory patient and appointment repositories defined in
-`app/repositories/in_memory.py`.
-
-Valid manual test identities:
-
-- Name: `Ana Silva`
-- Phone: `11999998888`
-- Date of birth: `1990-05-10`
-- Name: `Carlos Souza`
-- Phone: `11911112222`
-- Date of birth: `1985-09-22`
-
-The bot only verifies identity when the full name, phone number, and date of
-birth all match the same seeded patient record. Any other combination will
-return `invalid_identity` and restart the verification flow.
 
 ## Running Tests
 
@@ -284,52 +275,6 @@ If this application needed to move beyond demo scope, the next improvements woul
 - move patient and appointment data to a real persistence layer instead of seeded demo data
 - add background workers and queueing for slower downstream operations or audits
 - add stronger auth, rate limiting, and production-grade observability around protected flows
-
-
-
-## Docker
-
-Build and run everything with Docker Compose:
-
-```bash
-docker-compose up --build
-```
-
-If your Docker installation supports the plugin-based CLI, this works too:
-
-```bash
-docker compose up --build
-```
-
-Then open:
-
-- API: `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-- Streamlit: `http://localhost:8501`
-- Langfuse: `http://localhost:3000`
-
-The Compose stack starts:
-
-- `api`
-- `frontend`
-- `langfuse-web`
-- `langfuse-worker`
-- `langfuse-postgres`
-- `langfuse-clickhouse`
-- `langfuse-minio`
-- `langfuse-redis`
-
-Default local Langfuse bootstrap values:
-
-- Email: `admin@appointment-bot.local`
-- Password: `appointment-bot-dev`
-- Public key: `lf_pk_local_dev_key`
-- Secret key: `lf_sk_local_dev_key`
-
-By default, the API container points tracing at the local Langfuse instance via
-`http://langfuse-web:3000`. Override `TRACING_ENABLED`, `LANGFUSE_HOST`,
-`LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY` if you want to disable tracing
-or send traces somewhere else.
 
 ## Additional Docs
 
