@@ -23,7 +23,7 @@ flowchart TD
     confirm --> respond
     cancel --> respond
     help --> respond
-    respond --> end([End])
+    respond --> finish([End])
 ```
 
 ## Notes
