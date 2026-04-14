@@ -7,6 +7,7 @@ ENV PYTHONPATH=/app
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
+COPY capy.png ./capy.png
 COPY app ./app
 COPY frontend ./frontend
 
