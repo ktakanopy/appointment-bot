@@ -68,7 +68,7 @@
 
 **Decision:** Use Streamlit for a lightweight chat interface that calls the backend over HTTP.
 
-**Consequences:** The frontend is a single file. It supports session management, streaming progress, and remembered identity. It is not production-grade but demonstrates the end-to-end flow.
+**Consequences:** The frontend is a single file. It supports session management, remembered identity, and the full protected appointment flow. It is not production-grade but demonstrates the end-to-end flow.
 
 ## ADR-008: Custom Eval Runner
 

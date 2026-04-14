@@ -41,7 +41,7 @@ flowchart TB
 
 ### HTTP layer
 
-`app/api/routes.py` and `app/api/schemas.py` define FastAPI routes, Pydantic request and response models, and session validation. Dependencies resolve `RuntimeContext` via `Depends(get_runtime)`. The `POST /chat` endpoint runs the synchronous `graph.invoke` inside `asyncio.to_thread` so the asyncio event loop is not blocked. `POST /chat/stream` returns a `StreamingResponse` with Server-Sent Events (SSE). The layer maps HTTP concerns to graph payloads and responses; it does not embed business rules beyond validation and orchestration.
+`app/api/routes.py` and `app/api/schemas.py` define FastAPI routes, Pydantic request and response models, and session validation. Dependencies resolve `RuntimeContext` via `Depends(get_runtime)`. The `POST /chat` endpoint runs the synchronous `graph.invoke` inside `asyncio.to_thread` so the asyncio event loop is not blocked. The layer maps HTTP concerns to graph payloads and responses; it does not embed business rules beyond validation and orchestration.
 
 ### Graph orchestration
 
@@ -120,42 +120,6 @@ Steps:
 5. Map the graph result to `ChatResponse` (response text, verification flags, appointments, last action, errors).
 6. Call `_ensure_remembered_identity` so verified sessions create or update remembered identity as appropriate; attach `remembered_identity_status` to the response.
 7. Return `ChatResponse`.
-
-### POST /chat/stream
-
-```mermaid
-sequenceDiagram
-  participant C as Client
-  participant API as FastAPI
-  participant T as Daemon thread
-  participant G as LangGraph
-  participant Q as asyncio.Queue
-
-  C->>API: POST /chat/stream
-  API->>API: same payload build as /chat
-  API->>T: start thread(produce)
-  loop graph.stream
-    T->>G: stream(payload, config)
-    G-->>T: chunk per node
-    T->>Q: SSE event node
-  end
-  T->>Q: SSE event message (final ChatResponse JSON)
-  T->>Q: SSE event done
-  T->>Q: sentinel (__end__)
-  loop event_stream
-    API->>Q: await get
-    Q-->>API: event_name, data
-    API-->>C: SSE frames
-  end
-```
-
-Steps:
-
-1. Build the payload the same way as `POST /chat` (session check, bootstrap pop or restore, `thread_id` and message).
-2. Start a daemon thread that runs `graph.stream` with the same `config`.
-3. For each chunk, emit an SSE event named `node` with node metadata derived from partial state.
-4. After streaming completes, emit SSE `message` with the same structured payload as synchronous chat (via `_build_chat_response`), then `done` with `thread_id`, and a sentinel to end the async generator.
-5. The async generator drains the queue and yields formatted SSE until the sentinel; the client connection closes when the stream ends.
 
 ### POST /remembered-identity/forget
 

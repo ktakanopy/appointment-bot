@@ -54,42 +54,22 @@ def _start_session(remembered_identity_id: str | None = None) -> None:
 
 def _handle_user_message(message: str) -> None:
     st.session_state.messages.append({"role": "user", "content": message})
-    streamed_response = None
-    status_placeholder = st.empty()
-    assistant_placeholder = st.empty()
     try:
-        with assistant_placeholder.container():
-            with st.chat_message("assistant"):
-                response_placeholder = st.empty()
-                for event in st.session_state.client.send_message_stream(
-                    session_id=st.session_state.session_id,
-                    message=message,
-                    remembered_identity_id=st.session_state.remembered_identity_id,
-                ):
-                    if event["event"] == "node":
-                        status_placeholder.caption(_node_status_text(event["data"]))
-                        continue
-                    if event["event"] == "message":
-                        streamed_response = event["data"]
-                        response_placeholder.write(streamed_response["response"])
-                        continue
-                    if event["event"] == "error":
-                        raise httpx.HTTPError(event["data"]["detail"])
+        response = st.session_state.client.send_message(
+            session_id=st.session_state.session_id,
+            message=message,
+            remembered_identity_id=st.session_state.remembered_identity_id,
+        )
     except httpx.HTTPError as error:
         st.session_state.error = str(error)
         return
-    finally:
-        status_placeholder.empty()
-    if streamed_response is None:
-        st.session_state.error = "No response received from the backend."
-        return
-    st.session_state.messages.append({"role": "assistant", "content": streamed_response["response"]})
-    st.session_state.verified = streamed_response["verified"]
-    st.session_state.appointments = streamed_response.get("appointments") or []
-    st.session_state.last_action_result = streamed_response.get("last_action_result")
-    st.session_state.remembered_identity_status = streamed_response["remembered_identity_status"]
-    st.session_state.remembered_identity_id = streamed_response["remembered_identity_status"]["remembered_identity_id"] or None
-    st.session_state.error = streamed_response.get("error_code")
+    st.session_state.messages.append({"role": "assistant", "content": response["response"]})
+    st.session_state.verified = response["verified"]
+    st.session_state.appointments = response.get("appointments") or []
+    st.session_state.last_action_result = response.get("last_action_result")
+    st.session_state.remembered_identity_status = response["remembered_identity_status"]
+    st.session_state.remembered_identity_id = response["remembered_identity_status"]["remembered_identity_id"] or None
+    st.session_state.error = response.get("error_code")
     st.session_state.current_action = response.get("current_action", "unknown")
 
 
@@ -102,18 +82,6 @@ def _forget_identity() -> None:
         "status": "revoked",
     }
     st.session_state.remembered_identity_id = None
-
-
-def _node_status_text(data: dict[str, str | bool | None]) -> str:
-    node = data.get("node")
-    if node == "verification_subgraph":
-        return "Verifying identity..."
-    if node in {"list_appointments", "confirm_appointment", "cancel_appointment"}:
-        return "Applying appointment action..."
-    if node == "generate_response":
-        return "Preparing response..."
-    return "Processing..."
-    st.session_state.current_action = "verify_identity"
 
 
 def _chat_placeholder() -> str:

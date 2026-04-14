@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import httpx
 
 from frontend.lib.api_client import BackendClient
@@ -67,28 +65,3 @@ def test_frontend_client_posts_chat_message():
     response = client.send_message("s1", "hello")
 
     assert response["response"] == "Hello"
-
-
-def test_frontend_client_reads_stream_events():
-    payload = (
-        "event: node\n"
-        f"data: {json.dumps({'node': 'generate_response'})}\n\n"
-        "event: message\n"
-        f"data: {json.dumps({'response': 'Hello'})}\n\n"
-    )
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/chat/stream"
-        return httpx.Response(200, text=payload)
-
-    client = BackendClient(
-        "http://example.test",
-        client=httpx.Client(transport=httpx.MockTransport(handler), base_url="http://example.test"),
-    )
-
-    events = list(client.send_message_stream("s1", "hello"))
-
-    assert events == [
-        {"event": "node", "data": {"node": "generate_response"}},
-        {"event": "message", "data": {"response": "Hello"}},
-    ]

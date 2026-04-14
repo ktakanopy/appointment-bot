@@ -22,7 +22,7 @@ This document describes security-related behavior in the healthcare appointment 
 
 `/sessions/new` creates a `SessionRecord` in `runtime.sessions` with a UUID `session_id`.
 
-`/chat` and `/chat/stream` call `_require_session`, which returns HTTP 404 if `session_id` is not in the registry.
+`/chat` calls `_require_session`, which returns HTTP 404 if `session_id` is not in the registry.
 
 Sessions use a TTL (`SESSION_TTL_MINUTES`, default 60 minutes). Expired sessions are removed during request handling.
 

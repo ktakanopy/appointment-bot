@@ -25,5 +25,3 @@
     session-not-found response instead of silently creating a thread.
 12. Fail identity verification three times in the same session and confirm the
     session is locked until a new session is created.
-13. Call `POST /chat/stream` and confirm the response emits node events followed
-    by a final message event.

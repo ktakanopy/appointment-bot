@@ -275,30 +275,10 @@ Specification artifacts:
   accepting arbitrary thread ids
 - verification attempts are capped per session, with automatic lockout after
   repeated failures
-- `POST /chat/stream` exposes a streaming chat endpoint with per-node progress
-  events and a final message event
-- the Streamlit frontend uses the streaming endpoint to show progress during
-  verification and appointment actions
+- the Streamlit frontend now uses the same `POST /chat` flow as the public API,
+  which keeps the client and backend simpler
 - the eval suite now covers retry recovery and missing-list-context flows
 - graph-level concurrency coverage verifies parallel thread isolation
-
-## Streaming Example
-
-```bash
-curl -N -X POST http://localhost:8000/chat/stream \
-  -H 'Content-Type: application/json' \
-  -d '{"session_id":"demo-session-1","message":"I want to see my appointments"}'
-```
-
-Example event sequence:
-
-```text
-event: node
-data: {"node":"verification_subgraph","current_action":"verify_identity","verified":false,"verification_status":"collecting","error_code":null}
-
-event: message
-data: {"response":"I can help with that, but first I need to verify your identity. What is your full name?","verified":false,"current_action":"verify_identity", ...}
-```
 
 ## Docker
 

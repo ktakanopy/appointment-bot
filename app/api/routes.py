@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import threading
 import time
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
     ActionResultResponse,
@@ -106,62 +103,6 @@ async def chat(
     return _build_chat_response(runtime, request, result)
 
 
-@router.post("/chat/stream")
-async def chat_stream(
-    request: ChatRequest,
-    runtime: RuntimeContext = Depends(get_runtime),
-) -> StreamingResponse:
-    payload = _build_chat_payload(runtime, request)
-    config = {"configurable": {"thread_id": request.session_id}}
-    queue: asyncio.Queue[tuple[str, dict[str, Any] | None]] = asyncio.Queue()
-    loop = asyncio.get_running_loop()
-
-    def publish(event_name: str, data: dict[str, Any] | None) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, (event_name, data))
-
-    def produce() -> None:
-        final_result: dict[str, Any] | None = None
-        try:
-            record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
-            for chunk in runtime.graph.stream(payload, config):
-                if not chunk:
-                    continue
-                node_name, node_state = next(iter(chunk.items()))
-                final_result = node_state
-                publish("node", _build_stream_node_event(node_name, node_state))
-            if final_result is None:
-                publish("error", {"detail": "The chat stream did not produce a result.", "error_code": "empty_stream"})
-                return
-            record_trace_event(runtime.logger, runtime.tracer, "workflow.end", {"session_id": request.session_id, "result": final_result})
-            publish("message", _build_chat_response(runtime, request, final_result).model_dump())
-            publish("done", {"thread_id": request.session_id})
-        except RepositoryUnavailableError:
-            publish("error", {"detail": "The appointment service is temporarily unavailable.", "error_code": "service_unavailable"})
-        except Exception:
-            publish("error", {"detail": "The chat stream failed.", "error_code": "stream_failed"})
-        finally:
-            publish("__end__", None)
-
-    threading.Thread(target=produce, daemon=True).start()
-
-    async def event_stream():
-        while True:
-            event_name, data = await queue.get()
-            if event_name == "__end__":
-                break
-            yield _format_sse(event_name, data or {})
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
 @router.post("/remembered-identity/forget", response_model=ForgetRememberedIdentityResponse)
 async def forget_remembered_identity(
     request: ForgetRememberedIdentityRequest,
@@ -229,19 +170,6 @@ def _build_chat_response(runtime: RuntimeContext, request: ChatRequest, result: 
         error_code=result.get("error_code"),
         remembered_identity_status=remembered_identity_status,
     )
-
-
-def _build_stream_node_event(node_name: str, state: dict[str, Any]) -> dict[str, Any]:
-    current_action = state.get("requested_action") or "unknown"
-    if not state.get("verified") and current_action in {"unknown", "help", "verify_identity"}:
-        current_action = "verify_identity"
-    return {
-        "node": node_name,
-        "current_action": current_action,
-        "verified": state.get("verified", False),
-        "verification_status": state.get("verification_status"),
-        "error_code": state.get("error_code"),
-    }
 
 
 def _ensure_remembered_identity(runtime: RuntimeContext, result: dict[str, Any]) -> RememberedIdentity | None:
@@ -320,7 +248,3 @@ def _require_session(runtime: RuntimeContext, session_id: str) -> SessionRecord:
         raise HTTPException(status_code=404, detail="Session not found. Start a new session.")
     session.last_seen_at = time.monotonic()
     return session
-
-
-def _format_sse(event_name: str, data: dict[str, Any]) -> str:
-    return f"event: {event_name}\ndata: {json.dumps(data, ensure_ascii=True)}\n\n"

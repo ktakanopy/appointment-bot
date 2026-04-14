@@ -19,9 +19,6 @@ class InvokableGraph(Protocol):
     def invoke(self, payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
         ...
 
-    def stream(self, payload: dict[str, Any], config: dict[str, Any]):
-        ...
-
 
 @dataclass(slots=True)
 class SessionBootstrap:
