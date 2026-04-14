@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from app.config import ProviderSettings
 from app.llm.openai_provider import OpenAIProvider
 
@@ -26,7 +28,7 @@ class FakeClient:
         self.chat = FakeChat(content)
 
 
-def _provider() -> OpenAIProvider:
+def _provider(content: str = '{"response_text":"ok"}') -> OpenAIProvider:
     return OpenAIProvider(
         ProviderSettings(
             provider_name="openai",
@@ -35,12 +37,12 @@ def _provider() -> OpenAIProvider:
             timeout_seconds=20,
         ),
         logger=logging.getLogger("appointment_bot"),
+        client=FakeClient(content),
     )
 
 
 def test_openai_provider_parses_structured_intent_response():
-    provider = _provider()
-    provider.client = FakeClient(
+    provider = _provider(
         '{"requested_action":"list_appointments","full_name":"Ana Silva","phone":"11999998888","dob":"1990-05-10","appointment_reference":null}'
     )
 
@@ -51,9 +53,15 @@ def test_openai_provider_parses_structured_intent_response():
 
 
 def test_openai_provider_parses_structured_response_generation():
-    provider = _provider()
-    provider.client = FakeClient('{"response_text":"Your appointment is confirmed."}')
+    provider = _provider('{"response_text":"Your appointment is confirmed."}')
 
     result = provider.generate_response({"requested_action": "confirm_appointment"}, "fallback")
 
     assert result.response_text == "Your appointment is confirmed."
+
+
+def test_openai_provider_raises_for_empty_content():
+    provider = _provider("")
+
+    with pytest.raises(ValueError, match="empty content"):
+        provider.generate_response({"requested_action": "confirm_appointment"}, "fallback")
