@@ -1,72 +1,82 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.action_names import ActionName
 from app.domain.models import Appointment
 
 
-class VerificationState(TypedDict, total=False):
-    verified: bool
-    verification_failures: int
-    verification_status: str | None
-    patient_id: str | None
-    provided_full_name: str | None
-    provided_phone: str | None
-    provided_dob: str | None
+class StateModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        setattr(self, key, value)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            return default
+
+    def setdefault(self, key: str, default: Any = None) -> Any:
+        value = getattr(self, key, None)
+        if value is None:
+            setattr(self, key, default)
+        return getattr(self, key)
 
 
-class TurnState(TypedDict, total=False):
-    requested_action: ActionName | None
-    deferred_action: ActionName | None
-    last_action_result: dict[str, str | None] | None
-    response_text: str | None
-    error_code: str | None
+class VerificationState(StateModel):
+    verified: bool = False
+    verification_failures: int = 0
+    verification_status: Optional[str] = None
+    patient_id: Optional[str] = None
+    provided_full_name: Optional[str] = None
+    provided_phone: Optional[str] = None
+    provided_dob: Optional[str] = None
+
+    def reset_failed_verification(self) -> None:
+        self.verification_status = "failed"
+        self.verified = False
+        self.patient_id = None
+        self.provided_full_name = None
+        self.provided_phone = None
+        self.provided_dob = None
 
 
-class AppointmentState(TypedDict, total=False):
-    listed_appointments: list[Appointment]
-    appointment_reference: str | None
+class TurnState(StateModel):
+    requested_action: Optional[ActionName] = None
+    deferred_action: Optional[ActionName] = None
+    last_action_result: Optional[dict[str, Optional[str]]] = None
+    response_text: Optional[str] = None
+    error_code: Optional[str] = None
 
 
-class ConversationState(TypedDict, total=False):
-    thread_id: str
-    incoming_message: str
-    messages: list[dict[str, str]]
-    verification: VerificationState
-    turn: TurnState
-    appointments: AppointmentState
+class AppointmentState(StateModel):
+    listed_appointments: list[Appointment] = Field(default_factory=list)
+    appointment_reference: Optional[str] = None
 
 
-def ensure_state_defaults(state: ConversationState) -> ConversationState:
-    state.setdefault("messages", [])
-    state.setdefault("verification", {})
-    state.setdefault("turn", {})
-    state.setdefault("appointments", {})
-    state["verification"].setdefault("verified", False)
-    state["verification"].setdefault("verification_failures", 0)
-    state["verification"].setdefault("verification_status", None)
-    state["verification"].setdefault("patient_id", None)
-    state["verification"].setdefault("provided_full_name", None)
-    state["verification"].setdefault("provided_phone", None)
-    state["verification"].setdefault("provided_dob", None)
-    state["turn"].setdefault("requested_action", "unknown")
-    state["turn"].setdefault("deferred_action", None)
-    state["turn"].setdefault("last_action_result", None)
-    state["turn"].setdefault("response_text", None)
-    state["turn"].setdefault("error_code", None)
-    state["appointments"].setdefault("listed_appointments", [])
-    state["appointments"].setdefault("appointment_reference", None)
-    return state
+class ConversationState(StateModel):
+    thread_id: str = ""
+    incoming_message: str = ""
+    messages: list[dict[str, str]] = Field(default_factory=list)
+    verification: VerificationState = Field(default_factory=VerificationState)
+    turn: TurnState = Field(default_factory=TurnState)
+    appointments: AppointmentState = Field(default_factory=AppointmentState)
 
 
 def verification_state(state: ConversationState) -> VerificationState:
-    return state["verification"]
+    return state.verification
 
 
 def turn_state(state: ConversationState) -> TurnState:
-    return state["turn"]
+    return state.turn
 
 
 def appointment_state(state: ConversationState) -> AppointmentState:
-    return state["appointments"]
+    return state.appointments
