@@ -45,7 +45,7 @@ flowchart TB
 
 ### Graph orchestration
 
-`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. Nodes: `ingest_user_message`, `parse_intent_and_entities`, `verification_subgraph`, `list_appointments`, `confirm_appointment`, `cancel_appointment`, `handle_help_or_unknown`, `generate_response`. Conditional routing uses `route_after_interpret` after `parse_intent_and_entities` and `route_after_verification` after `verification_subgraph`. The graph is the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
+`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. The runtime graph is intentionally linear: `ingest_user_message`, `parse_intent_and_entities`, `verify_or_prompt`, `execute_action`, and `generate_response`. Verification and action dispatch still use deterministic helpers in `app/graph/routing.py`, but branching no longer happens at the graph-edge level. The graph remains the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
 
 ### Domain services
 

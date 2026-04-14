@@ -74,23 +74,18 @@ stateDiagram-v2
 | messages | list[dict] | Full conversation history (role + content pairs) |
 | verified | bool | Whether identity verification has succeeded |
 | verification_failures | int | Count of failed verification attempts in this session |
-| verification_locked | bool | Whether the session is locked due to too many failures |
-| verification_status | str or None | Current phase: collecting, failed, verified, locked |
+| verification_status | str or None | Current phase: collecting, failed, verified, or locked |
 | patient_id | str or None | Matched patient ID after successful verification |
 | provided_full_name | str or None | Name provided by the patient during verification |
 | provided_phone | str or None | Phone provided by the patient during verification |
 | provided_dob | str or None | Date of birth provided by the patient during verification |
-| missing_verification_fields | list[str] | Fields still needed: full_name, phone, dob |
 | requested_action | ActionName or None | Current action being processed |
 | deferred_action | ActionName or None | Protected action deferred until verification completes |
 | listed_appointments | list[Appointment] | Appointments returned by the last list action |
 | appointment_reference | str or None | User's reference to a specific appointment (ordinal, date, id) |
-| selected_appointment_id | str or None | Resolved appointment ID for confirm/cancel |
 | last_action_result | dict or None | Outcome of the last appointment action |
 | response_text | str or None | Text to return to the patient |
 | error_code | str or None | Machine-readable error code for the current turn |
-| remembered_identity_id | str or None | Active remembered identity token |
-| remembered_identity_status | dict or None | Summary of remembered identity state |
 
 ## 5. Persistence Strategy
 

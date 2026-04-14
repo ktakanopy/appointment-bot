@@ -28,6 +28,7 @@ Per-node log events (via `log_event`, not `record_trace_event`):
 - parse_intent_and_entities (plus `appointment_reference`)
 - collect_missing_verification_fields
 - verify_identity (plus `outcome`: verified, failed, or locked)
+- execute_action (plus `outcome=skipped` when verification already produced the turn response)
 - list_appointments (plus `appointment_count`)
 - confirm_appointment (plus `outcome`, `appointment_id`)
 - cancel_appointment (plus `outcome`, `appointment_id`)

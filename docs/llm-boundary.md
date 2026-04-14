@@ -75,11 +75,8 @@ flowchart LR
   end
   subgraph deterministic_only["Deterministic only"]
     C[ingest_user_message]
-    D[verification_subgraph]
-    E[list_appointments]
-    F[confirm_appointment]
-    G[cancel_appointment]
-    H[handle_help_or_unknown]
+    D[verify_or_prompt]
+    E[execute_action]
   end
 ```
 
@@ -87,11 +84,8 @@ flowchart LR
 |------|-----|---------------|
 | ingest_user_message | No | Yes |
 | parse_intent_and_entities | Yes | No |
-| verification_subgraph | No | Yes |
-| list_appointments | No | Yes |
-| confirm_appointment | No | Yes |
-| cancel_appointment | No | Yes |
-| handle_help_or_unknown | No | Yes |
+| verify_or_prompt | No | Yes |
+| execute_action | No | Yes |
 | generate_response | Yes | Yes (upstream business outcome only) |
 
 ## 7. Error isolation
