@@ -238,10 +238,16 @@ uv run python -m app.evals.runner
 
 ## Design Artifacts
 
-Supporting documentation:
+Architecture documentation:
 
-- `docs/sdd.md`
+- `docs/architecture.md`
+- `docs/llm-boundary.md`
+- `docs/security.md`
+- `docs/data-model.md`
+- `docs/observability.md`
+- `docs/evaluation.md`
 - `docs/decisions.md`
+- `docs/graph.md`
 - `docs/test-scenarios.md`
 
 Specification artifacts:
@@ -310,4 +316,11 @@ Then open:
 
 ## Additional Docs
 
-- `docs/graph.md`
+- `docs/architecture.md` -- system overview, layered architecture, data flows
+- `docs/llm-boundary.md` -- LLM provider boundary, fallback, prompt design
+- `docs/security.md` -- verification gating, session validation, PII redaction
+- `docs/data-model.md` -- domain models, state machine, persistence strategy
+- `docs/observability.md` -- structured logging, Langfuse, trace events
+- `docs/evaluation.md` -- eval framework, scenarios, judge modes
+- `docs/decisions.md` -- architecture decision records
+- `docs/graph.md` -- workflow graph diagram
