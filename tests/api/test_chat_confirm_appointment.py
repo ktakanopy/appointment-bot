@@ -20,7 +20,7 @@ def test_api_confirm_first_appointment():
     assert body["last_action_result"]["outcome"] == "confirmed"
     assert len(body["appointments"]) == 2
     assert body["appointments"][0]["status"] == "confirmed"
-    assert "Here are your appointments:" in body["response"]
+    assert "Confirmed. Here is your updated appointment list." in body["response"]
 
 
 def test_api_confirm_numeric_reference_uses_patient_facing_numbering():
@@ -38,7 +38,7 @@ def test_api_confirm_numeric_reference_uses_patient_facing_numbering():
     assert body["last_action_result"]["outcome"] == "confirmed"
 
 
-def test_api_ambiguous_confirm_without_list_context():
+def test_api_confirm_after_verification_only_flow_uses_auto_list_context():
     session_id = client.post("/sessions/new").json()["session_id"]
 
     for message in ["Ana Silva", "11999998888", "1990-05-10"]:
@@ -48,7 +48,9 @@ def test_api_ambiguous_confirm_without_list_context():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["issue"] == "missing_list_context"
+    assert body["current_operation"] == "confirm_appointment"
+    assert body["last_action_result"]["appointment_id"] == "a1"
+    assert body["last_action_result"]["outcome"] == "confirmed"
 
 
 def test_api_repeated_confirm_keeps_appointments_visible():
@@ -64,4 +66,4 @@ def test_api_repeated_confirm_keeps_appointments_visible():
     body = response.json()
     assert body["last_action_result"]["outcome"] == "already_confirmed"
     assert body["appointments"][0]["status"] == "confirmed"
-    assert "Here are your appointments:" in body["response"]
+    assert "That appointment was already confirmed. Here is your updated appointment list." in body["response"]

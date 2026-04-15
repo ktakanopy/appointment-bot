@@ -75,8 +75,8 @@ class ResponsePolicy:
 
     def _appointments_list(self, workflow_result: ConversationWorkflowResult) -> str:
         if not workflow_result.listed_appointments:
-            return "You do not have any appointments right now."
-        lines = ["Here are your appointments:"]
+            return "Thanks, you're verified. You do not have any appointments right now."
+        lines = ["Thanks, you're verified. Here are your appointments. Would you like to confirm or cancel any of them?"]
         for index, appointment in enumerate(workflow_result.listed_appointments, start=1):
             lines.append(f"{index}. {appointment.date} at {appointment.time} with {appointment.doctor} ({appointment.status})")
         return "\n".join(lines)
@@ -86,7 +86,7 @@ class ResponsePolicy:
         if subject is None:
             return self._default(workflow_result)
         return self._with_appointments_list(
-            f"Your appointment for {subject.date} at {subject.time} is now confirmed.",
+            "Confirmed. Here is your updated appointment list.",
             workflow_result,
         )
 
@@ -95,7 +95,7 @@ class ResponsePolicy:
         if subject is None:
             return self._default(workflow_result)
         return self._with_appointments_list(
-            f"That appointment was already confirmed for {subject.date} at {subject.time}.",
+            "That appointment was already confirmed. Here is your updated appointment list.",
             workflow_result,
         )
 
@@ -107,7 +107,7 @@ class ResponsePolicy:
         if subject is None:
             return self._default(workflow_result)
         return self._with_appointments_list(
-            f"Your appointment for {subject.date} at {subject.time} has been canceled.",
+            "Canceled. Here is your updated appointment list.",
             workflow_result,
         )
 
@@ -116,7 +116,7 @@ class ResponsePolicy:
         if subject is None:
             return self._default(workflow_result)
         return self._with_appointments_list(
-            f"That appointment was already canceled for {subject.date} at {subject.time}.",
+            "That appointment was already canceled. Here is your updated appointment list.",
             workflow_result,
         )
 
@@ -144,7 +144,13 @@ class ResponsePolicy:
     def _with_appointments_list(self, text: str, workflow_result: ConversationWorkflowResult) -> str:
         if not workflow_result.listed_appointments:
             return text
-        return f"{text}\n\n{self._appointments_list(workflow_result)}"
+        return f"{text}\n\n{self._plain_appointments_list(workflow_result)}"
+
+    def _plain_appointments_list(self, workflow_result: ConversationWorkflowResult) -> str:
+        lines = []
+        for index, appointment in enumerate(workflow_result.listed_appointments, start=1):
+            lines.append(f"{index}. {appointment.date} at {appointment.time} with {appointment.doctor} ({appointment.status})")
+        return "\n".join(lines)
 
     def _default(self, workflow_result: ConversationWorkflowResult) -> str:
         return "I couldn't complete that request right now. Please try again."

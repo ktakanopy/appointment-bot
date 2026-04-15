@@ -65,6 +65,19 @@ def test_verify_then_list_keeps_original_deferred_action_during_identity_collect
     assert len(final.listed_appointments) == 2
 
 
+def test_verify_without_deferred_action_auto_lists_appointments():
+    workflow = build_test_workflow()
+
+    workflow.run(ConversationWorkflowInput(thread_id="graph-auto-list", incoming_message="Ana Silva"))
+    workflow.run(ConversationWorkflowInput(thread_id="graph-auto-list", incoming_message="11999998888"))
+    final = workflow.run(ConversationWorkflowInput(thread_id="graph-auto-list", incoming_message="1990-05-10"))
+
+    assert final.verification.verified is True
+    assert final.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
+    assert final.turn.response_key == ResponseKey.APPOINTMENTS_LIST
+    assert len(final.listed_appointments) == 2
+
+
 def test_greeting_routes_into_verification_before_help():
     workflow = build_test_workflow()
 

@@ -26,3 +26,25 @@ def test_cancel_then_reroute_back_to_list():
     assert canceled.listed_appointments[0].status == "canceled"
     assert refreshed.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
     assert refreshed.listed_appointments[0].status == "canceled"
+
+
+def test_cancel_second_reference_replaces_previous_selection():
+    workflow = build_test_workflow()
+
+    for message in [
+        "show me my appointments",
+        "Ana Silva",
+        "11999998888",
+        "1990-05-10",
+    ]:
+        workflow.run(ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message=message))
+
+    workflow.run(ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message="confirm the first one"))
+    canceled = workflow.run(
+        ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message="cancel the second one")
+    )
+
+    assert canceled.turn.operation_result.outcome == ConversationOperationOutcome.CANCELED
+    assert canceled.turn.operation_result.appointment_id == "a2"
+    assert canceled.listed_appointments[0].status == "confirmed"
+    assert canceled.listed_appointments[1].status == "canceled"

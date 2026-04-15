@@ -139,6 +139,14 @@ Why deterministic workflow over a ReAct agent:
 - confirmation and cancellation are idempotent
 - the system avoids exposing another patient's data
 
+## UX Scope Notes
+
+- after successful verification, the intended UX is to show appointments automatically, so asking `list appointments` becomes optional for the happy path
+- the explicit `list appointments` intent still exists and remains valid
+- the current delivery supports one primary appointment action per user message
+
+Messages that combine multiple mutations in one turn, such as `confirm the first and cancel the second`, are intentionally treated as out of scope for this exercise delivery. The reason is not that the behavior is unimportant, but that implementing it correctly would require broadening a design that is currently centered on one interpreted action and one main result per turn. For a hiring-process submission, keeping that boundary makes the workflow easier to reason about, test, and defend: the core value is deterministic verification-gated behavior, not maximizing conversational surface area in a single iteration.
+
 ## Environment Setup
 
 ### Requirements

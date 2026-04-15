@@ -116,3 +116,13 @@
 - **Less failure surface:** Provider errors can no longer occur during response rendering; the only provider call remaining is `interpret`.
 - **Sufficient quality:** `ResponsePolicy` strings are concise, patient-facing, and correct for every workflow outcome. LLM rewriting added stylistic variation without improving accuracy or safety.
 - **LLM boundary preserved:** The model still handles the intent and entity extraction task where nondeterminism is unavoidable and valuable. The workflow and all policy outcomes remain fully deterministic Python.
+
+## ADR-012: Keep One Action Per Turn for This Delivery
+
+**Status:** Accepted
+
+**Context:** During review of the conversational UX, two improvements emerged as high-value and low-risk for the exercise: automatically listing appointments right after successful verification, and fixing stale appointment-reference reuse between turns. A third idea also emerged: supporting compound messages such as `confirm the first and cancel the second`. Although desirable, that behavior would expand the current design from one primary action per turn to multiple ordered actions in a single turn. The current workflow, turn state, and response contract are intentionally modeled around one interpreted operation and one main action result per message.
+
+**Decision:** For this hiring-process delivery, keep the system scoped to one primary appointment action per user turn. Prioritize the post-verification auto-list improvement and the appointment-reference bug fix. Treat support for multiple appointment mutations in one message as a future enhancement rather than part of the current refactor.
+
+**Consequences:** The delivered flow stays simpler, more testable, and easier to explain in review. It remains aligned with the exercise's core goals: verification-gated access, natural rerouting between turns, and deterministic protected operations. Compound commands are a known limitation for now because supporting them correctly would require widening the intent schema, turn-level workflow state, mutation execution flow, and possibly the public response contract.

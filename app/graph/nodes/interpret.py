@@ -77,5 +77,5 @@ def _update_appointment_reference(
     if requested_operation not in APPOINTMENT_ACTIONS:
         appointments.appointment_reference = None
         return
-    if appointments.appointment_reference is None and appointment_reference:
+    if appointment_reference:
         appointments.appointment_reference = appointment_reference

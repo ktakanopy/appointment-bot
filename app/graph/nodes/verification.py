@@ -127,10 +127,13 @@ def _handle_successful_verification(
     patient_id: str,
     state: ConversationState,
 ) -> ConversationState:
+    had_deferred_operation = turn.deferred_operation is not None
     verification.mark_verified(patient_id)
     turn.issue = None
     turn.response_key = None
     turn.resume_deferred_operation()
+    if not had_deferred_operation:
+        turn.requested_operation = ConversationOperation.LIST_APPOINTMENTS
     log_event(logger, "verify_identity", state, outcome="verified")
     return state
 
