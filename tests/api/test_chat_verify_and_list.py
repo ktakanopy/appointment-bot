@@ -19,7 +19,7 @@ def test_api_verify_then_list_happy_path():
     assert body["verified"] is True
     assert body["current_operation"] == "list_appointments"
     assert len(body["appointments"]) == 2
-    assert "Would you like to confirm or cancel any of them?" in body["response"]
+    assert "I am here to list, confirm, and cancel appointments." in body["response"]
 
 
 def test_api_invalid_identity_explains_mismatch():
@@ -59,7 +59,7 @@ def test_api_invalid_dob_format_explains_why_and_allows_retry():
     assert valid_body["verified"] is True
     assert valid_body["current_operation"] == "list_appointments"
     assert len(valid_body["appointments"]) == 2
-    assert "Would you like to confirm or cancel any of them?" in valid_body["response"]
+    assert "I am here to list, confirm, and cancel appointments." in valid_body["response"]
 
 
 def test_api_identify_request_starts_verification_before_capabilities():
@@ -86,4 +86,4 @@ def test_api_verification_without_deferred_action_auto_lists_appointments():
     assert body["verified"] is True
     assert body["current_operation"] == "list_appointments"
     assert len(body["appointments"]) == 2
-    assert "Would you like to confirm or cancel any of them?" in body["response"]
+    assert "I am here to list, confirm, and cancel appointments." in body["response"]

@@ -35,6 +35,8 @@ The main artifacts from that process live in:
 - `specs/001-appointment-management/`
 - `specs/002-frontend-llm-memory/`
 
+After the spec implementation, I started iteration with Cursor and Github Copilot agents. 
+
 ## Architecture
 
 This project is built with:
@@ -101,28 +103,6 @@ flowchart TD
     readyForAction -->|yes| finish([End])
     readyForAction -->|no| execute
     execute --> finish
-```
-
-Agent graph:
-
-```mermaid
-flowchart TD
-    startNode([Start]) --> ingestNode[ingest_user_message]
-    ingestNode --> interpretNode[parse_intent_and_entities]
-    interpretNode --> needVerify{verification_required?}
-    needVerify -->|yes| verifyNode[verify]
-    needVerify -->|no| actionRouter{requested_operation}
-    verifyNode --> verifyOutput{turn_output_present?}
-    verifyOutput -->|yes| endNode([End])
-    verifyOutput -->|no| actionRouter
-    actionRouter -->|list_appointments| listNode[list_appointments]
-    actionRouter -->|confirm_appointment| confirmNode[confirm_appointment]
-    actionRouter -->|cancel_appointment| cancelNode[cancel_appointment]
-    actionRouter -->|help_or_unknown| helpNode[help]
-    listNode --> endNode
-    confirmNode --> endNode
-    cancelNode --> endNode
-    helpNode --> endNode
 ```
 
 Why deterministic workflow over a ReAct agent:

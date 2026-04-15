@@ -44,7 +44,7 @@ class ResponsePolicy:
         return set(self._builders)
 
     def _collect_full_name(self, workflow_result: ConversationWorkflowResult) -> str:
-        return "I'm CAPY. I can help with that, but first I need to verify your identity. What is your full name?"
+        return "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?"
 
     def _collect_phone(self, workflow_result: ConversationWorkflowResult) -> str:
         return "Thanks. What phone number is on your clinic record?"
@@ -76,7 +76,7 @@ class ResponsePolicy:
     def _appointments_list(self, workflow_result: ConversationWorkflowResult) -> str:
         if not workflow_result.listed_appointments:
             return "Thanks, you're verified. You do not have any appointments right now."
-        lines = ["Thanks, you're verified. Here are your appointments. Would you like to confirm or cancel any of them?"]
+        lines = ["Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments."]
         for index, appointment in enumerate(workflow_result.listed_appointments, start=1):
             lines.append(f"{index}. {appointment.date} at {appointment.time} with {appointment.doctor} ({appointment.status})")
         return "\n".join(lines)
