@@ -7,10 +7,9 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from app.config import ProviderSettings
-from app.llm.schemas import AssistantResponse, IntentPrediction, JudgeResult
+from app.llm.schemas import IntentPrediction, JudgeResult
 from app.observability import record_provider_event
 from app.prompts.intent_prompt import INTENT_PROMPT
-from app.prompts.response_prompt import RESPONSE_PROMPT
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -40,23 +39,6 @@ class OpenAIProvider:
             event_name="interpret",
             response_model=IntentPrediction,
             system_message=INTENT_PROMPT,
-            payload=payload,
-        )
-
-    def generate_response(self, state: dict[str, Any], fallback_text: str) -> AssistantResponse:
-        verification = state.get("verification", {})
-        turn = state.get("turn", {})
-        payload = {
-            "fallback_text": fallback_text,
-            "requested_operation": turn.get("requested_operation"),
-            "verified": verification.get("verified"),
-            "issue": turn.get("issue"),
-            "last_action_result": turn.get("operation_result"),
-        }
-        return self._complete_model(
-            event_name="generate_response",
-            response_model=AssistantResponse,
-            system_message=RESPONSE_PROMPT + "\nKeep the same meaning as fallback_text and do not invent new policy decisions.",
             payload=payload,
         )
 
