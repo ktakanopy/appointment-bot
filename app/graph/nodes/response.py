@@ -28,7 +28,7 @@ def make_response_node(logger, provider):
             turn.response_text = "I couldn't complete that request right now. Please try again."
         generated = provider.generate_response(state, turn.response_text)
         turn.response_text = generated.response_text
-        state.messages.append({"role": "assistant", "content": turn.response_text})
+        state.add_assistant_message(turn.response_text)
         log_event(logger, "generate_response", state)
         return state
 

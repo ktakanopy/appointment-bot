@@ -4,7 +4,7 @@ import pytest
 import app.graph.builder as builder_module
 import app.runtime as runtime_module
 
-from app.domain import policies
+from app.domain import parsing
 from app.llm.schemas import AssistantResponse, IntentPrediction, JudgeResult
 
 
@@ -13,11 +13,11 @@ class TestProvider:
 
     def interpret(self, message, state):
         return IntentPrediction(
-            requested_action=policies.extract_requested_action(message, state),
-            full_name=policies.extract_full_name(message),
-            phone=policies.extract_phone(message),
-            dob=policies.extract_dob(message),
-            appointment_reference=policies.extract_appointment_reference(message),
+            requested_action=parsing.extract_requested_action(message, state),
+            full_name=parsing.extract_full_name(message),
+            phone=parsing.extract_phone(message),
+            dob=parsing.extract_dob(message),
+            appointment_reference=parsing.extract_appointment_reference(message),
         )
 
     def generate_response(self, state, fallback_text):

@@ -14,7 +14,7 @@ from app.domain.models import (
     RememberedIdentity,
     RememberedIdentityStatus,
 )
-from app.domain.policies import normalize_dob, normalize_name, normalize_phone
+from app.domain.parsing import normalize_dob, normalize_name, normalize_phone
 from app.repositories.appointment_repository import AppointmentRepository
 from app.repositories.patient_repository import PatientRepository
 from app.repositories.remembered_identity_repository import RememberedIdentityRepository

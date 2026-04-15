@@ -39,6 +39,15 @@ class VerificationState(StateModel):
     provided_phone: Optional[str] = None
     provided_dob: Optional[str] = None
 
+    def mark_collecting(self) -> None:
+        self.verification_status = "collecting"
+
+    def mark_verified(self, patient_id: str) -> None:
+        self.verification_status = "verified"
+        self.verified = True
+        self.verification_failures = 0
+        self.patient_id = patient_id
+
     def reset_failed_verification(self) -> None:
         self.verification_status = "failed"
         self.verified = False
@@ -47,6 +56,36 @@ class VerificationState(StateModel):
         self.provided_phone = None
         self.provided_dob = None
 
+    def fill_missing_fields(
+        self,
+        *,
+        full_name: Optional[str],
+        phone: Optional[str],
+        dob: Optional[str],
+    ) -> None:
+        if self.provided_full_name is None and full_name:
+            self.provided_full_name = full_name
+        if self.provided_phone is None and phone:
+            self.provided_phone = phone
+        if self.provided_dob is None and dob:
+            self.provided_dob = dob
+
+    def missing_fields(self) -> list[str]:
+        missing = []
+        if not self.provided_full_name:
+            missing.append("full_name")
+        if not self.provided_phone:
+            missing.append("phone")
+        if not self.provided_dob:
+            missing.append("dob")
+        return missing
+
+    def next_missing_field(self) -> Optional[str]:
+        missing = self.missing_fields()
+        if not missing:
+            return None
+        return missing[0]
+
 
 class TurnState(StateModel):
     requested_action: Optional[ActionName] = None
@@ -54,6 +93,16 @@ class TurnState(StateModel):
     last_action_result: Optional[dict[str, Optional[str]]] = None
     response_text: Optional[str] = None
     error_code: Optional[str] = None
+
+    def resume_deferred_action(self) -> None:
+        if self.deferred_action:
+            self.requested_action = self.deferred_action
+            self.deferred_action = None
+
+    def clear_transient_output(self) -> None:
+        self.error_code = None
+        self.response_text = None
+        self.last_action_result = None
 
 
 class AppointmentState(StateModel):
@@ -68,6 +117,12 @@ class ConversationState(StateModel):
     verification: VerificationState = Field(default_factory=VerificationState)
     turn: TurnState = Field(default_factory=TurnState)
     appointments: AppointmentState = Field(default_factory=AppointmentState)
+
+    def add_user_message(self, content: str) -> None:
+        self.messages.append({"role": "user", "content": content})
+
+    def add_assistant_message(self, content: str) -> None:
+        self.messages.append({"role": "assistant", "content": content})
 
 
 def verification_state(state: ConversationState) -> VerificationState:

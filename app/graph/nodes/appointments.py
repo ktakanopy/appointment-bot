@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Callable
 
-from app.domain import policies
+from app.domain import parsing, policies
 from app.domain.models import ActionResult, Appointment
 from app.graph.routing import should_skip_action_execution
 from app.graph.state import AppointmentState, ConversationState, TurnState, VerificationState, appointment_state, turn_state, verification_state
@@ -154,7 +154,7 @@ def _resolve_target_appointment(
         return None
 
     appointments = listed_appointments or appointment_service.list_appointments(verification.patient_id)
-    appointment = policies.resolve_appointment_reference(reference, appointments)
+    appointment = parsing.resolve_appointment_reference(reference, appointments)
     turn.requested_action = action_name
     if appointment is None:
         turn.response_text = ambiguous_message

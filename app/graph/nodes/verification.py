@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain import policies
+from app.domain import parsing
 from app.graph.routing import verification_required
 from app.graph.state import ConversationState, TurnState, VerificationState, turn_state, verification_state
 from app.observability import log_event
@@ -35,14 +35,14 @@ def make_verification_node(verification_service, logger, max_verification_attemp
             )
 
         previous_status = verification.verification_status
-        missing_fields = policies.missing_verification_fields(state)
+        missing_field = verification.next_missing_field()
 
-        if missing_fields:
+        if missing_field:
             return _collect_missing_field(
                 verification,
                 turn,
                 logger,
-                field_name=missing_fields[0],
+                field_name=missing_field,
                 previous_status=previous_status,
                 state=state,
             )
@@ -88,7 +88,7 @@ def _collect_missing_field(
     previous_status: str | None,
     state: ConversationState,
 ) -> ConversationState:
-    verification.verification_status = "collecting"
+    verification.mark_collecting()
     turn.requested_action = "verify_identity"
     invalid_response = _invalid_response_for_field(state, field_name, previous_status)
     if invalid_response is None:
@@ -133,14 +133,9 @@ def _handle_successful_verification(
     patient_id: str,
     state: ConversationState,
 ) -> ConversationState:
-    verification.verification_status = "verified"
-    verification.verified = True
-    verification.verification_failures = 0
-    verification.patient_id = patient_id
+    verification.mark_verified(patient_id)
     turn.error_code = None
-    if turn.deferred_action:
-        turn.requested_action = turn.deferred_action
-        turn.deferred_action = None
+    turn.resume_deferred_action()
     log_event(logger, "verify_identity", state, outcome="verified")
     return state
 
@@ -155,9 +150,9 @@ def _invalid_response_for_field(
     message = (state.incoming_message or "").strip()
     if not message:
         return None
-    parsed_name = policies.extract_full_name(message)
-    parsed_phone = policies.extract_phone(message)
-    parsed_dob = policies.extract_dob(message)
+    parsed_name = parsing.extract_full_name(message)
+    parsed_phone = parsing.extract_phone(message)
+    parsed_dob = parsing.extract_dob(message)
     if field_name == "full_name" and parsed_name is None and parsed_phone is None and parsed_dob is None:
         return INVALID_RESPONSES[field_name]
     if field_name == "phone" and parsed_phone is None and parsed_name is None and parsed_dob is None:
