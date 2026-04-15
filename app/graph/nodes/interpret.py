@@ -63,7 +63,9 @@ def _update_deferred_operation(
     turn: TurnState,
     requested_operation: ConversationOperation,
 ) -> None:
-    if requested_operation.requires_verification and not verification.verified:
+    if verification.verified or not requested_operation.requires_verification:
+        return
+    if turn.deferred_operation is None:
         turn.deferred_operation = requested_operation
 
 

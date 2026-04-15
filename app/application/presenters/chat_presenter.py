@@ -24,7 +24,15 @@ class ChatPresenter:
         }:
             current_operation = ConversationOperation.VERIFY_IDENTITY
         appointments = None
-        if current_operation == ConversationOperation.LIST_APPOINTMENTS and workflow_result.listed_appointments:
+        if (
+            workflow_result.verification.verified
+            and workflow_result.listed_appointments
+            and current_operation in {
+                ConversationOperation.LIST_APPOINTMENTS,
+                ConversationOperation.CONFIRM_APPOINTMENT,
+                ConversationOperation.CANCEL_APPOINTMENT,
+            }
+        ):
             appointments = [
                 AppointmentSummary(
                     id=appointment.id,

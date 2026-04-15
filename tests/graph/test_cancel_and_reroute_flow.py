@@ -23,5 +23,6 @@ def test_cancel_then_reroute_back_to_list():
     )
 
     assert canceled.turn.operation_result.outcome == ConversationOperationOutcome.CANCELED
+    assert canceled.listed_appointments[0].status == "canceled"
     assert refreshed.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
     assert refreshed.listed_appointments[0].status == "canceled"

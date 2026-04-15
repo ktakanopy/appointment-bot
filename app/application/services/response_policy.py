@@ -85,13 +85,19 @@ class ResponsePolicy:
         subject = workflow_result.turn.subject_appointment
         if subject is None:
             return self._default(workflow_result)
-        return f"Your appointment for {subject.date} at {subject.time} is now confirmed."
+        return self._with_appointments_list(
+            f"Your appointment for {subject.date} at {subject.time} is now confirmed.",
+            workflow_result,
+        )
 
     def _confirm_already_confirmed(self, workflow_result: ConversationWorkflowResult) -> str:
         subject = workflow_result.turn.subject_appointment
         if subject is None:
             return self._default(workflow_result)
-        return f"That appointment was already confirmed for {subject.date} at {subject.time}."
+        return self._with_appointments_list(
+            f"That appointment was already confirmed for {subject.date} at {subject.time}.",
+            workflow_result,
+        )
 
     def _confirm_not_allowed(self, workflow_result: ConversationWorkflowResult) -> str:
         return "I couldn't confirm that appointment. Please choose a scheduled appointment."
@@ -100,13 +106,19 @@ class ResponsePolicy:
         subject = workflow_result.turn.subject_appointment
         if subject is None:
             return self._default(workflow_result)
-        return f"Your appointment for {subject.date} at {subject.time} has been canceled."
+        return self._with_appointments_list(
+            f"Your appointment for {subject.date} at {subject.time} has been canceled.",
+            workflow_result,
+        )
 
     def _cancel_already_canceled(self, workflow_result: ConversationWorkflowResult) -> str:
         subject = workflow_result.turn.subject_appointment
         if subject is None:
             return self._default(workflow_result)
-        return f"That appointment was already canceled for {subject.date} at {subject.time}."
+        return self._with_appointments_list(
+            f"That appointment was already canceled for {subject.date} at {subject.time}.",
+            workflow_result,
+        )
 
     def _cancel_not_allowed(self, workflow_result: ConversationWorkflowResult) -> str:
         return "I couldn't cancel that appointment. Please choose a scheduled or confirmed appointment."
@@ -128,6 +140,11 @@ class ResponsePolicy:
 
     def _cancel_ambiguous_reference(self, workflow_result: ConversationWorkflowResult) -> str:
         return "I couldn't tell which appointment you want to cancel. Please choose by number or date."
+
+    def _with_appointments_list(self, text: str, workflow_result: ConversationWorkflowResult) -> str:
+        if not workflow_result.listed_appointments:
+            return text
+        return f"{text}\n\n{self._appointments_list(workflow_result)}"
 
     def _default(self, workflow_result: ConversationWorkflowResult) -> str:
         return "I couldn't complete that request right now. Please try again."

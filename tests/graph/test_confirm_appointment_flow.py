@@ -20,6 +20,8 @@ def test_confirm_flow_resolves_first_appointment_and_is_idempotent():
 
     assert confirmed.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED
     assert confirmed_again.turn.operation_result.outcome == ConversationOperationOutcome.ALREADY_CONFIRMED
+    assert confirmed.listed_appointments[0].status == "confirmed"
+    assert confirmed_again.listed_appointments[0].status == "confirmed"
 
 
 def test_confirm_flow_resolves_date_reference_after_listing():
@@ -40,3 +42,4 @@ def test_confirm_flow_resolves_date_reference_after_listing():
     )
 
     assert confirmed.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED
+    assert confirmed.listed_appointments[0].status == "confirmed"

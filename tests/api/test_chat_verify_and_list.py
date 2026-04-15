@@ -70,3 +70,18 @@ def test_api_identify_request_starts_verification_before_capabilities():
     assert body["verified"] is False
     assert body["current_operation"] == "verify_identity"
     assert "full name" in body["response"].lower()
+
+
+def test_api_verification_without_deferred_action_does_not_auto_list_appointments():
+    session_id = client.post("/sessions/new").json()["session_id"]
+
+    client.post("/chat", json={"session_id": session_id, "message": "Ana Silva"})
+    client.post("/chat", json={"session_id": session_id, "message": "11999998888"})
+    response = client.post("/chat", json={"session_id": session_id, "message": "1990-05-10"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["verified"] is True
+    assert body["current_operation"] == "help"
+    assert body["appointments"] is None
+    assert "you are verified" in body["response"].lower()
