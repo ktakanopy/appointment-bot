@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from app.config import Settings, load_settings
 from app.domain.services import AppointmentService, VerificationService
-from app.graph.routing import route_after_interpret, route_after_verify
 from app.graph.nodes.appointments import (
     make_cancel_node,
     make_confirm_node,
@@ -16,40 +14,22 @@ from app.graph.nodes.appointments import (
 )
 from app.graph.nodes.ingest import make_ingest_node
 from app.graph.nodes.interpret import make_interpret_node
-from app.graph.nodes.response import make_help_node, make_response_node
+from app.graph.nodes.response import make_help_node
+from app.graph.routing import route_after_interpret, route_after_verify
 from app.graph.nodes.verification import make_verification_node
 from app.graph.state import ConversationState
 from app.llm.base import LLMProvider
-from app.llm.factory import build_provider
-from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
-from app.observability import build_tracer, get_logger
-
-_UNSET = object()
 
 
 def build_graph(
     *,
-    logger: logging.Logger | None = None,
-    settings: Settings | None = None,
-    tracer: object = _UNSET,
-    provider: LLMProvider | object = _UNSET,
-    verification_service: VerificationService | None = None,
-    appointment_service: AppointmentService | None = None,
+    logger: logging.Logger,
+    provider: LLMProvider,
+    verification_service: VerificationService,
+    appointment_service: AppointmentService,
+    max_verification_attempts: int,
+    checkpointer: Any,
 ):
-    """Build the conversation workflow with persisted per-session state."""
-    settings = settings or load_settings()
-    logger = logger or get_logger()
-    if tracer is _UNSET:
-        tracer = build_tracer(settings)
-    if verification_service is None:
-        patient_repository = InMemoryPatientRepository()
-        verification_service = VerificationService(patient_repository)
-    if appointment_service is None:
-        appointment_repository = InMemoryAppointmentRepository()
-        appointment_service = AppointmentService(appointment_repository)
-    if provider is _UNSET:
-        provider = build_provider(settings, logger, tracer=tracer)
-
     list_node = make_list_node(appointment_service, logger)
     confirm_node = make_confirm_node(appointment_service, logger)
     cancel_node = make_cancel_node(appointment_service, logger)
@@ -63,7 +43,7 @@ def build_graph(
         make_verification_node(
             verification_service,
             logger,
-            settings.max_verification_attempts,
+            max_verification_attempts,
         ),
     )
     builder.add_node(
@@ -76,7 +56,6 @@ def build_graph(
             help_node=help_node,
         ),
     )
-    builder.add_node("generate_response", make_response_node(logger, provider=provider))
 
     builder.add_edge(START, "ingest_user_message")
     builder.add_edge("ingest_user_message", "parse_intent_and_entities")
@@ -92,11 +71,10 @@ def build_graph(
         "verify",
         route_after_verify,
         {
-            "generate_response": "generate_response",
+            "end": END,
             "execute_action": "execute_action",
         },
     )
-    builder.add_edge("execute_action", "generate_response")
-    builder.add_edge("generate_response", END)
+    builder.add_edge("execute_action", END)
 
-    return builder.compile(checkpointer=InMemorySaver())
+    return builder.compile(checkpointer=checkpointer)

@@ -43,11 +43,11 @@ def test_frontend_client_posts_chat_message():
             json={
                 "response": "Hello",
                 "verified": False,
-                "current_action": "help",
+                "current_operation": "help",
                 "thread_id": "s1",
                 "appointments": None,
                 "last_action_result": None,
-                "error_code": None,
+                "issue": None,
                 "remembered_identity_status": {
                     "remembered_identity_id": "",
                     "status": "unavailable",

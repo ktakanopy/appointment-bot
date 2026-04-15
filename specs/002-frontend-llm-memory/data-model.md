@@ -11,7 +11,7 @@
 - `messages`: visible conversation history for the active session
 - `verified`: whether the current session has an identified patient
 - `patient_id`: resolved patient identifier when verification succeeds
-- `current_action`: latest requested action or verification step
+- `current_operation`: latest requested operation or verification step
 - `appointments`: current patient appointment view when relevant
 - `last_action_result`: structured outcome of the latest completed action
 

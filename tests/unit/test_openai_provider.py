@@ -4,6 +4,7 @@ import logging
 
 import pytest
 
+from app.application.contracts.conversation import ConversationOperation
 from app.config import ProviderSettings
 from app.infrastructure.llm.openai_provider import OpenAIProvider
 
@@ -43,19 +44,19 @@ def _provider(content: str = '{"response_text":"ok"}') -> OpenAIProvider:
 
 def test_openai_provider_parses_structured_intent_response():
     provider = _provider(
-        '{"requested_action":"list_appointments","full_name":"Ana Silva","phone":"11999998888","dob":"1990-05-10","appointment_reference":null}'
+        '{"requested_operation":"list_appointments","full_name":"Ana Silva","phone":"11999998888","dob":"1990-05-10","appointment_reference":null}'
     )
 
     result = provider.interpret("show my appointments", {"verified": False})
 
-    assert result.requested_action == "list_appointments"
+    assert result.requested_operation == ConversationOperation.LIST_APPOINTMENTS
     assert result.full_name == "Ana Silva"
 
 
 def test_openai_provider_parses_structured_response_generation():
     provider = _provider('{"response_text":"Your appointment is confirmed."}')
 
-    result = provider.generate_response({"requested_action": "confirm_appointment"}, "fallback")
+    result = provider.generate_response({"requested_operation": "confirm_appointment"}, "fallback")
 
     assert result.response_text == "Your appointment is confirmed."
 
@@ -64,4 +65,4 @@ def test_openai_provider_raises_for_empty_content():
     provider = _provider("")
 
     with pytest.raises(ValueError, match="empty content"):
-        provider.generate_response({"requested_action": "confirm_appointment"}, "fallback")
+        provider.generate_response({"requested_operation": "confirm_appointment"}, "fallback")

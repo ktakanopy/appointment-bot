@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
-from app.domain.actions import Action
+from app.application.contracts.conversation import ConversationOperation
 
 
 class IntentPrediction(BaseModel):
-    requested_action: Action = Action.UNKNOWN
+    requested_operation: ConversationOperation = Field(
+        default=ConversationOperation.UNKNOWN,
+        validation_alias=AliasChoices("requested_operation", "requested_action"),
+        serialization_alias="requested_operation",
+    )
     full_name: str | None = None
     phone: str | None = None
     dob: str | None = None

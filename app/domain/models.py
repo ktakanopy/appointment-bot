@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
 from datetime import datetime as dt
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -11,6 +11,13 @@ class AppointmentStatus(str, Enum):
     SCHEDULED = "scheduled"
     CONFIRMED = "confirmed"
     CANCELED = "canceled"
+
+
+class AppointmentMutationOutcome(str, Enum):
+    CONFIRMED = "confirmed"
+    ALREADY_CONFIRMED = "already_confirmed"
+    CANCELED = "canceled"
+    ALREADY_CANCELED = "already_canceled"
 
 
 class FullName(BaseModel):
@@ -121,23 +128,23 @@ class Appointment(BaseModel):
             status=status,
         )
 
-    def confirm(self) -> tuple[Appointment, str]:
+    def confirm(self) -> tuple[Appointment, AppointmentMutationOutcome]:
         if self.status == AppointmentStatus.CONFIRMED:
-            return self, "already_confirmed"
+            return self, AppointmentMutationOutcome.ALREADY_CONFIRMED
         if self.status != AppointmentStatus.SCHEDULED:
             from app.domain.errors import AppointmentNotConfirmableError
 
             raise AppointmentNotConfirmableError(self.id)
-        return self.model_copy(update={"status": AppointmentStatus.CONFIRMED}), "confirmed"
+        return self.model_copy(update={"status": AppointmentStatus.CONFIRMED}), AppointmentMutationOutcome.CONFIRMED
 
-    def cancel(self) -> tuple[Appointment, str]:
+    def cancel(self) -> tuple[Appointment, AppointmentMutationOutcome]:
         if self.status == AppointmentStatus.CANCELED:
-            return self, "already_canceled"
+            return self, AppointmentMutationOutcome.ALREADY_CANCELED
         if self.status not in {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}:
             from app.domain.errors import AppointmentNotCancelableError
 
             raise AppointmentNotCancelableError(self.id)
-        return self.model_copy(update={"status": AppointmentStatus.CANCELED}), "canceled"
+        return self.model_copy(update={"status": AppointmentStatus.CANCELED}), AppointmentMutationOutcome.CANCELED
 
     def is_owned_by(self, patient_id: str | None) -> bool:
         return bool(patient_id and self.patient_id == patient_id)
@@ -149,17 +156,6 @@ class Appointment(BaseModel):
     @property
     def is_cancelable(self) -> bool:
         return self.status in {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}
-
-
-class ActionResult(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    action: str
-    outcome: str
-    appointment_id: str | None = None
-
-    def __init__(self, action: str, outcome: str, appointment_id: str | None = None):
-        super().__init__(action=action, outcome=outcome, appointment_id=appointment_id)
 
 
 class RememberedIdentityStatus(str, Enum):
@@ -201,4 +197,20 @@ class RememberedIdentity(BaseModel):
             expires_at=expires_at,
             revoked_at=revoked_at,
             status=status,
+        )
+
+    def is_active(self, now: datetime) -> bool:
+        return self.revoked_at is None and self.expires_at > now and self.status == RememberedIdentityStatus.ACTIVE
+
+    def expire(self) -> RememberedIdentity:
+        if self.revoked_at is not None:
+            return self.model_copy(update={"status": RememberedIdentityStatus.REVOKED})
+        return self.model_copy(update={"status": RememberedIdentityStatus.EXPIRED})
+
+    def revoke(self, now: datetime) -> RememberedIdentity:
+        return self.model_copy(
+            update={
+                "revoked_at": now,
+                "status": RememberedIdentityStatus.REVOKED,
+            }
         )

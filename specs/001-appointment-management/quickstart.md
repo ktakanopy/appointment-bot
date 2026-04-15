@@ -25,7 +25,7 @@ Expected behavior:
 
 - response asks for the first missing verification field
 - `verified` is `false`
-- `current_action` remains `list_appointments` or equivalent deferred intent
+- `current_operation` remains `list_appointments` or equivalent deferred intent
 
 Continue with the same `session_id`:
 

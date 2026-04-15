@@ -81,10 +81,5 @@ class InMemoryRememberedIdentityRepository:
         identity = self._identities.get(remembered_identity_id)
         if identity is None or identity.revoked_at is not None:
             return False
-        self._identities[remembered_identity_id] = identity.model_copy(
-            update={
-                "revoked_at": datetime.now(UTC),
-                "status": RememberedIdentityStatus.REVOKED,
-            }
-        )
+        self._identities[remembered_identity_id] = identity.revoke(datetime.now(UTC))
         return True

@@ -50,7 +50,7 @@ configuration surface for the feature.
 - [X] T007 [P] Replace in-memory thread checkpoints with SQLite-backed persistence in `app/graph/builder.py` and `app/graph/state.py`
 - [X] T008 [P] Define remembered-identity models and repository interface in `app/domain/models.py` and `app/repositories/remembered_identity_repository.py`
 - [X] T009 Implement SQLite remembered-identity repository and shared persistence helpers in `app/repositories/sqlite_identity.py` and `app/domain/services.py`
-- [X] T010 [P] Define the provider abstraction and factory boundary in `app/llm/base.py` and `app/llm/factory.py`
+- [X] T010 [P] Define the provider abstraction and factory boundary in `app/llm/base.py` and `app/infrastructure/llm/factory.py`
 - [X] T011 [P] Add shared tracing and redaction helpers in `app/observability.py` and `app/config.py`
 - [X] T012 [P] Extend request and response schemas for session bootstrap and remembered identity in `app/api/schemas.py`
 - [X] T013 Implement `/sessions/new` and `/remembered-identity/forget` route skeletons in `app/api/routes.py` and `app/main.py`
@@ -99,7 +99,7 @@ configuration surface for the feature.
 
 - [X] T023 [P] [US2] Define provider request or response schemas and prompt contracts in `app/llm/schemas.py`, `app/prompts/intent_prompt.py`, and `app/prompts/response_prompt.py`
 - [X] T024 [US2] Implement the default OpenAI adapter in `app/llm/openai_provider.py`
-- [X] T025 [US2] Integrate provider selection into interpretation and response generation in `app/graph/nodes/interpret.py`, `app/graph/nodes/response.py`, and `app/llm/factory.py`
+- [X] T025 [US2] Integrate provider selection into interpretation and presenter-based response generation in `app/graph/nodes/interpret.py`, `app/application/presenters/chat_presenter.py`, and `app/infrastructure/llm/factory.py`
 - [X] T026 [US2] Wire provider configuration into application startup in `app/main.py` and `app/config.py`
 - [X] T027 [US2] Add deterministic provider-error fallback handling in `app/graph/nodes/interpret.py`, `app/graph/nodes/response.py`, and `app/api/routes.py`
 

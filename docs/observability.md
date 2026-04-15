@@ -8,7 +8,7 @@ Log lines are JSON objects written to stdout. The formatter is message-only; the
 
 The default log level is INFO.
 
-`log_event(logger, node, state, **extra)` emits one JSON object per graph node execution. Standard fields are: `thread_id`, `node`, `requested_action`, `verified`, `verification_status`, `error_code`, plus any node-specific extras (for example `appointment_count`, `outcome`, and `appointment_id`).
+`log_event(logger, node, state, **extra)` emits one JSON object per graph node execution. Standard fields are: `thread_id`, `node`, `requested_operation`, `verified`, `verification_status`, `issue`, plus any node-specific extras (for example `appointment_count`, `outcome`, and `appointment_id`).
 
 ## 2. Trace Event Catalog
 
@@ -16,8 +16,8 @@ Events emitted through `record_trace_event` and `record_provider_event`:
 
 | Event | Emitter | Payload |
 |-------|---------|---------|
-| workflow.start | routes.py (chat, chat_stream) | session_id, full payload (redacted) |
-| workflow.end | routes.py (chat, chat_stream) | session_id, full result (redacted) |
+| workflow.start | `LangGraphConversationWorkflow.run()` | thread_id, full workflow payload (redacted) |
+| workflow.end | `LangGraphConversationWorkflow.run()` | thread_id, full workflow result (redacted) |
 | provider.interpret | OpenAIProvider.interpret | provider name, status |
 | provider.generate_response | OpenAIProvider.generate_response | provider name, status |
 | provider.judge | OpenAIProvider.judge | provider name, status |
@@ -34,7 +34,6 @@ Per-node log events (via `log_event`, not `record_trace_event`):
 - cancel_appointment (plus `outcome`, `appointment_id`)
 - resolve_appointment_reference (plus `outcome`: ambiguous or missing_list_context)
 - handle_help_or_unknown
-- generate_response
 
 ## 3. Langfuse Integration
 

@@ -1,9 +1,13 @@
-from app.graph.builder import build_graph
+from app.application.contracts.conversation import (
+    ConversationOperation,
+    ConversationOperationOutcome,
+    ConversationWorkflowInput,
+)
+from tests.support import build_test_workflow
 
 
 def test_cancel_then_reroute_back_to_list():
-    graph = build_graph()
-    config = {"configurable": {"thread_id": "graph-cancel"}}
+    workflow = build_test_workflow()
 
     for message in [
         "show me my appointments",
@@ -11,11 +15,13 @@ def test_cancel_then_reroute_back_to_list():
         "11999998888",
         "1990-05-10",
     ]:
-        graph.invoke({"thread_id": "graph-cancel", "incoming_message": message}, config)
+        workflow.run(ConversationWorkflowInput(thread_id="graph-cancel", incoming_message=message))
 
-    canceled = graph.invoke({"thread_id": "graph-cancel", "incoming_message": "cancel the first one"}, config)
-    refreshed = graph.invoke({"thread_id": "graph-cancel", "incoming_message": "show me my appointments again"}, config)
+    canceled = workflow.run(ConversationWorkflowInput(thread_id="graph-cancel", incoming_message="cancel the first one"))
+    refreshed = workflow.run(
+        ConversationWorkflowInput(thread_id="graph-cancel", incoming_message="show me my appointments again")
+    )
 
-    assert canceled["turn"]["last_action_result"]["outcome"] == "canceled"
-    assert refreshed["turn"]["requested_action"] == "list_appointments"
-    assert refreshed["appointments"]["listed_appointments"][0].status.value == "canceled"
+    assert canceled.turn.operation_result.outcome == ConversationOperationOutcome.CANCELED
+    assert refreshed.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
+    assert refreshed.listed_appointments[0].status.value == "canceled"

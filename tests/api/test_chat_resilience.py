@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app.application.errors import DependencyUnavailableError
 from app.api import routes
-from app.domain.services import RepositoryUnavailableError
 from app.main import app
 
 
@@ -16,11 +16,11 @@ def test_invalid_payload_returns_422():
 
 
 def test_repository_failure_returns_503(monkeypatch):
-    def fail_invoke(*args, **kwargs):
-        raise RepositoryUnavailableError("boom")
+    def fail_run(*args, **kwargs):
+        raise DependencyUnavailableError("boom")
 
     session = client.post("/sessions/new").json()
-    monkeypatch.setattr(app.state.runtime.graph, "invoke", fail_invoke)
+    monkeypatch.setattr(app.state.runtime.handle_chat_turn_use_case.workflow, "run", fail_run)
 
     response = client.post("/chat", json={"session_id": session["session_id"], "message": "show my appointments"})
 

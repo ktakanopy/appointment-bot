@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios against the compiled graph and uses the configured LLM provider as the judge.
+The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios through the application use-case boundary and uses the configured LLM provider as the judge.
 
 ## 2. Framework Components
 
@@ -26,8 +26,8 @@ Pydantic model with fields:
 ### Runner (`app/evals/runner.py`)
 
 - Creates a fresh `RuntimeContext` via `create_runtime()` for isolation
-- For each scenario: creates a unique id `eval-{scenario_id}-{uuid}` (used as `thread_id` in `graph.invoke` config), replays each turn via `graph.invoke`, collects the transcript and `observed_outcomes` from the final turn
-- `observed_outcomes` extracted: `verified`, `current_action` (from `requested_action`), `error_code`, `last_outcome` (from `last_action_result.outcome`)
+- For each scenario: creates a fresh session through `create_session_use_case.execute()`, replays each turn via `handle_chat_turn_use_case.execute()`, and collects the transcript and `observed_outcomes` from the final turn
+- `observed_outcomes` extracted: `verified`, `current_operation`, `issue`, `last_outcome`
 - Passes scenario + transcript + `observed_outcomes` to the judge
 - Exceptions during replay set `status="error"` with the exception message
 
@@ -43,11 +43,11 @@ Current scenarios in `app/evals/scenarios/core_scenarios.py`:
 
 | ID | Title | Category | Expected |
 |----|-------|----------|----------|
-| verification-list | Verification gates appointment list | verification | `verified=True`, `current_action=list_appointments` |
-| ambiguous-cancel | Ambiguous cancellation asks for clarification | ambiguity | `error_code=ambiguous_appointment_reference` |
+| verification-list | Verification gates appointment list | verification | `verified=True`, `current_operation=list_appointments` |
+| ambiguous-cancel | Ambiguous cancellation asks for clarification | ambiguity | `issue=ambiguous_appointment_reference` |
 | idempotent-confirm | Repeated confirm remains idempotent | idempotency | `last_outcome=already_confirmed` |
-| retry-after-failed-verification | Retry after failed verification can recover | verification | `verified=True`, `current_action=list_appointments` |
-| confirm-without-list-context | Confirm without prior list asks for context | context | `error_code=missing_list_context` |
+| retry-after-failed-verification | Retry after failed verification can recover | verification | `verified=True`, `current_operation=list_appointments` |
+| confirm-without-list-context | Confirm without prior list asks for context | context | `issue=missing_list_context` |
 
 ## 4. Adding a New Scenario
 
@@ -75,4 +75,4 @@ The test `test_eval_runner_returns_results_for_default_scenarios` verifies that 
 
 ## 6. State Isolation
 
-Each eval run creates its own `RuntimeContext` with a fresh in-memory graph and repository state. Each scenario gets a unique thread id (`eval-{id}-{uuid}`) so conversations never cross-contaminate. The runtime is closed after all scenarios complete.
+Each eval run creates its own `RuntimeContext` with fresh in-memory adapters. Each scenario gets a new session and thread id so conversations never cross-contaminate. The runtime is closed after all scenarios complete.

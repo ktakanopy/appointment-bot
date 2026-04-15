@@ -30,14 +30,14 @@ erDiagram
         datetime revoked_at
         string status
     }
-    ActionResult {
-        string action
+    ConversationOperationResult {
+        string operation
         string outcome
         string appointment_id
     }
 ```
 
-`ActionResult` is a value object used in conversation flow; it is not persisted.
+`ConversationOperationResult` is an application/workflow contract used to describe the outcome of a completed operation; it is not persisted.
 
 ## 2. AppointmentStatus State Machine
 
@@ -74,18 +74,18 @@ stateDiagram-v2
 | messages | list[dict] | Full conversation history (role + content pairs) |
 | verified | bool | Whether identity verification has succeeded |
 | verification_failures | int | Count of failed verification attempts in this session |
-| verification_status | str or None | Current phase: collecting, failed, verified, or locked |
+| verification_status | `VerificationStatus` | Current phase: unverified, collecting, failed, verified, or locked |
 | patient_id | str or None | Matched patient ID after successful verification |
 | provided_full_name | str or None | Name provided by the patient during verification |
 | provided_phone | str or None | Phone provided by the patient during verification |
 | provided_dob | str or None | Date of birth provided by the patient during verification |
-| requested_action | Action or None | Current action being processed |
-| deferred_action | Action or None | Protected action deferred until verification completes |
+| requested_operation | `ConversationOperation` | Current operation being processed |
+| deferred_operation | `ConversationOperation` or None | Protected operation deferred until verification completes |
 | listed_appointments | list[Appointment] | Appointments returned by the last list action |
 | appointment_reference | str or None | User's reference to a specific appointment (ordinal, date, id) |
-| last_action_result | dict or None | Outcome of the last appointment action |
-| response_text | str or None | Text to return to the patient |
-| error_code | str or None | Machine-readable error code for the current turn |
+| operation_result | `ConversationOperationResult` or None | Outcome of the last completed operation |
+| response_key | `ResponseKey` or None | Deterministic presenter key for the patient-facing response |
+| issue | `TurnIssue` or None | Machine-readable issue classification for the current turn |
 
 ## 5. Persistence Strategy
 
@@ -95,7 +95,7 @@ stateDiagram-v2
 | Appointment records | In-memory (InMemoryAppointmentRepository) | Process lifetime |
 | Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
 | Remembered identity | In-memory (InMemoryRememberedIdentityRepository) | Process lifetime, TTL + revoke |
-| Session registry | In-memory (`runtime.session_service.sessions`) | Process lifetime, TTL-based cleanup |
-| Session bootstrap | In-memory on each `SessionRecord` | 300s TTL |
+| Session registry | In-memory via `InMemorySessionStore` | Process lifetime, TTL-based cleanup |
+| Session bootstrap | In-memory on each `SessionRecord` via `SessionBootstrap` | 300s TTL |
 
 In-memory storage is intentional for demo scope. A production system would back conversation state, remembered identity, patient data, and appointment data with external persistence.

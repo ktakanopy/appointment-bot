@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import app.graph.builder as builder_module
 import pytest
+
+from app.application.contracts.conversation import ConversationWorkflowInput
+from tests.support import build_test_workflow
 
 
 class BrokenProvider:
@@ -17,10 +19,8 @@ class BrokenProvider:
         raise RuntimeError("judge failed")
 
 
-def test_graph_raises_when_provider_fails(monkeypatch):
-    monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
-    graph = builder_module.build_graph()
-    config = {"configurable": {"thread_id": "graph-llm-fallback"}}
+def test_graph_raises_when_provider_fails():
+    workflow = build_test_workflow(provider=BrokenProvider())
 
     with pytest.raises(RuntimeError, match="interpret failed"):
-        graph.invoke({"thread_id": "graph-llm-fallback", "incoming_message": "show my appointments"}, config)
+        workflow.run(ConversationWorkflowInput(thread_id="graph-llm-fallback", incoming_message="show my appointments"))

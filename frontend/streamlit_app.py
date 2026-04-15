@@ -37,8 +37,8 @@ def _ensure_state() -> None:
         st.session_state.remembered_identity_status = {"remembered_identity_id": "", "status": "unavailable"}
     if "error" not in st.session_state:
         st.session_state.error = None
-    if "current_action" not in st.session_state:
-        st.session_state.current_action = "verify_identity"
+    if "current_operation" not in st.session_state:
+        st.session_state.current_operation = "verify_identity"
 
 
 def _start_session(remembered_identity_id: str | None = None) -> None:
@@ -52,7 +52,7 @@ def _start_session(remembered_identity_id: str | None = None) -> None:
     st.session_state.remembered_identity_status = response["remembered_identity_status"]
     st.session_state.remembered_identity_id = response["remembered_identity_status"]["remembered_identity_id"] or None
     st.session_state.error = None
-    st.session_state.current_action = "help" if response["restored_verification"] else "verify_identity"
+    st.session_state.current_operation = "help" if response["restored_verification"] else "verify_identity"
     if response.get("response"):
         st.session_state.messages.append({"role": "assistant", "content": response["response"]})
 
@@ -74,8 +74,8 @@ def _handle_user_message(message: str) -> None:
     st.session_state.last_action_result = response.get("last_action_result")
     st.session_state.remembered_identity_status = response["remembered_identity_status"]
     st.session_state.remembered_identity_id = response["remembered_identity_status"]["remembered_identity_id"] or None
-    st.session_state.error = response.get("error_code")
-    st.session_state.current_action = response.get("current_action", "unknown")
+    st.session_state.error = response.get("issue")
+    st.session_state.current_operation = response.get("current_operation", "unknown")
 
 
 def _forget_identity() -> None:
@@ -90,13 +90,13 @@ def _forget_identity() -> None:
 
 
 def _chat_placeholder() -> str:
-    if st.session_state.current_action == "verify_identity" or not st.session_state.verified:
+    if st.session_state.current_operation == "verify_identity" or not st.session_state.verified:
         return "Start by entering your full name"
     return "Ask about your appointments"
 
 
 def _render_guidance() -> None:
-    if st.session_state.current_action == "verify_identity" or not st.session_state.verified:
+    if st.session_state.current_operation == "verify_identity" or not st.session_state.verified:
         st.info("Please identify yourself first. Start with your full name, then provide your phone number and date of birth.")
         return
     st.success("You are verified. You can ask me to list your appointments, confirm one, or cancel one.")

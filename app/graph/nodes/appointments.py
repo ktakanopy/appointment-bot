@@ -2,9 +2,20 @@ from __future__ import annotations
 
 from typing import Callable
 
-from app.domain.actions import Action
-from app.domain.errors import AppointmentNotCancelableError, AppointmentNotConfirmableError, AppointmentNotOwnedError
-from app.domain.models import ActionResult, Appointment
+from app.application.contracts.conversation import (
+    ConversationOperation,
+    ConversationOperationOutcome,
+    ConversationOperationResult,
+    ResponseKey,
+    TurnIssue,
+)
+from app.domain.errors import (
+    AppointmentNotCancelableError,
+    AppointmentNotConfirmableError,
+    AppointmentNotFoundError,
+    AppointmentNotOwnedError,
+)
+from app.domain.models import Appointment, AppointmentMutationOutcome
 from app.graph.routing import should_skip_action_execution
 from app.graph.state import AppointmentState, ConversationState, TurnState, VerificationState, appointment_state, turn_state, verification_state
 from app.graph.text_extraction import resolve_appointment_reference
@@ -18,9 +29,13 @@ def make_list_node(appointment_service, logger):
         turn = turn_state(state)
         appointments = appointment_service.list_appointments(verification.patient_id)
         appointments_state.listed_appointments = appointments
-        turn.requested_action = Action.LIST_APPOINTMENTS
-        turn.last_action_result = ActionResult("list_appointments", "listed").model_dump()
-        turn.response_text = _format_appointment_list(appointments)
+        turn.requested_operation = ConversationOperation.LIST_APPOINTMENTS
+        turn.operation_result = ConversationOperationResult(
+            operation=ConversationOperation.LIST_APPOINTMENTS,
+            outcome=ConversationOperationOutcome.LISTED,
+        )
+        turn.response_key = ResponseKey.APPOINTMENTS_LIST
+        turn.issue = None
         log_event(logger, "list_appointments", state, appointment_count=len(appointments))
         return state
 
@@ -36,32 +51,44 @@ def make_confirm_node(appointment_service, logger):
             state,
             appointment_service,
             logger,
-            action_name=Action.CONFIRM_APPOINTMENT,
-            missing_list_context_message="Please ask to see your appointments first, then tell me which one you want to confirm.",
-            ambiguous_message="I couldn't tell which appointment you want to confirm. Please choose by number or date.",
+            operation=ConversationOperation.CONFIRM_APPOINTMENT,
+            missing_list_context_key=ResponseKey.CONFIRM_MISSING_LIST_CONTEXT,
+            ambiguous_key=ResponseKey.CONFIRM_AMBIGUOUS_REFERENCE,
         )
         if appointment is None:
             return state
 
         try:
-            updated, action_result = appointment_service.confirm_appointment(verification.patient_id, appointment.id)
+            updated, outcome = appointment_service.confirm_appointment(verification.patient_id, appointment.id)
         except AppointmentNotConfirmableError:
-            turn.response_text = "I couldn't confirm that appointment. Please choose a scheduled appointment."
-            turn.error_code = "appointment_not_confirmable"
+            turn.response_key = ResponseKey.CONFIRM_NOT_ALLOWED
+            turn.issue = TurnIssue.APPOINTMENT_NOT_CONFIRMABLE
             log_event(logger, "confirm_appointment", state, outcome="not_confirmable")
             return state
         except AppointmentNotOwnedError:
-            turn.response_text = "I couldn't complete that request. Please choose one of your appointments."
-            turn.error_code = "appointment_not_owned"
+            turn.response_key = ResponseKey.APPOINTMENT_NOT_OWNED
+            turn.issue = TurnIssue.APPOINTMENT_NOT_OWNED
             log_event(logger, "confirm_appointment", state, outcome="not_owned")
             return state
-        turn.last_action_result = action_result.model_dump()
+        except AppointmentNotFoundError:
+            turn.response_key = ResponseKey.APPOINTMENT_NOT_FOUND
+            turn.issue = TurnIssue.APPOINTMENT_NOT_FOUND
+            log_event(logger, "confirm_appointment", state, outcome="not_found")
+            return state
+        turn.response_key = (
+            ResponseKey.CONFIRM_ALREADY_CONFIRMED
+            if outcome == AppointmentMutationOutcome.ALREADY_CONFIRMED
+            else ResponseKey.CONFIRM_SUCCESS
+        )
+        turn.issue = None
+        turn.subject_appointment = updated
+        turn.operation_result = ConversationOperationResult(
+            operation=ConversationOperation.CONFIRM_APPOINTMENT,
+            outcome=_map_mutation_outcome(outcome),
+            appointment_id=appointment.id,
+        )
         appointments_state.listed_appointments = appointment_service.list_appointments(verification.patient_id)
-        if action_result.outcome == "already_confirmed":
-            turn.response_text = f"That appointment was already confirmed for {updated.date} at {updated.time}."
-        else:
-            turn.response_text = f"Your appointment for {updated.date} at {updated.time} is now confirmed."
-        log_event(logger, "confirm_appointment", state, outcome=action_result.outcome, appointment_id=appointment.id)
+        log_event(logger, "confirm_appointment", state, outcome=outcome.value, appointment_id=appointment.id)
         return state
 
     return confirm_appointment
@@ -76,32 +103,44 @@ def make_cancel_node(appointment_service, logger):
             state,
             appointment_service,
             logger,
-            action_name=Action.CANCEL_APPOINTMENT,
-            missing_list_context_message="Please ask to see your appointments first, then tell me which one you want to cancel.",
-            ambiguous_message="I couldn't tell which appointment you want to cancel. Please choose by number or date.",
+            operation=ConversationOperation.CANCEL_APPOINTMENT,
+            missing_list_context_key=ResponseKey.CANCEL_MISSING_LIST_CONTEXT,
+            ambiguous_key=ResponseKey.CANCEL_AMBIGUOUS_REFERENCE,
         )
         if appointment is None:
             return state
 
         try:
-            updated, action_result = appointment_service.cancel_appointment(verification.patient_id, appointment.id)
+            updated, outcome = appointment_service.cancel_appointment(verification.patient_id, appointment.id)
         except AppointmentNotCancelableError:
-            turn.response_text = "I couldn't cancel that appointment. Please choose a scheduled or confirmed appointment."
-            turn.error_code = "appointment_not_cancelable"
+            turn.response_key = ResponseKey.CANCEL_NOT_ALLOWED
+            turn.issue = TurnIssue.APPOINTMENT_NOT_CANCELABLE
             log_event(logger, "cancel_appointment", state, outcome="not_cancelable")
             return state
         except AppointmentNotOwnedError:
-            turn.response_text = "I couldn't complete that request. Please choose one of your appointments."
-            turn.error_code = "appointment_not_owned"
+            turn.response_key = ResponseKey.APPOINTMENT_NOT_OWNED
+            turn.issue = TurnIssue.APPOINTMENT_NOT_OWNED
             log_event(logger, "cancel_appointment", state, outcome="not_owned")
             return state
-        turn.last_action_result = action_result.model_dump()
+        except AppointmentNotFoundError:
+            turn.response_key = ResponseKey.APPOINTMENT_NOT_FOUND
+            turn.issue = TurnIssue.APPOINTMENT_NOT_FOUND
+            log_event(logger, "cancel_appointment", state, outcome="not_found")
+            return state
+        turn.response_key = (
+            ResponseKey.CANCEL_ALREADY_CANCELED
+            if outcome == AppointmentMutationOutcome.ALREADY_CANCELED
+            else ResponseKey.CANCEL_SUCCESS
+        )
+        turn.issue = None
+        turn.subject_appointment = updated
+        turn.operation_result = ConversationOperationResult(
+            operation=ConversationOperation.CANCEL_APPOINTMENT,
+            outcome=_map_mutation_outcome(outcome),
+            appointment_id=appointment.id,
+        )
         appointments_state.listed_appointments = appointment_service.list_appointments(verification.patient_id)
-        if action_result.outcome == "already_canceled":
-            turn.response_text = f"That appointment was already canceled for {updated.date} at {updated.time}."
-        else:
-            turn.response_text = f"Your appointment for {updated.date} at {updated.time} has been canceled."
-        log_event(logger, "cancel_appointment", state, outcome=action_result.outcome, appointment_id=appointment.id)
+        log_event(logger, "cancel_appointment", state, outcome=outcome.value, appointment_id=appointment.id)
         return state
 
     return cancel_appointment
@@ -119,28 +158,16 @@ def make_execute_action_node(
         if should_skip_action_execution(state):
             log_event(logger, "execute_action", state, outcome="skipped")
             return state
-        action = turn_state(state).requested_action
-        if action == Action.LIST_APPOINTMENTS:
+        operation = turn_state(state).requested_operation
+        if operation == ConversationOperation.LIST_APPOINTMENTS:
             return list_node(state)
-        if action == Action.CONFIRM_APPOINTMENT:
+        if operation == ConversationOperation.CONFIRM_APPOINTMENT:
             return confirm_node(state)
-        if action == Action.CANCEL_APPOINTMENT:
+        if operation == ConversationOperation.CANCEL_APPOINTMENT:
             return cancel_node(state)
         return help_node(state)
 
     return execute_action
-
-
-def _format_appointment_list(appointments) -> str:
-    if not appointments:
-        return "You do not have any appointments right now."
-
-    lines = ["Here are your appointments:"]
-    for index, appointment in enumerate(appointments, start=1):
-        lines.append(
-            f"{index}. {appointment.date} at {appointment.time} with {appointment.doctor} ({appointment.status.value})"
-        )
-    return "\n".join(lines)
 
 
 def _resolve_target_appointment(
@@ -148,9 +175,9 @@ def _resolve_target_appointment(
     appointment_service,
     logger,
     *,
-    action_name: Action,
-    missing_list_context_message: str,
-    ambiguous_message: str,
+    operation: ConversationOperation,
+    missing_list_context_key: ResponseKey,
+    ambiguous_key: ResponseKey,
 ) -> Appointment | None:
     appointments_state = appointment_state(state)
     turn = turn_state(state)
@@ -158,19 +185,29 @@ def _resolve_target_appointment(
     listed_appointments = appointments_state.listed_appointments or []
     reference = appointments_state.appointment_reference
     if reference and reference.isdigit() and not listed_appointments:
-        turn.requested_action = action_name
-        turn.response_text = missing_list_context_message
-        turn.error_code = "missing_list_context"
+        turn.requested_operation = operation
+        turn.response_key = missing_list_context_key
+        turn.issue = TurnIssue.MISSING_LIST_CONTEXT
         log_event(logger, "resolve_appointment_reference", state, outcome="missing_list_context")
         return None
 
     appointments = listed_appointments or appointment_service.list_appointments(verification.patient_id)
     appointment = resolve_appointment_reference(reference, appointments)
-    turn.requested_action = action_name
+    turn.requested_operation = operation
     if appointment is None:
-        turn.response_text = ambiguous_message
-        turn.error_code = "ambiguous_appointment_reference"
+        turn.response_key = ambiguous_key
+        turn.issue = TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE
         log_event(logger, "resolve_appointment_reference", state, outcome="ambiguous")
         return None
 
     return appointment
+
+
+def _map_mutation_outcome(outcome: AppointmentMutationOutcome) -> ConversationOperationOutcome:
+    if outcome == AppointmentMutationOutcome.CONFIRMED:
+        return ConversationOperationOutcome.CONFIRMED
+    if outcome == AppointmentMutationOutcome.ALREADY_CONFIRMED:
+        return ConversationOperationOutcome.ALREADY_CONFIRMED
+    if outcome == AppointmentMutationOutcome.CANCELED:
+        return ConversationOperationOutcome.CANCELED
+    return ConversationOperationOutcome.ALREADY_CANCELED

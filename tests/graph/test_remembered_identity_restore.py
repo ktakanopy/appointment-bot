@@ -1,25 +1,24 @@
 from __future__ import annotations
 
-from app.graph.builder import build_graph
+from app.application.contracts.conversation import (
+    ConversationOperation,
+    ConversationWorkflowInput,
+    WorkflowVerificationBootstrap,
+)
+from tests.support import build_test_workflow
 
 
 def test_graph_allows_list_action_when_session_bootstraps_verified_patient():
-    graph = build_graph()
-    config = {"configurable": {"thread_id": "graph-remembered-restore"}}
+    workflow = build_test_workflow()
 
-    result = graph.invoke(
-        {
-            "thread_id": "graph-remembered-restore",
-            "incoming_message": "show my appointments",
-            "verification": {
-                "verified": True,
-                "verification_status": "verified",
-                "patient_id": "p1",
-            },
-        },
-        config,
+    result = workflow.run(
+        ConversationWorkflowInput(
+            thread_id="graph-remembered-restore",
+            incoming_message="show my appointments",
+            bootstrap_verification=WorkflowVerificationBootstrap(patient_id="p1"),
+        )
     )
 
-    assert result["verification"]["verified"] is True
-    assert result["turn"]["requested_action"] == "list_appointments"
-    assert len(result["appointments"]["listed_appointments"]) == 2
+    assert result.verification.verified is True
+    assert result.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
+    assert len(result.listed_appointments) == 2

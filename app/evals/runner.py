@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
 
-from app.api.routes import create_runtime
 from app.evals.judge import run_judge
 from app.evals.models import EvaluationResult
 from app.evals.scenarios.core_scenarios import CORE_SCENARIOS
-from app.runtime import close_runtime
+from app.runtime import close_runtime, create_runtime
 
 
 def run_scenarios(scenarios=None) -> list[EvaluationResult]:
@@ -17,25 +15,30 @@ def run_scenarios(scenarios=None) -> list[EvaluationResult]:
         results = []
         provider = runtime.provider
         for scenario in scenarios:
-            session_id = f"eval-{scenario.scenario_id}-{uuid4()}"
             transcript = []
             observed_outcomes = {}
             status = "pass"
             summary = "Scenario completed."
             score = 1.0
             try:
+                session = runtime.create_session_use_case.execute()
+                session_id = session.session_id
                 for turn in scenario.input_turns:
                     transcript.append({"role": "user", "content": turn})
-                    result = runtime.graph.invoke(
-                        {"thread_id": session_id, "incoming_message": turn},
-                        {"configurable": {"thread_id": session_id}},
+                    result = runtime.handle_chat_turn_use_case.execute(
+                        session_id=session_id,
+                        message=turn,
                     )
-                    transcript.append({"role": "assistant", "content": result.get("response_text")})
+                    transcript.append({"role": "assistant", "content": result.response})
                     observed_outcomes = {
-                        "verified": result.get("verified", False),
-                        "current_action": result.get("requested_action"),
-                        "error_code": result.get("error_code"),
-                        "last_outcome": (result.get("last_action_result") or {}).get("outcome"),
+                        "verified": result.verified,
+                        "current_operation": result.current_operation.value,
+                        "issue": result.issue,
+                        "last_outcome": (
+                            result.last_action_result.outcome.value
+                            if result.last_action_result is not None
+                            else None
+                        ),
                     }
                 judged = run_judge(provider, scenario, transcript, observed_outcomes)
                 status = judged.status

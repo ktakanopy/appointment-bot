@@ -12,11 +12,9 @@ from app.api.schemas import (
     NewSessionRequest,
     NewSessionResponse,
 )
-from app.application.session_service import SessionNotFoundError
+from app.application.errors import DependencyUnavailableError, SessionNotFoundError
 from app.config import Settings
-from app.domain.errors import RepositoryUnavailableError
-from app.observability import record_trace_event
-from app.runtime import RuntimeContext, close_runtime, create_runtime
+from app.runtime import RuntimeContext, create_runtime, reset_runtime as reset_runtime_context
 
 router = APIRouter()
 
@@ -33,10 +31,7 @@ def reset_runtime(target_app=None, settings: Settings | None = None) -> RuntimeC
     if target_app is None:
         from app.main import app as target_app
 
-    close_runtime(getattr(target_app.state, "runtime", None))
-    runtime = create_runtime(settings=settings)
-    target_app.state.runtime = runtime
-    return runtime
+    return reset_runtime_context(target_app, settings=settings)
 
 
 @router.post("/sessions/new", response_model=NewSessionResponse)
@@ -44,10 +39,11 @@ async def create_session(
     request: NewSessionRequest | None = None,
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> NewSessionResponse:
-    response = runtime.session_service.create_session(
-        request.remembered_identity_id if request is not None else None
+    response = await asyncio.to_thread(
+        runtime.create_session_use_case.execute,
+        request.remembered_identity_id if request is not None else None,
     )
-    return NewSessionResponse(**response)
+    return NewSessionResponse(**response.model_dump(mode="json"))
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -56,29 +52,17 @@ async def chat(
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> ChatResponse:
     try:
-        payload = runtime.chat_service.build_payload(
-            request.session_id,
-            request.message,
-            request.remembered_identity_id,
+        response = await asyncio.to_thread(
+            runtime.handle_chat_turn_use_case.execute,
+            session_id=request.session_id,
+            message=request.message,
+            remembered_identity_id=request.remembered_identity_id,
         )
     except SessionNotFoundError as error:
         raise HTTPException(status_code=404, detail="Session not found. Start a new session.") from error
-    config = {"configurable": {"thread_id": request.session_id}}
-    record_trace_event(runtime.logger, runtime.tracer, "workflow.start", {"session_id": request.session_id, "payload": payload})
-    try:
-        result = await asyncio.to_thread(runtime.graph.invoke, payload, config)
-    except RepositoryUnavailableError as error:
+    except DependencyUnavailableError as error:
         raise HTTPException(status_code=503, detail="The appointment service is temporarily unavailable.") from error
-    record_trace_event(runtime.logger, runtime.tracer, "workflow.end", {"session_id": request.session_id, "result": result})
-    try:
-        response = runtime.chat_service.build_response(
-            request.session_id,
-            request.remembered_identity_id,
-            result,
-        )
-    except SessionNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Session not found. Start a new session.") from error
-    return ChatResponse(**response)
+    return ChatResponse(**response.model_dump(mode="json"))
 
 
 @router.post("/remembered-identity/forget", response_model=ForgetRememberedIdentityResponse)
@@ -86,5 +70,8 @@ async def forget_remembered_identity(
     request: ForgetRememberedIdentityRequest,
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> ForgetRememberedIdentityResponse:
-    cleared = runtime.identity_service.revoke_identity(request.remembered_identity_id)
-    return ForgetRememberedIdentityResponse(cleared=cleared)
+    response = await asyncio.to_thread(
+        runtime.forget_remembered_identity_use_case.execute,
+        request.remembered_identity_id,
+    )
+    return ForgetRememberedIdentityResponse(**response.model_dump(mode="json"))

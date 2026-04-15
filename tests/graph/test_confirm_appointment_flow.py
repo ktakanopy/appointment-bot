@@ -1,9 +1,9 @@
-from app.graph.builder import build_graph
+from app.application.contracts.conversation import ConversationOperationOutcome, ConversationWorkflowInput
+from tests.support import build_test_workflow
 
 
 def test_confirm_flow_resolves_first_appointment_and_is_idempotent():
-    graph = build_graph()
-    config = {"configurable": {"thread_id": "graph-confirm"}}
+    workflow = build_test_workflow()
 
     for message in [
         "show me my appointments",
@@ -11,29 +11,32 @@ def test_confirm_flow_resolves_first_appointment_and_is_idempotent():
         "11999998888",
         "1990-05-10",
     ]:
-        graph.invoke({"thread_id": "graph-confirm", "incoming_message": message}, config)
+        workflow.run(ConversationWorkflowInput(thread_id="graph-confirm", incoming_message=message))
 
-    confirmed = graph.invoke({"thread_id": "graph-confirm", "incoming_message": "confirm the first one"}, config)
-    confirmed_again = graph.invoke({"thread_id": "graph-confirm", "incoming_message": "confirm the first one"}, config)
+    confirmed = workflow.run(ConversationWorkflowInput(thread_id="graph-confirm", incoming_message="confirm the first one"))
+    confirmed_again = workflow.run(
+        ConversationWorkflowInput(thread_id="graph-confirm", incoming_message="confirm the first one")
+    )
 
-    assert confirmed["turn"]["last_action_result"]["outcome"] == "confirmed"
-    assert confirmed_again["turn"]["last_action_result"]["outcome"] == "already_confirmed"
+    assert confirmed.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED
+    assert confirmed_again.turn.operation_result.outcome == ConversationOperationOutcome.ALREADY_CONFIRMED
 
 
 def test_confirm_flow_resolves_date_reference_after_listing():
-    graph = build_graph()
-    config = {"configurable": {"thread_id": "graph-confirm-date"}}
+    workflow = build_test_workflow()
 
     for message in [
         "show me my appointments, I'm Ana Silva",
         "11999998888",
         "1990-05-10",
     ]:
-        graph.invoke({"thread_id": "graph-confirm-date", "incoming_message": message}, config)
+        workflow.run(ConversationWorkflowInput(thread_id="graph-confirm-date", incoming_message=message))
 
-    confirmed = graph.invoke(
-        {"thread_id": "graph-confirm-date", "incoming_message": "confirm my 2026-04-20 appointment"},
-        config,
+    confirmed = workflow.run(
+        ConversationWorkflowInput(
+            thread_id="graph-confirm-date",
+            incoming_message="confirm my 2026-04-20 appointment",
+        )
     )
 
-    assert confirmed["turn"]["last_action_result"]["outcome"] == "confirmed"
+    assert confirmed.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED

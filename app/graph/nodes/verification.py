@@ -1,22 +1,26 @@
 from __future__ import annotations
 
-from app.domain.actions import Action
+from app.application.contracts.conversation import (
+    ConversationOperation,
+    ResponseKey,
+    TurnIssue,
+    VerificationStatus,
+)
 from app.graph.routing import verification_required
 from app.graph.state import ConversationState, TurnState, VerificationState, turn_state, verification_state
 from app.graph.text_extraction import extract_dob, extract_full_name, extract_phone
 from app.observability import log_event
 
-
 PROMPTS = {
-    "full_name": "I'm CAPY. I can help with that, but first I need to verify your identity. What is your full name?",
-    "phone": "Thanks. What phone number is on your clinic record?",
-    "dob": "Thanks. What is your date of birth? Use YYYY-MM-DD.",
+    "full_name": ResponseKey.COLLECT_FULL_NAME,
+    "phone": ResponseKey.COLLECT_PHONE,
+    "dob": ResponseKey.COLLECT_DOB,
 }
 
 INVALID_RESPONSES = {
-    "full_name": ("That full name looks invalid. Please enter your first and last name.", "invalid_full_name"),
-    "phone": ("That phone number looks invalid. Please enter at least 10 digits.", "invalid_phone"),
-    "dob": ("That date of birth looks invalid. Please use YYYY-MM-DD.", "invalid_dob"),
+    "full_name": (ResponseKey.INVALID_FULL_NAME, TurnIssue.INVALID_FULL_NAME),
+    "phone": (ResponseKey.INVALID_PHONE, TurnIssue.INVALID_PHONE),
+    "dob": (ResponseKey.INVALID_DOB, TurnIssue.INVALID_DOB),
 }
 
 
@@ -27,13 +31,8 @@ def make_verification_node(verification_service, logger, max_verification_attemp
         if not verification_required(state):
             return state
 
-        if verification.verification_status == "locked":
-            return _set_locked_response(
-                turn,
-                logger,
-                "For your security, this session is locked after too many failed verification attempts. Please start a new session.",
-                state,
-            )
+        if verification.verification_status == VerificationStatus.LOCKED:
+            return _set_locked_response(turn, logger, state)
 
         previous_status = verification.verification_status
         missing_field = verification.next_missing_field()
@@ -70,12 +69,11 @@ def make_verification_node(verification_service, logger, max_verification_attemp
 def _set_locked_response(
     turn: TurnState,
     logger,
-    response_text: str,
     state: ConversationState,
 ) -> ConversationState:
-    turn.requested_action = Action.VERIFY_IDENTITY
-    turn.response_text = response_text
-    turn.error_code = "verification_locked"
+    turn.requested_operation = ConversationOperation.VERIFY_IDENTITY
+    turn.response_key = ResponseKey.VERIFICATION_LOCKED
+    turn.issue = TurnIssue.VERIFICATION_LOCKED
     log_event(logger, "verify_identity", state, outcome="locked")
     return state
 
@@ -86,17 +84,17 @@ def _collect_missing_field(
     logger,
     *,
     field_name: str,
-    previous_status: str | None,
+    previous_status: VerificationStatus,
     state: ConversationState,
 ) -> ConversationState:
     verification.mark_collecting()
-    turn.requested_action = Action.VERIFY_IDENTITY
+    turn.requested_operation = ConversationOperation.VERIFY_IDENTITY
     invalid_response = _invalid_response_for_field(state, field_name, previous_status)
     if invalid_response is None:
-        turn.response_text = PROMPTS[field_name]
-        turn.error_code = None
+        turn.response_key = PROMPTS[field_name]
+        turn.issue = None
     else:
-        turn.response_text, turn.error_code = invalid_response
+        turn.response_key, turn.issue = invalid_response
     log_event(logger, "collect_missing_verification_fields", state)
     return state
 
@@ -111,17 +109,12 @@ def _handle_failed_verification(
 ) -> ConversationState:
     verification.verification_failures += 1
     verification.reset_failed_verification()
-    turn.requested_action = Action.VERIFY_IDENTITY
+    turn.requested_operation = ConversationOperation.VERIFY_IDENTITY
     if verification.verification_failures >= max_verification_attempts:
-        verification.verification_status = "locked"
-        return _set_locked_response(
-            turn,
-            logger,
-            "I couldn't verify your identity. For your security, this session is now locked. Please start a new session to try again.",
-            state,
-        )
-    turn.response_text = "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?"
-    turn.error_code = "invalid_identity"
+        verification.verification_status = VerificationStatus.LOCKED
+        return _set_locked_response(turn, logger, state)
+    turn.response_key = ResponseKey.VERIFICATION_FAILED
+    turn.issue = TurnIssue.INVALID_IDENTITY
     log_event(logger, "verify_identity", state, outcome="failed")
     return state
 
@@ -135,8 +128,9 @@ def _handle_successful_verification(
     state: ConversationState,
 ) -> ConversationState:
     verification.mark_verified(patient_id)
-    turn.error_code = None
-    turn.resume_deferred_action()
+    turn.issue = None
+    turn.response_key = None
+    turn.resume_deferred_operation()
     log_event(logger, "verify_identity", state, outcome="verified")
     return state
 
@@ -144,9 +138,9 @@ def _handle_successful_verification(
 def _invalid_response_for_field(
     state: ConversationState,
     field_name: str,
-    previous_status: str | None,
-) -> tuple[str, str] | None:
-    if previous_status not in {"collecting", "failed"}:
+    previous_status: VerificationStatus,
+) -> tuple[ResponseKey, TurnIssue] | None:
+    if previous_status not in {VerificationStatus.COLLECTING, VerificationStatus.FAILED}:
         return None
     message = (state.incoming_message or "").strip()
     if not message:

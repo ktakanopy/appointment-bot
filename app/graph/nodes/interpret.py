@@ -1,12 +1,23 @@
 from __future__ import annotations
 
-from app.domain.actions import Action
+from app.application.contracts.conversation import ConversationOperation
 from app.domain.models import DateOfBirth, FullName
-from app.graph.state import AppointmentState, ConversationState, TurnState, VerificationState, appointment_state, turn_state, verification_state
+from app.graph.state import (
+    AppointmentState,
+    ConversationState,
+    TurnState,
+    VerificationState,
+    appointment_state,
+    turn_state,
+    verification_state,
+)
 from app.graph.text_extraction import extract_phone
 from app.observability import log_event
 
-APPOINTMENT_ACTIONS = {Action.CONFIRM_APPOINTMENT, Action.CANCEL_APPOINTMENT}
+APPOINTMENT_ACTIONS = {
+    ConversationOperation.CONFIRM_APPOINTMENT,
+    ConversationOperation.CANCEL_APPOINTMENT,
+}
 
 
 def make_interpret_node(logger, provider):
@@ -18,13 +29,15 @@ def make_interpret_node(logger, provider):
         provider_state = {
             "verification": {"verified": verification.verified},
             "turn": {
-                "requested_action": turn.requested_action,
-                "deferred_action": turn.deferred_action,
+                "requested_operation": turn.requested_operation.value,
+                "deferred_operation": (
+                    turn.deferred_operation.value if turn.deferred_operation is not None else None
+                ),
             },
             "missing_verification_fields": verification.missing_fields(),
         }
         result = provider.interpret(message, provider_state)
-        requested_action = result.requested_action
+        requested_operation = result.requested_operation
 
         verification.fill_missing_fields(
             phone=_normalize_phone(result.phone),
@@ -32,9 +45,9 @@ def make_interpret_node(logger, provider):
             full_name=_normalize_full_name(result.full_name),
         )
 
-        turn.requested_action = requested_action
-        _update_deferred_action(verification, turn, requested_action)
-        _update_appointment_reference(appointments, requested_action, result.appointment_reference)
+        turn.requested_operation = requested_operation
+        _update_deferred_operation(verification, turn, requested_operation)
+        _update_appointment_reference(appointments, requested_operation, result.appointment_reference)
         log_event(
             logger,
             "parse_intent_and_entities",
@@ -46,17 +59,21 @@ def make_interpret_node(logger, provider):
     return interpret
 
 
-def _update_deferred_action(verification: VerificationState, turn: TurnState, requested_action: Action) -> None:
-    if requested_action.requires_verification and not verification.verified:
-        turn.deferred_action = requested_action
+def _update_deferred_operation(
+    verification: VerificationState,
+    turn: TurnState,
+    requested_operation: ConversationOperation,
+) -> None:
+    if requested_operation.requires_verification and not verification.verified:
+        turn.deferred_operation = requested_operation
 
 
 def _update_appointment_reference(
     appointments: AppointmentState,
-    requested_action: Action,
+    requested_operation: ConversationOperation,
     appointment_reference: str | None,
 ) -> None:
-    if requested_action not in APPOINTMENT_ACTIONS:
+    if requested_operation not in APPOINTMENT_ACTIONS:
         appointments.appointment_reference = None
         return
     if appointments.appointment_reference is None and appointment_reference:

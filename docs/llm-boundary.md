@@ -6,8 +6,8 @@ This document describes how language models participate in the appointment bot. 
 
 The LLM is non-authoritative. It performs exactly two product roles:
 
-1. **Intent extraction** — parse the user message into a structured action label and entity fields.
-2. **Response polishing** — rewrite deterministic template strings into concise, natural patient-facing wording.
+1. **Intent extraction** — parse the user message into a structured operation label and entity fields.
+2. **Response polishing** — rewrite deterministic presenter fallback text into concise, patient-facing wording.
 
 The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Those responsibilities stay in deterministic Python code paths. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
 
@@ -17,7 +17,7 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 | Method | Role |
 |--------|------|
-| `interpret(message, state) -> IntentPrediction` | Propose `requested_action`, `full_name`, `phone`, `dob`, `appointment_reference` from the message and a small state snapshot. |
+| `interpret(message, state) -> IntentPrediction` | Propose `requested_operation`, `full_name`, `phone`, `dob`, `appointment_reference` from the message and a small state snapshot. |
 | `generate_response(state, fallback_text) -> AssistantResponse` | Produce polished `response_text` from the deterministic `fallback_text` and state context. |
 | `judge(scenario, transcript, observed_outcomes) -> JudgeResult` | Used by the evaluation harness; not part of the live chat graph. |
 
@@ -25,13 +25,13 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 ## 3. Factory pattern
 
-`build_provider` in `app/llm/factory.py` constructs a concrete provider from `Settings`. It returns `OpenAIProvider` when `ProviderSettings.provider_name` is `"openai"` and `ProviderSettings.api_key` is present. Those values come from environment configuration (`LLM_PROVIDER` defaults to `openai`; `OPENAI_API_KEY` supplies the key). If configuration is missing or unsupported, the factory raises and runtime startup fails fast.
+`build_provider` in `app/infrastructure/llm/factory.py` constructs a concrete provider from `Settings`. It returns `OpenAIProvider` when `ProviderSettings.provider_name` is `"openai"` and `ProviderSettings.api_key` is present. Those values come from environment configuration (`LLM_PROVIDER` defaults to `openai`; `OPENAI_API_KEY` supplies the key). If configuration is missing or unsupported, the factory raises and runtime startup fails fast.
 
 ## 4. Runtime behavior
 
 - **`parse_intent_and_entities`** delegates action and entity extraction to the configured provider.
-- **`generate_response`** sends the current response text and state context to the provider for the final patient-facing wording.
-- Verification, appointment ownership, idempotency, and graph routing stay in deterministic Python code outside the provider.
+- **`ChatPresenter.present()`** sends a deterministic fallback string plus workflow state to the provider for the final patient-facing wording.
+- Verification, appointment ownership, idempotency, issue classification, and workflow routing stay in deterministic Python code outside the provider.
 
 Provider calls are no longer wrapped in local fallback logic. If the provider raises, the failure propagates instead of silently degrading to deterministic behavior.
 
@@ -42,8 +42,8 @@ Two system prompts, kept short and task-scoped:
 **Intent** (`app/prompts/intent_prompt.py`, `INTENT_PROMPT`):
 
 ```text
-Return strict JSON with keys requested_action, full_name, phone, dob, appointment_reference.
-Use only these requested_action values:
+Return strict JSON with keys requested_operation, full_name, phone, dob, appointment_reference.
+Use only these requested_operation values:
 - verify_identity
 - list_appointments
 - confirm_appointment
@@ -65,32 +65,30 @@ Keep the same operational meaning as the provided fallback text.
 Do not add medical advice, extra policy, or details not already present in the fallback text.
 ```
 
-`OpenAIProvider._complete` in `app/llm/openai_provider.py` passes `response_format={"type": "json_object"}` on chat completions so the API returns parseable JSON. The intent and response prompts explicitly steer the model away from authorization and policy decisions; the judge path uses its own minimal JSON instruction for eval-only calls.
+`OpenAIProvider._complete` in `app/infrastructure/llm/openai_provider.py` passes `response_format={"type": "json_object"}` on chat completions so the API returns parseable JSON. The intent and response prompts explicitly steer the model away from authorization and policy decisions; the judge path uses its own minimal JSON instruction for eval-only calls.
 
-## 6. LLM vs deterministic node map
+## 6. LLM vs deterministic flow map
 
-Only two LangGraph nodes invoke the provider directly.
+The provider is now used once inside the workflow and once in the application presentation layer.
 
 ```mermaid
 flowchart LR
-  subgraph llm_nodes["LLM-backed"]
-    A[parse_intent_and_entities]
-    B[generate_response]
+  subgraph workflow [Workflow]
+    interpret[parse_intent_and_entities]
+    verify[verify]
+    execute[execute_action]
   end
-  subgraph deterministic_only["Deterministic only"]
-    C[ingest_user_message]
-    D[verify]
-    E[execute_action]
+  subgraph application [Application]
+    presenter[ChatPresenter.present]
   end
 ```
 
-| Node | LLM | Deterministic |
+| Stage | LLM | Deterministic |
 |------|-----|---------------|
-| ingest_user_message | No | Yes |
-| parse_intent_and_entities | Yes | No |
-| verify | No | Yes |
-| execute_action | No | Yes |
-| generate_response | Yes | Yes (upstream business outcome only) |
+| `parse_intent_and_entities` | Yes | No |
+| `verify` | No | Yes |
+| `execute_action` | No | Yes |
+| `ChatPresenter.present()` | Yes | Yes (fallback text and workflow state are deterministic inputs) |
 
 ## 7. Why not a ReAct agent
 
@@ -98,4 +96,4 @@ For this use case, a ReAct agent would give the model too much control over a wo
 
 ## 8. Error isolation
 
-Tracing failures do not abort the graph, but provider failures now do. The `interpret` and `generate_response` node implementations call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.
+Tracing failures do not abort the request path, but provider failures still do. `OpenAIProvider.interpret()` and `ChatPresenter.present()` both call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.

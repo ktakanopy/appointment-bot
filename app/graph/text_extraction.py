@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from app.domain.actions import Action
+from app.application.contracts.conversation import ConversationOperation
 from app.domain.models import Appointment, DateOfBirth, FullName, Phone
 
 ORDINAL_WORDS = {
@@ -60,20 +60,20 @@ def extract_full_name(message: str) -> str | None:
     return FullName(candidate).value
 
 
-def extract_requested_action(message: str, state: dict) -> Action:
+def extract_requested_operation(message: str, state: dict) -> ConversationOperation:
     lowered = message.lower()
     if "cancel" in lowered:
-        return Action.CANCEL_APPOINTMENT
+        return ConversationOperation.CANCEL_APPOINTMENT
     if "confirm" in lowered:
-        return Action.CONFIRM_APPOINTMENT
+        return ConversationOperation.CONFIRM_APPOINTMENT
     if any(keyword in lowered for keyword in ["appointment", "appointments", "show", "see", "list"]):
-        return Action.LIST_APPOINTMENTS
+        return ConversationOperation.LIST_APPOINTMENTS
     if is_help_request(lowered):
-        return Action.HELP
-    deferred_action = state.get("turn", {}).get("deferred_action")
-    if deferred_action:
-        return Action(deferred_action)
-    return Action.UNKNOWN
+        return ConversationOperation.HELP
+    deferred_operation = state.get("turn", {}).get("deferred_operation")
+    if deferred_operation:
+        return ConversationOperation(deferred_operation)
+    return ConversationOperation.UNKNOWN
 
 
 def extract_appointment_reference(message: str) -> str | None:

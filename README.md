@@ -97,11 +97,10 @@ flowchart TD
     interpret --> need_verify{verification_required?}
     need_verify -->|yes| verify[verify]
     need_verify -->|no| execute[execute_action]
-    verify --> ready_for_action{response already prepared?}
-    ready_for_action -->|yes| respond[generate_response]
-    ready_for_action -->|no| execute
-    execute --> respond
-    respond --> finish([End])
+    verify --> readyForAction{response_key set?}
+    readyForAction -->|yes| finish([End])
+    readyForAction -->|no| execute
+    execute --> finish
 ```
 
 Why deterministic workflow over a ReAct agent:
@@ -226,7 +225,7 @@ After that, you can continue with messages like:
 - `cancel the first one`
 
 If the full name, phone number, and date of birth do not match the same seeded
-patient record, the bot returns `invalid_identity` and restarts the verification
+patient record, the bot returns `issue=invalid_identity` and restarts the verification
 flow.
 
 ### Run locally without Docker
@@ -309,7 +308,7 @@ If this application needed to move beyond demo scope, the next improvements woul
 ## Additional Docs
 
 - `docs/architecture.md` -- system overview, layered architecture, data flows
-- `docs/llm-boundary.md` -- LLM provider boundary, fallback, prompt design
+- `docs/llm-boundary.md` -- LLM provider boundary, intent extraction, presenter-based response generation
 - `docs/security.md` -- verification gating, session validation, PII redaction
 - `docs/data-model.md` -- domain models, state machine, persistence strategy
 - `docs/observability.md` -- structured logging, Langfuse, trace events

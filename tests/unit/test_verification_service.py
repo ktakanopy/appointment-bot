@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.errors import RepositoryUnavailableError
 from app.domain.services import VerificationService
 from app.infrastructure.persistence.in_memory import InMemoryPatientRepository
 
@@ -31,5 +30,5 @@ def test_verification_service_wraps_repository_failures():
 
     service = VerificationService(BrokenRepository())
 
-    with pytest.raises(RepositoryUnavailableError):
+    with pytest.raises(RuntimeError, match="boom"):
         service.verify_identity("Ana Silva", "11999998888", "1990-05-10")

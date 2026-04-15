@@ -1,4 +1,4 @@
-from app.domain.actions import Action
+from app.application.contracts.conversation import ConversationOperation
 from app.domain.models import DateOfBirth, Phone
 from app.graph import text_extraction
 
@@ -12,9 +12,15 @@ def test_normalize_helpers_parse_supported_identity_fields():
 
 
 def test_extract_requested_action_prefers_protected_keywords():
-    assert text_extraction.extract_requested_action("Please cancel my appointment", {}) == Action.CANCEL_APPOINTMENT
-    assert text_extraction.extract_requested_action("Show my appointments", {}) == Action.LIST_APPOINTMENTS
-    assert text_extraction.extract_requested_action("What can you do?", {}) == Action.HELP
+    assert (
+        text_extraction.extract_requested_operation("Please cancel my appointment", {})
+        == ConversationOperation.CANCEL_APPOINTMENT
+    )
+    assert (
+        text_extraction.extract_requested_operation("Show my appointments", {})
+        == ConversationOperation.LIST_APPOINTMENTS
+    )
+    assert text_extraction.extract_requested_operation("What can you do?", {}) == ConversationOperation.HELP
 
 
 def test_resolve_appointment_reference_supports_ordinals_and_dates():

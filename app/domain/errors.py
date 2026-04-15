@@ -17,5 +17,5 @@ class AppointmentNotOwnedError(DomainError):
     pass
 
 
-class RepositoryUnavailableError(RuntimeError):
+class AppointmentNotFoundError(DomainError):
     pass

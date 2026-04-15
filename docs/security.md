@@ -4,23 +4,23 @@ This document describes security-related behavior in the healthcare appointment 
 
 ## 1. Verification gating
 
-**Protected actions** (`Action.requires_verification` in `app/domain/actions.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
+**Protected operations** (`ConversationOperation.requires_verification` in `app/application/contracts/conversation.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
 
-**Verification-first actions** (`Action.triggers_verification_flow` in `app/domain/actions.py`): `help`, `unknown`, `verify_identity`.
+**Verification-first operations** (`ConversationOperation.triggers_verification_flow` in `app/application/contracts/conversation.py`): `help`, `unknown`, `verify_identity`.
 
-**Verification gate** (`verification_required` in `app/graph/routing.py`): after interpretation, the graph conditionally routes into `verify` whenever the interpreted action is protected, is verification-first, or already has a `deferred_action`. Other turns can skip verification and proceed directly to action execution.
+**Verification gate** (`verification_required` in `app/graph/routing.py`): after interpretation, the workflow routes into `verify` whenever the interpreted operation is protected, is verification-first, or already has a `deferred_operation`.
 
-**Deferred action**: when a protected action is requested while the user is unverified, `deferred_action` is stored. After successful verification, `requested_action` is restored from `deferred_action` so the patient does not need to repeat the original request.
+**Deferred operation**: when a protected operation is requested while the user is unverified, `deferred_operation` is stored. After successful verification, `requested_operation` is restored from `deferred_operation` so the patient does not need to repeat the original request.
 
-**Verification order**: fields are collected in sequence: full name, then phone, then date of birth. Each turn collects the next missing field.
+**Verification order**: fields are collected in sequence: full name, then phone, then date of birth.
 
 **Matching**: verification uses normalized comparison: case-insensitive name, digits-only phone, ISO date.
 
-**Failure handling**: when a field format is invalid, the response explains which field is invalid and asks for that same field again without consuming a verification attempt. When all three fields are syntactically valid but do not match a patient record, the flow clears the collected identity fields, increments the verification failure counter, and restarts from full name with a mismatch explanation.
+**Failure handling**: when a field format is invalid, the workflow returns a typed `issue` and a presenter response key for that field without consuming a verification attempt. When all three fields are syntactically valid but do not match a patient record, the flow clears the collected identity fields, increments the verification failure counter, and restarts from full name.
 
 ## 2. Session validation
 
-`/sessions/new` creates a `SessionRecord` in `runtime.session_service.sessions` with a UUID `session_id`.
+`/sessions/new` creates a `SessionRecord` in `SessionStore`, currently backed by `InMemorySessionStore`.
 
 `/chat` uses `SessionService.require_session`, which returns HTTP 404 if `session_id` is not in the registry.
 
@@ -34,9 +34,9 @@ Sessions use a TTL (`SESSION_TTL_MINUTES`, default 60 minutes). Expired sessions
 
 `max_verification_attempts` defaults to 3 and is configurable via `MAX_VERIFICATION_ATTEMPTS`.
 
-When failures reach the limit, `verification_status` becomes `locked` on the session state and is not cleared for that session.
+When failures reach the limit, `verification_status` becomes `locked` and remains locked for that session.
 
-Locked sessions respond with a message that the session is locked for security and `error_code=verification_locked`.
+Locked sessions respond with a patient-facing lock message and `issue=verification_locked`.
 
 The patient must obtain a new session via `/sessions/new` to attempt verification again.
 
@@ -44,9 +44,9 @@ The patient must obtain a new session via `/sessions/new` to attempt verificatio
 
 From `app/observability.py`, `redact_trace_payload` runs on workflow event payloads before logging or sending traces to Langfuse.
 
-Structured fields are redacted as follows: `provided_full_name` and `display_name` become `[redacted-name]`; `provided_phone` and `phone` become `[redacted-phone-XXXX]` using the last four digits; `provided_dob` and `dob` become `[redacted-dob]`.
+Structured fields are redacted as follows: `provided_full_name` and `display_name` become `[redacted-name]`; `provided_phone` and `phone` become `[redacted-phone-XXXX]`; `provided_dob` and `dob` become `[redacted-dob]`.
 
-For `messages`, each message body is processed with `_redact_message`, which masks dates (formats such as YYYY-MM-DD and DD/MM/YYYY) and sequences of ten or more digits.
+For `messages`, each message body is processed with `_redact_message`, which masks dates and sequences of ten or more digits.
 
 Nested dictionaries are redacted recursively.
 
@@ -54,17 +54,17 @@ The same redaction applies to structured log output and Langfuse trace events.
 
 ## 5. Remembered identity lifecycle
 
-After successful verification, `ChatService.ensure_remembered_identity` in `app/application/chat_service.py` may create a `RememberedIdentity` record with:
+After successful verification, `HandleChatTurnUseCase` may create a `RememberedIdentity` record with:
 
-- A SHA-256 fingerprint over normalized name, phone, date of birth, and `patient_id`
+- a SHA-256 fingerprint over normalized name, phone, date of birth, and `patient_id`
 - TTL from `REMEMBERED_IDENTITY_TTL_HOURS` (default 24 hours)
-- Storage in a dedicated in-memory repository scoped to the running process
+- storage in a dedicated in-memory repository scoped to the running process
 
-On `POST /sessions/new` with `remembered_identity_id`, identity is restored only if the record is active (not expired and not revoked).
+On `POST /sessions/new` with `remembered_identity_id`, identity is restored only if the record is active.
 
 `POST /remembered-identity/forget` revokes the remembered identity so it cannot be used for future restores.
 
-Expired records are handled on read: `RememberedIdentityService._is_active` performs a lazy expiry check when determining whether an identity is active.
+Expired records are handled lazily by `RememberedIdentityService.restore_identity()`.
 
 ## 6. Appointment ownership
 
@@ -72,7 +72,7 @@ Expired records are handled on read: `RememberedIdentityService._is_active` perf
 
 `AppointmentService` and `app/graph/nodes/appointments.py` enforce this before confirm or cancel operations.
 
-If ownership does not hold, the response uses `error_code=appointment_not_owned`.
+If ownership does not hold, the workflow returns `issue=appointment_not_owned`.
 
 ## 7. Scope limitations
 

@@ -1,4 +1,4 @@
-from app.domain.actions import Action
+from app.application.contracts.conversation import ConversationOperation
 from app.domain.models import Appointment, AppointmentStatus
 from app.graph.state import VerificationState
 
@@ -18,8 +18,8 @@ def test_action_and_appointment_rules_cover_status_and_ownership():
     confirmed = Appointment("a2", "p1", "2026-04-23", "09:30", "Dr. Lima", AppointmentStatus.CONFIRMED)
     canceled = Appointment("a3", "p1", "2026-04-25", "11:00", "Dr. Lima", AppointmentStatus.CANCELED)
 
-    assert Action.LIST_APPOINTMENTS.requires_verification is True
-    assert Action.HELP.requires_verification is False
+    assert ConversationOperation.LIST_APPOINTMENTS.requires_verification is True
+    assert ConversationOperation.HELP.requires_verification is False
     assert scheduled.is_confirmable is True
     assert confirmed.is_confirmable is False
     assert confirmed.is_cancelable is True

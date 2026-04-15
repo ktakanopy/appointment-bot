@@ -4,7 +4,7 @@ import logging
 import pytest
 
 from app.config import load_settings
-from app.llm.factory import build_provider
+from app.infrastructure.llm.factory import build_provider
 
 
 def test_build_provider_requires_api_key(monkeypatch):

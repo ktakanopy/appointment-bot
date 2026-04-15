@@ -43,10 +43,10 @@ def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) ->
     payload = {
         "thread_id": _state_value(state, "thread_id"),
         "node": node,
-        "requested_action": turn.get("requested_action"),
+        "requested_operation": turn.get("requested_operation"),
         "verified": verification.get("verified"),
         "verification_status": verification.get("verification_status"),
-        "error_code": turn.get("error_code"),
+        "issue": turn.get("issue"),
     }
     payload.update(extra)
     logger.info(json.dumps(payload, ensure_ascii=True, default=str))

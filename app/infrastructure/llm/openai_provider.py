@@ -31,8 +31,8 @@ class OpenAIProvider:
             "message": message,
             "state": {
                 "verified": verification.get("verified", False),
-                "requested_action": turn.get("requested_action"),
-                "deferred_action": turn.get("deferred_action"),
+                "requested_operation": turn.get("requested_operation"),
+                "deferred_operation": turn.get("deferred_operation"),
                 "missing_verification_fields": state.get("missing_verification_fields", []),
             },
         }
@@ -48,10 +48,10 @@ class OpenAIProvider:
         turn = state.get("turn", {})
         payload = {
             "fallback_text": fallback_text,
-            "requested_action": turn.get("requested_action"),
+            "requested_operation": turn.get("requested_operation"),
             "verified": verification.get("verified"),
-            "error_code": turn.get("error_code"),
-            "last_action_result": turn.get("last_action_result"),
+            "issue": turn.get("issue"),
+            "last_action_result": turn.get("operation_result"),
         }
         return self._complete_model(
             event_name="generate_response",

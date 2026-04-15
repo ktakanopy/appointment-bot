@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 
 from app.config import Settings
-from app.llm.base import LLMProvider
 from app.infrastructure.llm.openai_provider import OpenAIProvider
+from app.llm.base import LLMProvider
 
 
 def build_provider(

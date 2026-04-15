@@ -56,9 +56,9 @@ workflow.
 
 - `thread_id`: stable workflow thread identifier derived from `session_id`
 - `messages`: accumulated user and assistant messages for the current thread
-- `requested_action`: latest requested high-level action such as list, confirm,
-  cancel, help, or unknown
-- `deferred_action`: protected action paused until verification succeeds
+- `requested_operation`: latest requested high-level operation such as list,
+  confirm, cancel, help, or unknown
+- `deferred_operation`: protected operation paused until verification succeeds
 - `verified`: boolean gate for protected actions
 - `verification_status`: current verification progress or failure status
 - `patient_id`: resolved patient identifier after successful verification
@@ -71,12 +71,12 @@ workflow.
 - `selected_appointment_id`: resolved appointment target for confirm or cancel
 - `last_action_result`: structured outcome of the latest completed action
 - `response_text`: final response text returned to the caller
-- `error_code`: structured internal recovery signal
+- `issue`: structured internal recovery signal
 
 **Validation Rules**:
 
 - protected actions require `verified == true`
-- `deferred_action` may only be set for protected actions blocked by policy
+- `deferred_operation` may only be set for protected actions blocked by policy
 - `selected_appointment_id` must resolve from the current patient's known
   appointments
 - `listed_appointments` must be refreshed after state-changing actions when the

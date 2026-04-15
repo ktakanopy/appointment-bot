@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from typing import Any
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.actions import Action
+from app.application.contracts.conversation import (
+    ConversationOperation,
+    ConversationOperationResult,
+    ResponseKey,
+    TurnIssue,
+    VerificationStatus,
+)
 from app.domain.models import Appointment
 
 
@@ -22,23 +27,23 @@ class StateModel(BaseModel):
 class VerificationState(StateModel):
     verified: bool = False
     verification_failures: int = 0
-    verification_status: Optional[str] = None
-    patient_id: Optional[str] = None
-    provided_full_name: Optional[str] = None
-    provided_phone: Optional[str] = None
-    provided_dob: Optional[str] = None
+    verification_status: VerificationStatus = VerificationStatus.UNVERIFIED
+    patient_id: str | None = None
+    provided_full_name: str | None = None
+    provided_phone: str | None = None
+    provided_dob: str | None = None
 
     def mark_collecting(self) -> None:
-        self.verification_status = "collecting"
+        self.verification_status = VerificationStatus.COLLECTING
 
     def mark_verified(self, patient_id: str) -> None:
-        self.verification_status = "verified"
+        self.verification_status = VerificationStatus.VERIFIED
         self.verified = True
         self.verification_failures = 0
         self.patient_id = patient_id
 
     def reset_failed_verification(self) -> None:
-        self.verification_status = "failed"
+        self.verification_status = VerificationStatus.FAILED
         self.verified = False
         self.patient_id = None
         self.provided_full_name = None
@@ -77,26 +82,28 @@ class VerificationState(StateModel):
 
 
 class TurnState(StateModel):
-    requested_action: Optional[Action] = None
-    deferred_action: Optional[Action] = None
-    last_action_result: Optional[dict[str, Optional[str]]] = None
-    response_text: Optional[str] = None
-    error_code: Optional[str] = None
+    requested_operation: ConversationOperation = ConversationOperation.UNKNOWN
+    deferred_operation: ConversationOperation | None = None
+    operation_result: ConversationOperationResult | None = None
+    response_key: ResponseKey | None = None
+    issue: TurnIssue | None = None
+    subject_appointment: Appointment | None = None
 
-    def resume_deferred_action(self) -> None:
-        if self.deferred_action:
-            self.requested_action = self.deferred_action
-            self.deferred_action = None
+    def resume_deferred_operation(self) -> None:
+        if self.deferred_operation:
+            self.requested_operation = self.deferred_operation
+            self.deferred_operation = None
 
     def clear_transient_output(self) -> None:
-        self.error_code = None
-        self.response_text = None
-        self.last_action_result = None
+        self.response_key = None
+        self.issue = None
+        self.operation_result = None
+        self.subject_appointment = None
 
 
 class AppointmentState(StateModel):
     listed_appointments: list[Appointment] = Field(default_factory=list)
-    appointment_reference: Optional[str] = None
+    appointment_reference: str | None = None
 
 
 class ConversationState(StateModel):

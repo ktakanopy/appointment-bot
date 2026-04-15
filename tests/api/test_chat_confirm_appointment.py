@@ -16,7 +16,7 @@ def test_api_confirm_first_appointment():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["current_action"] == "confirm_appointment"
+    assert body["current_operation"] == "confirm_appointment"
     assert body["last_action_result"]["outcome"] == "confirmed"
 
 
@@ -30,7 +30,7 @@ def test_api_confirm_numeric_reference_uses_patient_facing_numbering():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["current_action"] == "confirm_appointment"
+    assert body["current_operation"] == "confirm_appointment"
     assert body["last_action_result"]["appointment_id"] == "a1"
     assert body["last_action_result"]["outcome"] == "confirmed"
 
@@ -45,4 +45,4 @@ def test_api_ambiguous_confirm_without_list_context():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["error_code"] == "missing_list_context"
+    assert body["issue"] == "missing_list_context"

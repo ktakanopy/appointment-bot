@@ -27,5 +27,5 @@ def test_verification_locks_after_max_failed_attempts():
 
     assert response.status_code == 200
     assert body["verified"] is False
-    assert body["error_code"] == "verification_locked"
+    assert body["issue"] == "verification_locked"
     assert "session is now locked" in body["response"]

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import app.graph.builder as builder_module
 import app.runtime as runtime_module
 import pytest
 from fastapi.testclient import TestClient
@@ -26,7 +25,6 @@ class BrokenProvider:
 
 
 def test_api_raises_when_provider_fails(monkeypatch):
-    monkeypatch.setattr(builder_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
     monkeypatch.setattr(runtime_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
     routes.reset_runtime(app)
     session = client.post("/sessions/new").json()
