@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from app.llm.schemas import IntentPrediction, JudgeResult
 
 
+@runtime_checkable
 class LLMProvider(Protocol):
     name: str
 

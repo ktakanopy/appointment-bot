@@ -18,6 +18,8 @@ APPOINTMENT_ACTIONS = {
     ConversationOperation.CANCEL_APPOINTMENT,
 }
 
+MESSAGE_HISTORY_LIMIT = 6
+
 
 def make_interpret_node(logger, provider):
     def interpret(state: ConversationState) -> ConversationState:
@@ -34,6 +36,7 @@ def make_interpret_node(logger, provider):
                 ),
             },
             "missing_verification_fields": verification.missing_fields(),
+            "messages": state.recent_messages(MESSAGE_HISTORY_LIMIT),
         }
         result = provider.interpret(message, provider_state)
         requested_operation = result.requested_operation

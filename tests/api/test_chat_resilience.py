@@ -15,6 +15,13 @@ def test_invalid_payload_returns_422():
     assert response.json() == {"detail": "Invalid chat request"}
 
 
+def test_chat_rejects_messages_over_length_limit():
+    response = client.post("/chat", json={"session_id": "s1", "message": "x" * 4001})
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Invalid chat request"}
+
+
 def test_repository_failure_returns_503(monkeypatch):
     def fail_run(*args, **kwargs):
         raise DependencyUnavailableError("boom")
@@ -26,3 +33,10 @@ def test_repository_failure_returns_503(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"detail": "The appointment service is temporarily unavailable."}
+
+
+def test_health_returns_ok():
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

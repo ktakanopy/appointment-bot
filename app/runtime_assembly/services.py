@@ -8,6 +8,7 @@ from app.application.services.response_policy import ResponsePolicy
 from app.application.session_service import SessionService
 from app.config import Settings
 from app.domain.services import AppointmentService, VerificationService
+from app.llm.base import LLMProvider
 from app.runtime_assembly.bundles import RepositoryBundle, ServiceBundle
 
 
@@ -17,7 +18,7 @@ def build_services(
     logger: logging.Logger,
     tracer: object | None,
     repositories: RepositoryBundle,
-    provider_factory: Callable[..., object],
+    provider_factory: Callable[..., LLMProvider],
 ) -> ServiceBundle:
     provider = provider_factory(settings, logger, tracer=tracer)
     verification_service = VerificationService(repositories.patient_repository)

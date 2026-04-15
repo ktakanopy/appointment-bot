@@ -131,6 +131,11 @@ class ConversationState(StateModel):
     def add_assistant_message(self, content: str) -> None:
         self.messages.append({"role": "assistant", "content": content})
 
+    def recent_messages(self, limit: int) -> list[dict[str, str]]:
+        if limit <= 0:
+            return []
+        return self.messages[-limit:]
+
 
 def verification_state(state: ConversationState) -> VerificationState:
     return state.verification

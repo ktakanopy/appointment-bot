@@ -9,6 +9,8 @@ Use only these requested_operation values:
 - unknown
 Do not decide authorization or mutate appointment state.
 Leave unknown fields as null.
+Recent messages may be provided in state.messages. Use them only to resolve references in the current user message.
+Do not invent a new request from history alone.
 If the message asks to confirm or cancel an appointment by number, treat the number as patient-facing and 1-indexed.
 Examples:
 - "I want to see my appointments" -> {"requested_operation":"list_appointments","full_name":null,"phone":null,"dob":null,"appointment_reference":null}

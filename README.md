@@ -10,6 +10,8 @@ The main endpoint accepts natural language messages and lets a patient:
 - cancel an appointment
 - move naturally between these actions within the same conversation
 
+Demo asset: [chat flow GIF](docs/demo-chat-flow.gif)
+
 ## How This Project Was Built
 
 I started from the exercise statement provided for the hiring process.
@@ -185,6 +187,7 @@ docker compose up --build
 Then open:
 
 - API: `http://localhost:8000`
+- Health: `http://localhost:8000/health`
 - Swagger UI: `http://localhost:8000/docs`
 - Streamlit: `http://localhost:8501`
 - Langfuse: `http://localhost:3000`
@@ -366,8 +369,10 @@ In a production version, likely next steps would be:
 
 - cross-session remembered identity as an explicit scope expansion once the core flow no longer needs to stay exercise-sized
 - deterministic fallback for intent and entity extraction in well-covered cases
+- background or scheduled session cleanup instead of request-path lazy cleanup
 - agent response streaming to deliver partial updates in real time and improve chat usability
 - stronger persistence for sessions and appointments
+- thread-safe shared state or externalized persistence instead of in-memory mutable stores
 - stronger evaluation and regression coverage for natural language understanding
 - more production-grade error handling and operational resilience
 

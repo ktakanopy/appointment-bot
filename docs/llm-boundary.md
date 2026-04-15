@@ -16,7 +16,7 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 | Method | Role |
 |--------|------|
-| `interpret(message, state) -> IntentPrediction` | Propose `requested_operation`, `full_name`, `phone`, `dob`, `appointment_reference` from the message and a small state snapshot. |
+| `interpret(message, state) -> IntentPrediction` | Propose `requested_operation`, `full_name`, `phone`, `dob`, `appointment_reference` from the message and a small state snapshot, including a bounded recent message history. |
 | `judge(scenario, transcript, observed_outcomes) -> JudgeResult` | Used by the evaluation harness; not part of the live chat graph. |
 
 `IntentPrediction` and `JudgeResult` are Pydantic models in `app/llm/schemas.py`. They constrain what the implementation may return and keep the boundary typed.
@@ -48,10 +48,12 @@ Use only these requested_operation values:
 - unknown
 Do not decide authorization or mutate appointment state.
 Leave unknown fields as null.
+Recent messages may be provided in state.messages. Use them only to resolve references in the current user message.
+Do not invent a new request from history alone.
 If the message asks to confirm or cancel an appointment by number, treat the number as patient-facing and 1-indexed.
 ```
 
-`OpenAIProvider._complete` in `app/infrastructure/llm/openai_provider.py` passes `response_format={"type": "json_object"}` on chat completions so the API returns parseable JSON. The intent prompt explicitly steers the model away from authorization and policy decisions; the judge path uses its own minimal JSON instruction for eval-only calls.
+`OpenAIProvider` uses native OpenAI structured parsing against the Pydantic models `IntentPrediction` and `JudgeResult`. The provider also retries a small number of transient parse or transport failures before surfacing an error. The intent prompt explicitly steers the model away from authorization and policy decisions; the judge path uses its own minimal structured schema for eval-only calls.
 
 ## 6. LLM vs deterministic flow map
 
@@ -80,6 +82,6 @@ flowchart LR
 
 For this use case, a ReAct agent would give the model too much control over a workflow that is mostly policy-driven. The critical decisions are whether the patient is verified, whether an appointment belongs to that patient, whether a mutation is idempotent, and whether the session is locked. Those decisions are deterministic and easy to encode directly in Python, which makes the system easier to test, reason about, and defend against prompt-injection attempts. The chosen design keeps the model useful at the boundaries without turning it into the workflow authority.
 
-## 8. Error isolation
+## 8. Error isolation and retries
 
-Tracing failures do not abort the request path, but provider failures do. `OpenAIProvider.interpret()` is the only provider call in the live chat path, so provider exceptions surface as runtime errors on the interpret step only. Response rendering cannot produce provider errors because it is fully deterministic.
+Tracing failures do not abort the request path, but provider failures do. `OpenAIProvider.interpret()` is the only provider call in the live chat path, so provider exceptions surface as runtime errors on the interpret step only after a short retry window. Response rendering cannot produce provider errors because it is fully deterministic.

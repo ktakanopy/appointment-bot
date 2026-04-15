@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
+    HealthResponse,
     NewSessionResponse,
 )
 from app.application.errors import DependencyUnavailableError, SessionNotFoundError
@@ -32,21 +31,19 @@ def reset_runtime(target_app=None, settings: Settings | None = None) -> RuntimeC
 
 
 @router.post("/sessions/new", response_model=NewSessionResponse)
-async def create_session(
+def create_session(
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> NewSessionResponse:
-    response = await asyncio.to_thread(runtime.create_session_use_case.execute)
-    return NewSessionResponse(**response.model_dump(mode="json"))
+    return runtime.create_session_use_case.execute()
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(
+def chat(
     request: ChatRequest,
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> ChatResponse:
     try:
-        response = await asyncio.to_thread(
-            runtime.handle_chat_turn_use_case.execute,
+        return runtime.handle_chat_turn_use_case.execute(
             session_id=request.session_id,
             message=request.message,
         )
@@ -54,4 +51,8 @@ async def chat(
         raise HTTPException(status_code=404, detail="Session not found. Start a new session.") from error
     except DependencyUnavailableError as error:
         raise HTTPException(status_code=503, detail="The appointment service is temporarily unavailable.") from error
-    return ChatResponse(**response.model_dump(mode="json"))
+
+
+@router.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(status="ok")

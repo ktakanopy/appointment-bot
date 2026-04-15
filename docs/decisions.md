@@ -88,7 +88,7 @@
 
 **Decision:** Require session creation via `/sessions/new` and validate session_id on every `/chat` request. Apply a TTL to expire idle sessions.
 
-**Consequences:** Unknown session_ids return 404. Session cleanup happens lazily on each request. The registry is in-memory, so sessions are lost on restart, which is acceptable for demo scope.
+**Consequences:** Unknown session_ids return 404. Session cleanup happens lazily on each request. The registry is in-memory, so sessions are lost on restart, which is acceptable for demo scope. A background or scheduled cleanup path remains a future scaling improvement rather than part of the current exercise-sized implementation.
 
 ## ADR-010: Verification Lockout
 

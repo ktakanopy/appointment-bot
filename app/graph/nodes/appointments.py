@@ -201,8 +201,6 @@ def _resolve_target_appointment(
         return None
 
     return appointment
-
-
 def _map_mutation_outcome(outcome: AppointmentMutationOutcome) -> ConversationOperationOutcome:
     if outcome == AppointmentMutationOutcome.CONFIRMED:
         return ConversationOperationOutcome.CONFIRMED

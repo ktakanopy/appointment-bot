@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, TypeVar
 
 from openai import OpenAI
@@ -12,6 +13,9 @@ from app.observability import record_provider_event
 from app.prompts.intent_prompt import INTENT_PROMPT
 
 T = TypeVar("T", bound=BaseModel)
+
+MAX_PARSE_ATTEMPTS = 3
+BASE_RETRY_SECONDS = 0.1
 
 
 class OpenAIProvider:
@@ -33,6 +37,7 @@ class OpenAIProvider:
                 "requested_operation": turn.get("requested_operation"),
                 "deferred_operation": turn.get("deferred_operation"),
                 "missing_verification_fields": state.get("missing_verification_fields", []),
+                "messages": state.get("messages", []),
             },
         }
         return self._complete_model(
@@ -67,11 +72,11 @@ class OpenAIProvider:
         payload: dict[str, Any],
     ) -> T:
         try:
-            content = self._complete(
+            result = self._complete_with_retries(
+                response_model=response_model,
                 system_message=system_message,
                 user_message=json.dumps(payload, ensure_ascii=True, default=str),
             )
-            result = response_model.model_validate_json(content)
         except Exception as exc:
             record_provider_event(
                 self.logger,
@@ -83,27 +88,50 @@ class OpenAIProvider:
         record_provider_event(self.logger, self.tracer, event_name, {"provider": self.name, "status": "ok"})
         return result
 
-    def _complete(self, system_message: str, user_message: str) -> str:
-        response = self.client.chat.completions.create(
+    def _complete_with_retries(
+        self,
+        *,
+        response_model: type[T],
+        system_message: str,
+        user_message: str,
+    ) -> T:
+        last_error: Exception | None = None
+        for attempt in range(MAX_PARSE_ATTEMPTS):
+            try:
+                return self._complete(
+                    response_model=response_model,
+                    system_message=system_message,
+                    user_message=user_message,
+                )
+            except Exception as error:
+                last_error = error
+                if attempt == MAX_PARSE_ATTEMPTS - 1:
+                    raise
+                time.sleep(BASE_RETRY_SECONDS * (2**attempt))
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Structured parse failed without an exception")
+
+    def _complete(
+        self,
+        *,
+        response_model: type[T],
+        system_message: str,
+        user_message: str,
+    ) -> T:
+        response = self.client.beta.chat.completions.parse(
             model=self.settings.model_name,
-            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message},
             ],
+            response_format=response_model,
         )
-        message = response.choices[0].message.content
-        if isinstance(message, list):
-            content = "".join(self._extract_text_part(part) for part in message)
-        else:
-            content = message or ""
-        if not content.strip():
-            raise ValueError("OpenAI returned empty content")
-        return content
-
-    def _extract_text_part(self, part: Any) -> str:
-        if isinstance(part, dict):
-            text = part.get("text")
-            return text if isinstance(text, str) else ""
-        text = getattr(part, "text", "")
-        return text if isinstance(text, str) else ""
+        message = response.choices[0].message
+        parsed = getattr(message, "parsed", None)
+        if parsed is not None:
+            return response_model.model_validate(parsed)
+        refusal = getattr(message, "refusal", None)
+        if refusal:
+            raise ValueError(f"OpenAI refused structured output: {refusal}")
+        raise ValueError("OpenAI returned no parsed content")

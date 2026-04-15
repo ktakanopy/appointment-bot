@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.application.ports.workflow_runner import ConversationWorkflow
+from app.application.session_service import SessionService
+from app.application.use_cases.create_session import CreateSessionUseCase
+from app.application.use_cases.handle_chat_turn import HandleChatTurnUseCase
 from app.config import Settings, load_settings
 from app.infrastructure.llm.factory import build_provider
+from app.llm.base import LLMProvider
 from app.observability import build_tracer, get_logger
 from app.runtime_assembly.presenters import build_presenters
 from app.runtime_assembly.repositories import build_repositories
@@ -21,12 +25,12 @@ class RuntimeContext(BaseModel):
     settings: Settings
     logger: logging.Logger
     tracer: object | None
-    graph: Any
-    workflow: Any
-    provider: Any
-    session_service: Any
-    create_session_use_case: Any
-    handle_chat_turn_use_case: Any
+    graph: object
+    workflow: ConversationWorkflow
+    provider: LLMProvider
+    session_service: SessionService
+    create_session_use_case: CreateSessionUseCase
+    handle_chat_turn_use_case: HandleChatTurnUseCase
 
 
 def create_runtime(settings: Settings | None = None) -> RuntimeContext:
