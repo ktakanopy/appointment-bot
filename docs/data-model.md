@@ -5,7 +5,6 @@
 ```mermaid
 erDiagram
     Patient ||--o{ Appointment : has
-    Patient ||--o{ RememberedIdentity : has
     Patient {
         string id PK
         string full_name
@@ -18,16 +17,6 @@ erDiagram
         date date
         string time
         string doctor
-        string status
-    }
-    RememberedIdentity {
-        string remembered_identity_id PK
-        string patient_id FK
-        string display_name
-        string verification_fingerprint
-        datetime issued_at
-        datetime expires_at
-        datetime revoked_at
         string status
     }
     ConversationOperationResult {
@@ -53,19 +42,7 @@ stateDiagram-v2
 
 Confirming a `scheduled` appointment transitions to `confirmed`. Re-confirming an already `confirmed` appointment returns outcome `already_confirmed` without error. Canceling transitions `scheduled` or `confirmed` to `canceled`. Re-canceling an already `canceled` appointment returns outcome `already_canceled` without error. A `canceled` appointment cannot be confirmed.
 
-## 3. RememberedIdentityStatus Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> unavailable
-    unavailable --> active : identity issued
-    active --> expired : expires_at before now\n(lazy on access)
-    active --> revoked : POST /remembered-identity/forget
-```
-
-`unavailable` is the initial state when no remembered identity exists for the session.
-
-## 4. ConversationState Reference
+## 3. ConversationState Reference
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -87,15 +64,15 @@ stateDiagram-v2
 | response_key | `ResponseKey` or None | Deterministic presenter key for the patient-facing response |
 | issue | `TurnIssue` or None | Machine-readable issue classification for the current turn |
 
-## 5. Persistence Strategy
+## 4. Persistence Strategy
 
 | Data | Storage | Lifetime |
 |------|---------|----------|
 | Patient records | In-memory (InMemoryPatientRepository) | Process lifetime |
 | Appointment records | In-memory (InMemoryAppointmentRepository) | Process lifetime |
 | Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
-| Remembered identity | In-memory (InMemoryRememberedIdentityRepository) | Process lifetime, TTL + revoke |
 | Session registry | In-memory via `InMemorySessionStore` | Process lifetime, TTL-based cleanup |
-| Session bootstrap | In-memory on each `SessionRecord` via `SessionBootstrap` | 300s TTL |
 
-In-memory storage is intentional for demo scope. A production system would back conversation state, remembered identity, patient data, and appointment data with external persistence.
+In-memory storage is intentional for demo scope. A production system would back conversation state, patient data, and appointment data with external persistence.
+
+Cross-session remembered identity is a possible future improvement, but it is intentionally not part of the delivered data model for this exercise.

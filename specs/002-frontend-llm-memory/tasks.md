@@ -5,6 +5,8 @@ description: "Task list for frontend, LLM, tracing, evaluation, and remembered i
 
 # Tasks: Frontend, LLM, and Returning Memory
 
+> Historical planning artifact: tasks related to remembered identity reflect an explored scope that was intentionally removed from the final delivered product.
+
 **Input**: Design documents from `/specs/002-frontend-llm-memory/`  
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/chat-api.yaml`, `quickstart.md`
 

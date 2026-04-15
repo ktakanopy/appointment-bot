@@ -1,5 +1,7 @@
 # Implementation Plan: Frontend, LLM, and Returning Memory
 
+> Historical planning artifact: this plan includes exploratory remembered-identity work that was later removed from the delivered product to stay closer to the original exercise scope.
+
 **Branch**: `002-frontend-llm-memory` | **Date**: 2026-04-13 | **Spec**: `/Users/kevin.takano/projects/appointment-bot/specs/002-frontend-llm-memory/spec.md`
 **Input**: Feature specification from `/Users/kevin.takano/projects/appointment-bot/specs/002-frontend-llm-memory/spec.md`
 

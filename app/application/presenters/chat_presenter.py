@@ -4,7 +4,7 @@ from app.application.contracts.conversation import (
     ConversationOperation,
     ConversationWorkflowResult,
 )
-from app.application.contracts.public import AppointmentSummary, ChatTurnResponse, RememberedIdentitySummary
+from app.application.contracts.public import AppointmentSummary, ChatTurnResponse
 
 
 class ChatPresenter:
@@ -14,7 +14,6 @@ class ChatPresenter:
         thread_id: str,
         response_text: str,
         workflow_result: ConversationWorkflowResult,
-        remembered_identity_status: RememberedIdentitySummary,
     ) -> ChatTurnResponse:
         current_operation = workflow_result.turn.requested_operation
         if not workflow_result.verification.verified and current_operation in {
@@ -51,5 +50,4 @@ class ChatPresenter:
             appointments=appointments,
             last_action_result=workflow_result.turn.operation_result,
             issue=workflow_result.turn.issue.value if workflow_result.turn.issue else None,
-            remembered_identity_status=remembered_identity_status,
         )

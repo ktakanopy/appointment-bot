@@ -53,12 +53,12 @@ This project is built with:
 Key design decisions:
 
 - a single `POST /chat` endpoint
-- a `POST /sessions/new` bootstrap endpoint and a `POST /remembered-identity/forget` revoke endpoint
+- a `POST /sessions/new` session-creation endpoint
 - explicit workflow orchestration with `LangGraph StateGraph`
 - in-memory conversation state keyed by `thread_id`
 - deterministic safety gates for verification and protected actions
 - a lightweight Streamlit frontend for patient chat
-- in-memory repositories for patients, appointments, and remembered identity
+- in-memory repositories for patients and appointments
 
 One alternative here would have been to use a ReAct-style agent. I chose an
 explicit deterministic workflow instead because this problem is mostly a
@@ -341,14 +341,16 @@ Specification artifacts:
 - The project is intentionally scoped to the exercise and uses simplified
   identity verification.
 - There is no real EHR/EMR integration.
-- Appointment, session, conversation, and remembered identity data remain in memory.
+- Appointment, session, and conversation data remain in memory.
+- Cross-session remembered identity was intentionally left out of the delivered
+  product to keep the implementation aligned with the original exercise scope.
 
 ## Scaling Ideas
 
 If this application needed to move beyond demo scope, the next improvements would be:
 
 - stream token output from the backend to the frontend instead of waiting for full responses
-- replace in-memory state with an external database or cache so sessions and remembered identity survive restarts
+- replace in-memory state with an external database or cache so sessions survive restarts
 - move patient and appointment data to a real persistence layer instead of seeded demo data
 - add background workers and queueing for slower downstream operations or audits
 - add stronger auth, rate limiting, and production-grade observability around protected flows
@@ -362,9 +364,10 @@ branching and fallback complexity beyond the scope of the exercise.
 
 In a production version, likely next steps would be:
 
+- cross-session remembered identity as an explicit scope expansion once the core flow no longer needs to stay exercise-sized
 - deterministic fallback for intent and entity extraction in well-covered cases
 - agent response streaming to deliver partial updates in real time and improve chat usability
-- stronger persistence for sessions, appointments, and remembered identity
+- stronger persistence for sessions and appointments
 - stronger evaluation and regression coverage for natural language understanding
 - more production-grade error handling and operational resilience
 

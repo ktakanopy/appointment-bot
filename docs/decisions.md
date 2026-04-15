@@ -50,15 +50,15 @@
 
 **Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors on the interpret step. Final responses are produced by `ResponsePolicy` and are never affected by provider failures.
 
-## ADR-006: In-Memory Remembered Identity Store
+## ADR-006: Remembered Identity Deferred From Delivered Scope
 
-**Status:** Accepted
+**Status:** Superseded
 
-**Context:** Remembered identity has a different lifecycle than conversation state and still needs TTL and revocation semantics. For the current scope, a separate in-memory repository keeps those concerns isolated without adding persistence complexity.
+**Context:** A remembered-identity layer was explored during implementation, but it expanded the delivery beyond the core hiring exercise. The main value of the submission is the verification-gated appointment flow inside a single session.
 
-**Decision:** Use a dedicated in-memory repository for remembered identity records.
+**Decision:** Remove remembered identity from the active product and keep it only as a possible future improvement.
 
-**Consequences:** Revocation and restore logic stay separate from the graph state. Remembered identities are cleared on process restart, which is acceptable for the current demo scope.
+**Consequences:** The delivered codebase is smaller and easier to explain. Session creation stays simple, there is no restore/revoke API surface, and cross-session convenience is intentionally out of scope for now.
 
 ## ADR-007: Streamlit Frontend
 
@@ -68,7 +68,7 @@
 
 **Decision:** Use Streamlit for a lightweight chat interface that calls the backend over HTTP.
 
-**Consequences:** The frontend is a single file. It supports session management, remembered identity, and the full protected appointment flow. It is not production-grade but demonstrates the end-to-end flow.
+**Consequences:** The frontend is a single file. It supports session management and the full protected appointment flow. It is not production-grade but demonstrates the end-to-end flow.
 
 ## ADR-008: Custom Eval Runner
 

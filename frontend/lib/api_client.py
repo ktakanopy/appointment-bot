@@ -10,11 +10,8 @@ class BackendClient:
         self.base_url = base_url.rstrip("/")
         self._client = client or httpx.Client(base_url=self.base_url, timeout=timeout)
 
-    def create_session(self, remembered_identity_id: str | None = None) -> dict[str, Any]:
-        payload = {}
-        if remembered_identity_id:
-            payload["remembered_identity_id"] = remembered_identity_id
-        response = self._client.post("/sessions/new", json=payload or None)
+    def create_session(self) -> dict[str, Any]:
+        response = self._client.post("/sessions/new")
         response.raise_for_status()
         return response.json()
 
@@ -22,19 +19,8 @@ class BackendClient:
         self,
         session_id: str,
         message: str,
-        remembered_identity_id: str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {"session_id": session_id, "message": message}
-        if remembered_identity_id:
-            payload["remembered_identity_id"] = remembered_identity_id
         response = self._client.post("/chat", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    def forget_remembered_identity(self, remembered_identity_id: str) -> dict[str, Any]:
-        response = self._client.post(
-            "/remembered-identity/forget",
-            json={"remembered_identity_id": remembered_identity_id},
-        )
         response.raise_for_status()
         return response.json()

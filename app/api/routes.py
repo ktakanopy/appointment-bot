@@ -7,9 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
-    ForgetRememberedIdentityRequest,
-    ForgetRememberedIdentityResponse,
-    NewSessionRequest,
     NewSessionResponse,
 )
 from app.application.errors import DependencyUnavailableError, SessionNotFoundError
@@ -36,13 +33,9 @@ def reset_runtime(target_app=None, settings: Settings | None = None) -> RuntimeC
 
 @router.post("/sessions/new", response_model=NewSessionResponse)
 async def create_session(
-    request: NewSessionRequest | None = None,
     runtime: RuntimeContext = Depends(get_runtime),
 ) -> NewSessionResponse:
-    response = await asyncio.to_thread(
-        runtime.create_session_use_case.execute,
-        request.remembered_identity_id if request is not None else None,
-    )
+    response = await asyncio.to_thread(runtime.create_session_use_case.execute)
     return NewSessionResponse(**response.model_dump(mode="json"))
 
 
@@ -56,22 +49,9 @@ async def chat(
             runtime.handle_chat_turn_use_case.execute,
             session_id=request.session_id,
             message=request.message,
-            remembered_identity_id=request.remembered_identity_id,
         )
     except SessionNotFoundError as error:
         raise HTTPException(status_code=404, detail="Session not found. Start a new session.") from error
     except DependencyUnavailableError as error:
         raise HTTPException(status_code=503, detail="The appointment service is temporarily unavailable.") from error
     return ChatResponse(**response.model_dump(mode="json"))
-
-
-@router.post("/remembered-identity/forget", response_model=ForgetRememberedIdentityResponse)
-async def forget_remembered_identity(
-    request: ForgetRememberedIdentityRequest,
-    runtime: RuntimeContext = Depends(get_runtime),
-) -> ForgetRememberedIdentityResponse:
-    response = await asyncio.to_thread(
-        runtime.forget_remembered_identity_use_case.execute,
-        request.remembered_identity_id,
-    )
-    return ForgetRememberedIdentityResponse(**response.model_dump(mode="json"))

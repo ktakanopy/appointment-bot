@@ -1,8 +1,8 @@
-from app.application.contracts.conversation import ConversationWorkflowInput, ResponseKey, TurnIssue
+from app.application.contracts.conversation import ConversationOperationOutcome, ConversationWorkflowInput
 from tests.support import build_test_workflow
 
 
-def test_confirm_ordinal_without_current_list_asks_for_list_first():
+def test_confirm_ordinal_after_verification_uses_auto_list_context():
     workflow = build_test_workflow()
 
     for message in [
@@ -16,5 +16,6 @@ def test_confirm_ordinal_without_current_list_asks_for_list_first():
         ConversationWorkflowInput(thread_id="graph-ambiguous", incoming_message="confirm the first one")
     )
 
-    assert result.turn.issue == TurnIssue.MISSING_LIST_CONTEXT
-    assert result.turn.response_key == ResponseKey.CONFIRM_MISSING_LIST_CONTEXT
+    assert result.turn.issue is None
+    assert result.turn.operation_result is not None
+    assert result.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED

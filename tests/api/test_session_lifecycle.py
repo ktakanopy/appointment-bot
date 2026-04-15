@@ -8,33 +8,32 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_new_session_defaults_to_unrestored_state():
+def test_new_session_returns_core_session_payload():
     response = client.post("/sessions/new")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["restored_verification"] is False
     assert body["thread_id"] == body["session_id"]
-    assert body["remembered_identity_status"]["status"] == "unavailable"
+    assert "remembered_identity_status" not in body
+    assert body["response"] == "Hello, I'm CAPY. I can help you with your appointments."
 
 
-def test_verified_session_returns_reusable_remembered_identity():
-    session = client.post("/sessions/new").json()
-    session_id = session["session_id"]
+def test_new_session_starts_unverified_even_after_a_previous_verified_session():
+    first_session_id = client.post("/sessions/new").json()["session_id"]
 
     for message in ["show my appointments", "Ana Silva", "11999998888", "1990-05-10"]:
-        response = client.post("/chat", json={"session_id": session_id, "message": message})
+        response = client.post("/chat", json={"session_id": first_session_id, "message": message})
 
     body = response.json()
-    remembered_identity_id = body["remembered_identity_status"]["remembered_identity_id"]
-
     assert body["verified"] is True
-    assert body["remembered_identity_status"]["status"] == "active"
-    assert remembered_identity_id
 
-    restored = client.post("/sessions/new", json={"remembered_identity_id": remembered_identity_id})
-    restored_body = restored.json()
+    second_session = client.post("/sessions/new").json()
+    follow_up = client.post(
+        "/chat",
+        json={"session_id": second_session["session_id"], "message": "show my appointments"},
+    )
+    follow_up_body = follow_up.json()
 
-    assert restored.status_code == 200
-    assert restored_body["restored_verification"] is True
-    assert restored_body["remembered_identity_status"]["remembered_identity_id"] == remembered_identity_id
+    assert follow_up.status_code == 200
+    assert follow_up_body["verified"] is False
+    assert follow_up_body["current_operation"] == "verify_identity"

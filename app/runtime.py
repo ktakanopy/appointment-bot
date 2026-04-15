@@ -24,11 +24,9 @@ class RuntimeContext(BaseModel):
     graph: Any
     workflow: Any
     provider: Any
-    identity_service: Any
     session_service: Any
     create_session_use_case: Any
     handle_chat_turn_use_case: Any
-    forget_remembered_identity_use_case: Any
 
 
 def create_runtime(settings: Settings | None = None) -> RuntimeContext:
@@ -63,11 +61,9 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
         graph=workflow_bundle.graph,
         workflow=workflow_bundle.workflow,
         provider=services.provider,
-        identity_service=services.identity_service,
         session_service=services.session_service,
         create_session_use_case=use_cases.create_session_use_case,
         handle_chat_turn_use_case=use_cases.handle_chat_turn_use_case,
-        forget_remembered_identity_use_case=use_cases.forget_remembered_identity_use_case,
     )
 
 

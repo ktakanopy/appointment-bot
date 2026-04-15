@@ -40,7 +40,6 @@ class TracingSettings(BaseModel):
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    remembered_identity_ttl_hours: int
     session_ttl_minutes: int
     max_verification_attempts: int
     frontend_api_base_url: str
@@ -60,7 +59,6 @@ def load_settings() -> Settings:
     tracing_host = os.getenv("LANGFUSE_HOST")
     tracing_enabled = _env_flag("TRACING_ENABLED", bool(tracing_public_key and tracing_secret_key))
     settings = Settings(
-        remembered_identity_ttl_hours=_env_int("REMEMBERED_IDENTITY_TTL_HOURS", 24),
         session_ttl_minutes=_env_int("SESSION_TTL_MINUTES", 60),
         max_verification_attempts=_env_int("MAX_VERIFICATION_ATTEMPTS", 3),
         frontend_api_base_url=os.getenv("FRONTEND_API_BASE_URL", "http://localhost:8000"),

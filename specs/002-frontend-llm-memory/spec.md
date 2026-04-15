@@ -1,5 +1,7 @@
 # Feature Specification: Frontend, LLM, and Returning Memory
 
+> Historical planning artifact: this spec includes an exploratory remembered-identity/session-bootstrap scope that was intentionally not kept in the delivered product. The shipped scope is the core verification-gated appointment flow plus the frontend/LLM/tracing/evaluation additions.
+
 **Feature Branch**: `002-frontend-llm-memory`  
 **Created**: 2026-04-13  
 **Status**: Draft  

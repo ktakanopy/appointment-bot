@@ -1,5 +1,7 @@
 # Data Model: Frontend, LLM, and Returning Memory
 
+> Historical planning artifact: this document still records a remembered-identity model from an exploratory scope that was not shipped in the delivered product.
+
 ## Patient Session
 
 **Purpose**: Represents the active patient interaction in the UI and backend.

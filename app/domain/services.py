@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-from datetime import UTC, datetime, timedelta
-from typing import Callable
-from uuid import uuid4
-
 from app.domain.errors import (
     AppointmentNotFoundError,
     AppointmentNotOwnedError,
@@ -16,10 +11,8 @@ from app.domain.models import (
     FullName,
     Patient,
     Phone,
-    RememberedIdentity,
-    RememberedIdentityStatus,
 )
-from app.domain.ports import AppointmentRepository, PatientRepository, RememberedIdentityRepository
+from app.domain.ports import AppointmentRepository, PatientRepository
 
 
 class VerificationService:
@@ -71,78 +64,3 @@ class AppointmentService:
         updated, outcome = appointment.cancel()
         saved = self.appointment_repository.save(updated)
         return saved, outcome
-
-
-class RememberedIdentityService:
-    def __init__(
-        self,
-        identity_repository: RememberedIdentityRepository,
-        ttl_hours: int,
-        now_factory: Callable[[], datetime] | None = None,
-    ):
-        self.identity_repository = identity_repository
-        self.ttl_hours = ttl_hours
-        self.now_factory = now_factory or (lambda: datetime.now(UTC))
-
-    def build_fingerprint(self, full_name: str | None, phone: str | None, dob: str | None, patient_id: str) -> str:
-        payload = "|".join(
-            [
-                self._normalize_full_name(full_name),
-                self._normalize_phone(phone),
-                self._normalize_dob(dob),
-                patient_id,
-            ]
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-    def ensure_identity(
-        self,
-        patient_id: str,
-        display_name: str | None,
-        verification_fingerprint: str,
-    ) -> RememberedIdentity:
-        existing = self.identity_repository.get_active_by_patient_id(patient_id)
-        if existing and existing.is_active(self.now_factory()):
-            return existing
-        now = self.now_factory()
-        identity = RememberedIdentity(
-            remembered_identity_id=str(uuid4()),
-            patient_id=patient_id,
-            display_name=display_name,
-            verification_fingerprint=verification_fingerprint,
-            issued_at=now,
-            expires_at=now + timedelta(hours=self.ttl_hours),
-            revoked_at=None,
-            status=RememberedIdentityStatus.ACTIVE,
-        )
-        return self.identity_repository.save(identity)
-
-    def restore_identity(self, remembered_identity_id: str | None) -> RememberedIdentity | None:
-        if not remembered_identity_id:
-            return None
-        identity = self.identity_repository.get_by_id(remembered_identity_id)
-        if identity is None:
-            return None
-        if not identity.is_active(self.now_factory()):
-            expired = identity.expire()
-            self.identity_repository.save(expired)
-            return expired
-        return identity
-
-    def revoke_identity(self, remembered_identity_id: str) -> bool:
-        return self.identity_repository.revoke(remembered_identity_id)
-
-    def _normalize_full_name(self, value: str | None) -> str:
-        if not value:
-            return ""
-        return FullName(value).value
-
-    def _normalize_phone(self, value: str | None) -> str:
-        if not value:
-            return ""
-        return Phone(value).digits
-
-    def _normalize_dob(self, value: str | None) -> str:
-        if not value:
-            return ""
-        return DateOfBirth(value).value

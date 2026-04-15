@@ -31,28 +31,22 @@ def _ensure_state() -> None:
         st.session_state.appointments = []
     if "last_action_result" not in st.session_state:
         st.session_state.last_action_result = None
-    if "remembered_identity_id" not in st.session_state:
-        st.session_state.remembered_identity_id = None
-    if "remembered_identity_status" not in st.session_state:
-        st.session_state.remembered_identity_status = {"remembered_identity_id": "", "status": "unavailable"}
     if "error" not in st.session_state:
         st.session_state.error = None
     if "current_operation" not in st.session_state:
         st.session_state.current_operation = "verify_identity"
 
 
-def _start_session(remembered_identity_id: str | None = None) -> None:
-    response = st.session_state.client.create_session(remembered_identity_id=remembered_identity_id)
+def _start_session() -> None:
+    response = st.session_state.client.create_session()
     st.session_state.session_id = response["session_id"]
     st.session_state.thread_id = response["thread_id"]
-    st.session_state.verified = response["restored_verification"]
+    st.session_state.verified = False
     st.session_state.messages = []
     st.session_state.appointments = []
     st.session_state.last_action_result = None
-    st.session_state.remembered_identity_status = response["remembered_identity_status"]
-    st.session_state.remembered_identity_id = response["remembered_identity_status"]["remembered_identity_id"] or None
     st.session_state.error = None
-    st.session_state.current_operation = "help" if response["restored_verification"] else "verify_identity"
+    st.session_state.current_operation = "verify_identity"
     if response.get("response"):
         st.session_state.messages.append({"role": "assistant", "content": response["response"]})
 
@@ -63,7 +57,6 @@ def _handle_user_message(message: str) -> None:
         response = st.session_state.client.send_message(
             session_id=st.session_state.session_id,
             message=message,
-            remembered_identity_id=st.session_state.remembered_identity_id,
         )
     except httpx.HTTPError as error:
         st.session_state.error = str(error)
@@ -72,21 +65,8 @@ def _handle_user_message(message: str) -> None:
     st.session_state.verified = response["verified"]
     st.session_state.appointments = response.get("appointments") or []
     st.session_state.last_action_result = response.get("last_action_result")
-    st.session_state.remembered_identity_status = response["remembered_identity_status"]
-    st.session_state.remembered_identity_id = response["remembered_identity_status"]["remembered_identity_id"] or None
     st.session_state.error = response.get("issue")
     st.session_state.current_operation = response.get("current_operation", "unknown")
-
-
-def _forget_identity() -> None:
-    if not st.session_state.remembered_identity_id:
-        return
-    st.session_state.client.forget_remembered_identity(st.session_state.remembered_identity_id)
-    st.session_state.remembered_identity_status = {
-        "remembered_identity_id": st.session_state.remembered_identity_id,
-        "status": "revoked",
-    }
-    st.session_state.remembered_identity_id = None
 
 
 def _chat_placeholder() -> str:
@@ -109,16 +89,10 @@ def main() -> None:
     st.image(str(BOT_IMAGE), width=240)
     st.title(BOT_NAME)
     st.write(f"{BOT_NAME} is your capybara chatbot.")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Start new session", use_container_width=True):
-            _start_session(remembered_identity_id=st.session_state.remembered_identity_id)
-    with col2:
-        if st.button("Forget remembered identity", use_container_width=True):
-            _forget_identity()
+    if st.button("Start new session", use_container_width=True):
+        _start_session()
 
     st.write(f"Verified: {'yes' if st.session_state.verified else 'no'}")
-    st.write(f"Remembered identity: {st.session_state.remembered_identity_status['status']}")
     _render_guidance()
 
     if st.session_state.appointments:
@@ -137,7 +111,7 @@ def main() -> None:
             st.write(item["content"])
 
     if st.session_state.session_id is None:
-        _start_session(remembered_identity_id=st.session_state.remembered_identity_id)
+        _start_session()
 
     message = st.chat_input(_chat_placeholder())
     if message:

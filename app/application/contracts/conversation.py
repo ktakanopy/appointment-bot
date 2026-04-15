@@ -103,13 +103,6 @@ class ConversationOperationResult(BaseModel):
     appointment_id: str | None = None
 
 
-class WorkflowVerificationBootstrap(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    verified: bool = True
-    patient_id: str
-
-
 class VerificationSnapshot(BaseModel):
     verified: bool = False
     status: VerificationStatus = VerificationStatus.UNVERIFIED
@@ -134,7 +127,6 @@ class ConversationWorkflowInput(BaseModel):
 
     thread_id: str
     incoming_message: str
-    bootstrap_verification: WorkflowVerificationBootstrap | None = None
 
 
 class ConversationWorkflowResult(BaseModel):

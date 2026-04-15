@@ -52,21 +52,7 @@ Nested dictionaries are redacted recursively.
 
 The same redaction applies to structured log output and Langfuse trace events.
 
-## 5. Remembered identity lifecycle
-
-After successful verification, `HandleChatTurnUseCase` may create a `RememberedIdentity` record with:
-
-- a SHA-256 fingerprint over normalized name, phone, date of birth, and `patient_id`
-- TTL from `REMEMBERED_IDENTITY_TTL_HOURS` (default 24 hours)
-- storage in a dedicated in-memory repository scoped to the running process
-
-On `POST /sessions/new` with `remembered_identity_id`, identity is restored only if the record is active.
-
-`POST /remembered-identity/forget` revokes the remembered identity so it cannot be used for future restores.
-
-Expired records are handled lazily by `RememberedIdentityService.restore_identity()`.
-
-## 6. Appointment ownership
+## 5. Appointment ownership
 
 `Appointment.is_owned_by()` in `app/domain/models.py` requires `appointment.patient_id == patient_id`.
 
@@ -74,7 +60,7 @@ Expired records are handled lazily by `RememberedIdentityService.restore_identit
 
 If ownership does not hold, the workflow returns `issue=appointment_not_owned`.
 
-## 7. Scope limitations
+## 6. Scope limitations
 
 This project is a demo or exercise. The following are intentionally out of scope:
 
@@ -84,3 +70,4 @@ This project is a demo or exercise. The following are intentionally out of scope
 - Role-based access control or multi-tenant isolation
 - Audit logging beyond structured events
 - Input sanitization beyond Pydantic models with `extra="forbid"`
+- Cross-session remembered identity restore; this was intentionally deferred to keep the delivered scope closer to the original exercise

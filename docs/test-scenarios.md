@@ -15,16 +15,13 @@
    name and phone.
 7. Use the Streamlit app to start a new session and complete one protected flow
    without calling the API manually.
-8. Verify in one session, note the returned remembered-identity id, start a new
-   session with it, and confirm appointments are available without re-entering
-   identity details.
-9. Revoke a remembered identity and confirm the next session falls back to
-   normal verification.
-10. Run the eval suite and confirm it returns per-scenario status and judge
+8. Verify in one session, start a fresh session, and confirm protected actions
+   require identity verification again.
+9. Run the eval suite and confirm it returns per-scenario status and judge
    summaries.
-11. Enable tracing with invalid Langfuse credentials and confirm the workflow
+10. Enable tracing with invalid Langfuse credentials and confirm the workflow
     still completes without failing the request path.
-12. Send a chat request with an unknown session id and confirm the API returns a
+11. Send a chat request with an unknown session id and confirm the API returns a
     session-not-found response instead of silently creating a thread.
-13. Fail identity verification three times in the same session and confirm the
+12. Fail identity verification three times in the same session and confirm the
     session is locked until a new session is created.

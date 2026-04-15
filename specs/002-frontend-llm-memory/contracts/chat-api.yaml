@@ -6,6 +6,10 @@ info:
     Conversational backend contract for the appointment workflow, returning
     session restoration signals and remembered-identity management data for the
     companion UI.
+    
+    Historical planning artifact: the remembered-identity portions of this
+    contract describe exploratory scope that was intentionally not kept in the
+    delivered product.
 paths:
   /chat:
     post:

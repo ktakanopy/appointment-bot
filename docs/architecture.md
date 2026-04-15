@@ -55,8 +55,8 @@ The codebase follows a Clean Architecture split with explicit use cases and work
 
 `app/domain/` contains clinic concepts only:
 - value objects such as `FullName`, `Phone`, and `DateOfBirth`
-- entities such as `Appointment`, `Patient`, and `RememberedIdentity`
-- domain services such as `VerificationService`, `AppointmentService`, and `RememberedIdentityService`
+- entities such as `Appointment` and `Patient`
+- domain services such as `VerificationService` and `AppointmentService`
 - repository protocols in `app/domain/ports.py`
 
 The domain no longer contains chatbot-specific action enums or public API result DTOs.
@@ -74,7 +74,6 @@ The domain no longer contains chatbot-specific action enums or public API result
 The primary use cases are:
 - `CreateSessionUseCase`
 - `HandleChatTurnUseCase`
-- `ForgetRememberedIdentityUseCase`
 
 The primary application services are:
 - `ChatResponseService`
@@ -107,7 +106,6 @@ flowchart TB
     subgraph domainPorts [Domain ports]
         appointmentRepo[AppointmentRepository]
         patientRepo[PatientRepository]
-        identityRepo[RememberedIdentityRepository]
     end
 
     subgraph applicationPorts [Application ports]
@@ -119,7 +117,6 @@ flowchart TB
     subgraph adapters [Current adapters]
         inMemAppointment[InMemoryAppointmentRepository]
         inMemPatient[InMemoryPatientRepository]
-        inMemIdentity[InMemoryRememberedIdentityRepository]
         inMemSession[InMemorySessionStore]
         inMemCheckpoint[InMemoryCheckpointStore]
         langgraphRunner[LangGraphConversationWorkflow]
@@ -128,7 +125,6 @@ flowchart TB
 
     inMemAppointment -.-> appointmentRepo
     inMemPatient -.-> patientRepo
-    inMemIdentity -.-> identityRepo
     inMemSession -.-> sessionStore
     inMemCheckpoint -.-> checkpointStore
     langgraphRunner -.-> workflowPort
@@ -146,18 +142,15 @@ sequenceDiagram
     participant api as FastAPI
     participant uc as CreateSessionUseCase
     participant sessionSvc as SessionService
-    participant identitySvc as RememberedIdentityService
 
     client->>api: POST /sessions/new
-    api->>uc: execute(remembered_identity_id)
+    api->>uc: execute()
     uc->>sessionSvc: cleanup_expired()
     uc->>sessionSvc: create_session()
-    uc->>identitySvc: restore_identity(...)
-    uc->>sessionSvc: save_session(updated SessionRecord)
     api-->>client: NewSessionResponse
 ```
 
-`CreateSessionUseCase` creates the session record, restores remembered identity when applicable, and stores an optional one-shot `SessionBootstrap`.
+`CreateSessionUseCase` creates the session record and returns the initial greeting payload for the chat UI.
 
 ### POST /chat
 
@@ -172,20 +165,16 @@ sequenceDiagram
     participant presenter as ChatPresenter
 
     client->>api: POST /chat
-    api->>uc: execute(session_id, message, remembered_identity_id)
+    api->>uc: execute(session_id, message)
     uc->>sessionSvc: cleanup_expired()
     uc->>sessionSvc: require_session(session_id)
     uc->>workflow: run(ConversationWorkflowInput)
     uc->>responseSvc: generate(workflow_result)
-    uc->>presenter: present(response_text, workflow_result, identity_summary)
+    uc->>presenter: present(response_text, workflow_result)
     api-->>client: ChatResponse
 ```
 
-`HandleChatTurnUseCase` owns the application flow: session validation, workflow bootstrap, remembered identity update, response generation, and presentation.
-
-### POST /remembered-identity/forget
-
-`ForgetRememberedIdentityUseCase` delegates to `RememberedIdentityService.revoke_identity()` and returns a simple cleared flag.
+`HandleChatTurnUseCase` owns the application flow: session validation, workflow execution, response generation, and presentation.
 
 ## 5. Runtime Lifecycle
 
@@ -201,7 +190,6 @@ sequenceDiagram
 `RuntimeContext` now holds the use cases as first-class dependencies:
 - `create_session_use_case`
 - `handle_chat_turn_use_case`
-- `forget_remembered_identity_use_case`
 
 `app/main.py` still registers a lifespan that creates the runtime on startup and closes it on shutdown. `app/api/routes.py` reads `request.app.state.runtime` and lazily creates one only if needed.
 
@@ -209,9 +197,9 @@ sequenceDiagram
 
 Session records are now stored through `SessionStore`, currently backed by `InMemorySessionStore`.
 
-Each `SessionRecord` may contain a `SessionBootstrap` with a verified patient id restored from remembered identity. `HandleChatTurnUseCase` consumes this bootstrap and converts it into a `ConversationWorkflowInput`.
-
 LangGraph checkpoint persistence is behind `CheckpointStore`, currently backed by `InMemoryCheckpointStore`.
+
+Cross-session remembered identity was intentionally removed from the delivered product. If it is revisited later, it should return as a separate scope expansion rather than hidden session bootstrap state.
 
 ## 7. File-to-Layer Mapping
 

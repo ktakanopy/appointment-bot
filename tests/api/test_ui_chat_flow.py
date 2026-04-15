@@ -8,7 +8,7 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_ui_chat_flow_bootstraps_session_and_returns_chat_responses():
+def test_ui_chat_flow_starts_session_and_returns_chat_responses():
     session = client.post("/sessions/new").json()
 
     first = client.post(

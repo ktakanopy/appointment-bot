@@ -1,5 +1,7 @@
 # Research: Frontend, LLM, and Returning Memory
 
+> Historical planning artifact: the remembered-identity research below documents an explored direction, not part of the shipped product scope.
+
 ## Decision 1: Use Streamlit for the simple patient-facing UI
 
 - **Decision**: Build the new interface as a small Streamlit app that calls the

@@ -1,5 +1,7 @@
 # Quickstart: Frontend, LLM, and Returning Memory
 
+> Historical planning artifact: this quickstart includes exploratory remembered-identity setup that was later removed from the delivered product scope.
+
 ## Prerequisites
 
 - Python 3.11+
@@ -22,12 +24,6 @@ Enable tracing when available:
 export LANGFUSE_PUBLIC_KEY=your_public_key
 export LANGFUSE_SECRET_KEY=your_secret_key
 export LANGFUSE_HOST=https://cloud.langfuse.com
-```
-
-Optional remembered-identity retention override:
-
-```bash
-export REMEMBERED_IDENTITY_TTL_HOURS=24
 ```
 
 ## Start the backend

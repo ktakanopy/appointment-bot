@@ -7,7 +7,6 @@ from app.application.contracts.conversation import (
     ConversationWorkflowResult,
     TurnSnapshot,
     VerificationSnapshot,
-    VerificationStatus,
 )
 from app.application.contracts.workflow_dtos import WorkflowAppointmentSnapshot
 from app.graph.state import ConversationState
@@ -39,17 +38,10 @@ class LangGraphConversationWorkflow:
         return self.from_graph_output(result)
 
     def to_graph_input(self, workflow_input: ConversationWorkflowInput) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+        return {
             "thread_id": workflow_input.thread_id,
             "incoming_message": workflow_input.incoming_message,
         }
-        if workflow_input.bootstrap_verification is not None:
-            payload["verification"] = {
-                "verified": workflow_input.bootstrap_verification.verified,
-                "verification_status": VerificationStatus.VERIFIED.value,
-                "patient_id": workflow_input.bootstrap_verification.patient_id,
-            }
-        return payload
 
     def from_graph_output(self, graph_output: dict[str, Any]) -> ConversationWorkflowResult:
         state = ConversationState.model_validate(graph_output)
