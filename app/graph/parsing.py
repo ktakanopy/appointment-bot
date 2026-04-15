@@ -93,6 +93,16 @@ def extract_appointment_reference(message: str) -> str | None:
 
 
 def resolve_appointment_reference(reference: str | None, appointments: list[Appointment]) -> Appointment | None:
+    """Map a loose user reference string to a single appointment from the given list.
+
+    Resolution order: match by appointment id; else if the string equals a date
+    string and exactly one appointment has that date; else if the string is
+    numeric, treat it as a 1-based index into appointments (1 is first), with 0
+    accepted as an alias for the first item when the list is non-empty.
+
+    Returns None when reference is empty or falsy, when more than one appointment
+    shares the matched date, or when no rule produces a unique appointment.
+    """
     if not reference:
         return None
 

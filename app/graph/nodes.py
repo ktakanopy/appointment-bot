@@ -611,11 +611,35 @@ def _resolve_target_appointment(
     missing_list_context_key: ResponseKey,
     ambiguous_key: ResponseKey,
 ) -> tuple[Appointment | None, dict[str, GraphTurnState]]:
+    """Pick the single appointment for confirm or cancel using state and services.
+
+    Reads appointment_reference from graph state (set during interpretation)
+    and resolves it against a candidate list. If the user gave a numeric index
+    (e.g. "1" for "the first one") but there is no in-session list from a prior
+    list_appointments turn, resolution cannot proceed: returns (None, turn
+    update) with MISSING_LIST_CONTEXT so the assistant can ask them to list
+    first.
+
+    Otherwise builds appointment_options from the cached list when present,
+    or falls back to the patient's current appointments from the repository so
+    id and date references still work after verification without requiring a
+    prior list.
+
+    Delegates matching to resolve_appointment_reference. If that returns None
+    (missing reference, no match, duplicate dates, or out-of-range index),
+    returns (None, turn update) with AMBIGUOUS_APPOINTMENT_REFERENCE and the
+    caller-specific ambiguous_key for the user-facing message.
+
+    Returns (appointment, {}) on success; the empty dict means no partial
+    state merge is needed beyond the mutation node itself.
+    """
     appointments = appointment_state(state)
     turn = turn_state(state)
     verification = verification_state(state)
     listed_appointments = appointments["listed_appointments"] or []
     reference = appointments["appointment_reference"]
+
+    # Ordinal-style references only make sense relative to a list the user saw.
     if reference and reference.isdigit() and not listed_appointments:
         return None, {
             "turn": {
@@ -627,8 +651,12 @@ def _resolve_target_appointment(
                 "subject_appointment": None,
             }
         }
+
+    # Prefer the session cache; otherwise load fresh appointments for id/date resolution.
     appointment_options = listed_appointments or appointment_service.list_appointments(verification["patient_id"])
     appointment = resolve_appointment_reference(reference, appointment_options)
+
+    # Any failure to pin down exactly one appointment is surfaced as ambiguous for this turn.
     if appointment is None:
         return None, {
             "turn": {
