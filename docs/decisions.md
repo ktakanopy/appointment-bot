@@ -46,9 +46,9 @@
 
 **Context:** In a healthcare context, the LLM must not control access to patient data or appointment mutations. Prompt injection and hallucination are real risks.
 
-**Decision:** Limit the LLM to intent extraction and response polishing. All authorization, routing, and state mutation logic is deterministic Python, while a configured provider is required for runtime startup.
+**Decision:** Limit the LLM to intent extraction at the workflow boundary. All authorization, routing, state mutation, and final response wording are deterministic Python. A configured provider is required for runtime startup.
 
-**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors instead of silently degrading to deterministic responses.
+**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors on the interpret step. Final responses are produced by `ResponsePolicy` and are never affected by provider failures.
 
 ## ADR-006: In-Memory Remembered Identity Store
 
@@ -99,3 +99,20 @@
 **Decision:** Cap verification attempts per session (default 3). After the limit, lock the session permanently. The patient must start a new session.
 
 **Consequences:** Brute-force attempts are bounded per session. The lockout is stored in ConversationState so it persists across the session. Legitimate patients who mistype can retry up to the limit or start a new session.
+
+## ADR-011: Deterministic Final Responses
+
+**Status:** Accepted
+
+**Context:** The initial design used the LLM to rewrite deterministic fallback text into "polished" patient-facing wording (`generate_response`). The `ResponsePolicy` already produces complete, correct responses for every workflow outcome, making the rewrite step redundant for this use case. Adding an LLM call at the presentation layer introduces nondeterminism, extra latency, extra cost, an additional failure surface, and test complexity without a meaningful quality benefit in a tightly scoped exercise.
+
+**Decision:** Remove `generate_response` from the `LLMProvider` protocol and `OpenAIProvider`. `ChatResponseService.generate()` returns the `ResponsePolicy` output directly. The LLM is retained only for intent and entity extraction at the workflow boundary.
+
+**Consequences:**
+- **Lower complexity:** `ChatResponseService` becomes a one-liner; no LLM call or provider dependency in the presentation layer.
+- **Lower latency:** Every chat turn saves one full LLM round-trip.
+- **Lower cost:** One fewer provider call per turn.
+- **Easier testing:** Response tests assert against exact, deterministic strings without mocking a provider.
+- **Less failure surface:** Provider errors can no longer occur during response rendering; the only provider call remaining is `interpret`.
+- **Sufficient quality:** `ResponsePolicy` strings are concise, patient-facing, and correct for every workflow outcome. LLM rewriting added stylistic variation without improving accuracy or safety.
+- **LLM boundary preserved:** The model still handles the intent and entity extraction task where nondeterminism is unavoidable and valuable. The workflow and all policy outcomes remain fully deterministic Python.

@@ -4,24 +4,22 @@ This document describes how language models participate in the appointment bot. 
 
 ## 1. Design principle
 
-The LLM is non-authoritative. It performs exactly two product roles:
+The LLM is non-authoritative. It performs exactly one product role:
 
 1. **Intent extraction** — parse the user message into a structured operation label and entity fields.
-2. **Response polishing** — rewrite deterministic presenter fallback text into concise, patient-facing wording.
 
-The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Those responsibilities stay in deterministic Python code paths. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
+The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Final patient-facing response wording is produced deterministically by `ResponsePolicy` and is not rewritten by the model. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
 
 ## 2. Provider protocol
 
-`LLMProvider` in `app/llm/base.py` is a `Protocol` with three methods:
+`LLMProvider` in `app/llm/base.py` is a `Protocol` with two methods:
 
 | Method | Role |
 |--------|------|
 | `interpret(message, state) -> IntentPrediction` | Propose `requested_operation`, `full_name`, `phone`, `dob`, `appointment_reference` from the message and a small state snapshot. |
-| `generate_response(state, fallback_text) -> AssistantResponse` | Produce polished `response_text` from the deterministic `fallback_text` and state context. |
 | `judge(scenario, transcript, observed_outcomes) -> JudgeResult` | Used by the evaluation harness; not part of the live chat graph. |
 
-`IntentPrediction`, `AssistantResponse`, and `JudgeResult` are Pydantic models in `app/llm/schemas.py`. They constrain what the implementation may return and keep the boundary typed.
+`IntentPrediction` and `JudgeResult` are Pydantic models in `app/llm/schemas.py`. They constrain what the implementation may return and keep the boundary typed.
 
 ## 3. Factory pattern
 
@@ -30,14 +28,12 @@ The model does not grant or deny access, does not mutate appointments or identit
 ## 4. Runtime behavior
 
 - **`interpret`** delegates action and entity extraction to the configured provider.
-- **`ChatResponseService.generate()`** sends a deterministic fallback string plus workflow state to the provider for the final patient-facing wording.
+- **`ChatResponseService.generate()`** returns the deterministic `ResponsePolicy` output directly. No provider call is made for response rendering.
 - Verification, appointment ownership, idempotency, issue classification, and workflow routing stay in deterministic Python code outside the provider.
-
-Provider calls are no longer wrapped in local fallback logic. If the provider raises, the failure propagates instead of silently degrading to deterministic behavior.
 
 ## 5. Prompt design
 
-Two system prompts, kept short and task-scoped:
+One system prompt for the live chat graph:
 
 **Intent** (`app/prompts/intent_prompt.py`, `INTENT_PROMPT`):
 
@@ -55,21 +51,11 @@ Leave unknown fields as null.
 If the message asks to confirm or cancel an appointment by number, treat the number as patient-facing and 1-indexed.
 ```
 
-**Response** (`app/prompts/response_prompt.py`, `RESPONSE_PROMPT`):
-
-```text
-Return strict JSON with key response_text.
-Keep the wording concise and patient-facing.
-Do not invent new actions, permissions, or workflow outcomes.
-Keep the same operational meaning as the provided fallback text.
-Do not add medical advice, extra policy, or details not already present in the fallback text.
-```
-
-`OpenAIProvider._complete` in `app/infrastructure/llm/openai_provider.py` passes `response_format={"type": "json_object"}` on chat completions so the API returns parseable JSON. The intent and response prompts explicitly steer the model away from authorization and policy decisions; the judge path uses its own minimal JSON instruction for eval-only calls.
+`OpenAIProvider._complete` in `app/infrastructure/llm/openai_provider.py` passes `response_format={"type": "json_object"}` on chat completions so the API returns parseable JSON. The intent prompt explicitly steers the model away from authorization and policy decisions; the judge path uses its own minimal JSON instruction for eval-only calls.
 
 ## 6. LLM vs deterministic flow map
 
-The provider is now used once inside the workflow and once in the application presentation layer.
+The provider is called once per turn, inside the workflow boundary.
 
 ```mermaid
 flowchart LR
@@ -88,7 +74,7 @@ flowchart LR
 | `interpret` | Yes | No |
 | `verify` | No | Yes |
 | `execute_action` | No | Yes |
-| `ChatResponseService.generate()` | Yes | Yes (fallback text and workflow state are deterministic inputs) |
+| `ChatResponseService.generate()` | No | Yes (`ResponsePolicy` output) |
 
 ## 7. Why not a ReAct agent
 
@@ -96,4 +82,4 @@ For this use case, a ReAct agent would give the model too much control over a wo
 
 ## 8. Error isolation
 
-Tracing failures do not abort the request path, but provider failures still do. `OpenAIProvider.interpret()` and `ChatResponseService.generate()` both call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.
+Tracing failures do not abort the request path, but provider failures do. `OpenAIProvider.interpret()` is the only provider call in the live chat path, so provider exceptions surface as runtime errors on the interpret step only. Response rendering cannot produce provider errors because it is fully deterministic.
