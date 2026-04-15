@@ -269,25 +269,63 @@ uv run --extra dev pytest tests/api
 uv run --extra dev pytest tests/evals
 ```
 
-Offline evaluation:
+## Offline Evaluation
+
+The project includes an in-repo offline evaluation runner for curated
+multi-turn scenarios. It executes the conversation flows locally through the
+application boundary and prints one JSON result per scenario.
+
+This is useful because it complements the regular test suite with a
+conversation-level review of the product behavior:
+
+- it checks whether the assistant behaves correctly across several turns, not
+  just within isolated units
+- it makes it easier to catch regressions in verification, rerouting,
+  ambiguity handling, and idempotency
+- it gives you a judge summary and score for each scenario, which is helpful
+  when reviewing prompt or workflow changes
+- it does not require the API server or frontend to be running
+
+Run it with:
 
 ```bash
 uv run python -m app.evals.runner
 ```
 
+`Offline` here means the eval harness runs directly inside the repo instead of
+through the deployed app or UI. The judge still uses the configured LLM
+provider, so you need a valid provider setup such as `OPENAI_API_KEY`.
+
+## Docs Folder
+
+The `docs/` folder collects the main architecture and delivery notes for the
+project. These files are the best place to understand the design choices,
+workflow boundaries, security model, and evaluation approach without reading the
+code first.
+
+- [`docs/architecture.md`](docs/architecture.md) - system overview, layered architecture, and data flows
+- [`docs/llm-boundary.md`](docs/llm-boundary.md) - LLM provider boundary, intent extraction, and deterministic response handling
+- [`docs/security.md`](docs/security.md) - verification gating, session validation, and PII redaction
+- [`docs/data-model.md`](docs/data-model.md) - domain models, workflow state, and persistence strategy
+- [`docs/observability.md`](docs/observability.md) - structured logs, tracing, and Langfuse integration
+- [`docs/evaluation.md`](docs/evaluation.md) - offline eval runner, scenarios, and judge flow
+- [`docs/decisions.md`](docs/decisions.md) - architecture decision records
+- [`docs/graph.md`](docs/graph.md) - workflow graph and routing notes
+- [`docs/test-scenarios.md`](docs/test-scenarios.md) - manual test checklist and scenario coverage
+
 ## Design Artifacts
 
 Architecture documentation:
 
-- `docs/architecture.md`
-- `docs/llm-boundary.md`
-- `docs/security.md`
-- `docs/data-model.md`
-- `docs/observability.md`
-- `docs/evaluation.md`
-- `docs/decisions.md`
-- `docs/graph.md`
-- `docs/test-scenarios.md`
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/llm-boundary.md`](docs/llm-boundary.md)
+- [`docs/security.md`](docs/security.md)
+- [`docs/data-model.md`](docs/data-model.md)
+- [`docs/observability.md`](docs/observability.md)
+- [`docs/evaluation.md`](docs/evaluation.md)
+- [`docs/decisions.md`](docs/decisions.md)
+- [`docs/graph.md`](docs/graph.md)
+- [`docs/test-scenarios.md`](docs/test-scenarios.md)
 
 Specification artifacts:
 
@@ -330,13 +368,3 @@ In a production version, likely next steps would be:
 - stronger evaluation and regression coverage for natural language understanding
 - more production-grade error handling and operational resilience
 
-## Additional Docs
-
-- `docs/architecture.md` -- system overview, layered architecture, data flows
-- `docs/llm-boundary.md` -- LLM provider boundary, intent extraction, presenter-based response generation
-- `docs/security.md` -- verification gating, session validation, PII redaction
-- `docs/data-model.md` -- domain models, state machine, persistence strategy
-- `docs/observability.md` -- structured logging, Langfuse, trace events
-- `docs/evaluation.md` -- eval framework, scenarios, judge modes
-- `docs/decisions.md` -- architecture decision records
-- `docs/graph.md` -- workflow graph diagram
