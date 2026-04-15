@@ -73,14 +73,14 @@ Main structure:
 
 ```text
 app/
-  api/
-  application/
-  domain/
+  models.py
+  repositories.py
+  services.py
+  responses.py
+  runtime.py
   evals/
   graph/
-  infrastructure/
   llm/
-  prompts/
 frontend/
 tests/
   api/
@@ -217,7 +217,7 @@ or send traces somewhere else.
 
 ### Valid chatbot inputs
 
-The project uses seeded in-memory patient data from `app/infrastructure/persistence/in_memory.py`.
+The project uses seeded in-memory patient data from `app/repositories.py`.
 To complete identity verification in the chat UI, provide one of these exact
 combinations when the bot asks for them:
 
@@ -306,7 +306,7 @@ project. These files are the best place to understand the design choices,
 workflow boundaries, security model, and evaluation approach without reading the
 code first.
 
-- [`docs/architecture.md`](docs/architecture.md) - system overview, layered architecture, and data flows
+- [`docs/architecture.md`](docs/architecture.md) - system overview, simplified architecture, and data flows
 - [`docs/llm-boundary.md`](docs/llm-boundary.md) - LLM provider boundary, intent extraction, and deterministic response handling
 - [`docs/security.md`](docs/security.md) - verification gating, session validation, and PII redaction
 - [`docs/data-model.md`](docs/data-model.md) - domain models, workflow state, and persistence strategy

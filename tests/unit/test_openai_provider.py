@@ -5,9 +5,9 @@ import time
 
 import pytest
 
-from app.application.contracts.conversation import ConversationOperation
 from app.config import ProviderSettings
-from app.infrastructure.llm.openai_provider import OpenAIProvider
+from app.llm.provider import OpenAIProvider
+from app.models import ConversationOperation
 
 
 class FakeParsedCompletions:

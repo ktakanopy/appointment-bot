@@ -1,6 +1,6 @@
 # appointment-bot Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-13
+Auto-generated from all feature plans. Last updated: 2026-04-15
 
 ## Active Technologies
 - Python 3.11+ + FastAPI, LangGraph, Pydantic, pytes (001-build-appointment-service)
@@ -13,14 +13,14 @@ Auto-generated from all feature plans. Last updated: 2026-04-13
 ## Project Structure
 
 ```text
-backend/
+app/
 frontend/
 tests/
 ```
 
 ## Commands
 
-cd src && pytest && ruff check .
+pytest
 
 ## Code Style
 

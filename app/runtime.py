@@ -1,77 +1,71 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from pydantic import BaseModel, ConfigDict
+from langgraph.checkpoint.memory import InMemorySaver
 
-from app.application.ports.workflow_runner import ConversationWorkflow
-from app.application.session_service import SessionService
-from app.application.use_cases.create_session import CreateSessionUseCase
-from app.application.use_cases.handle_chat_turn import HandleChatTurnUseCase
 from app.config import Settings, load_settings
-from app.infrastructure.llm.factory import build_provider
-from app.llm.base import LLMProvider
+from app.graph.builder import build_graph
+from app.graph.workflow import LangGraphWorkflow
+from app.llm.provider import OpenAIProvider
 from app.observability import build_tracer, get_logger
-from app.runtime_assembly.presenters import build_presenters
-from app.runtime_assembly.repositories import build_repositories
-from app.runtime_assembly.services import build_services
-from app.runtime_assembly.use_cases import build_use_cases
-from app.runtime_assembly.workflow import build_workflow
+from app.repositories import InMemoryAppointmentRepository, InMemoryPatientRepository, InMemorySessionStore
+from app.services import AppointmentService, SessionService, VerificationService
 
 
-class RuntimeContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class RuntimeContext:
     settings: Settings
     logger: logging.Logger
     tracer: object | None
     graph: object
-    workflow: ConversationWorkflow
-    provider: LLMProvider
+    workflow: LangGraphWorkflow
+    provider: OpenAIProvider
     session_service: SessionService
-    create_session_use_case: CreateSessionUseCase
-    handle_chat_turn_use_case: HandleChatTurnUseCase
+
+
+def build_provider(settings: Settings, logger: logging.Logger, tracer: object | None = None) -> OpenAIProvider:
+    if settings.provider.provider_name != "openai":
+        raise ValueError(f"Unsupported LLM provider: {settings.provider.provider_name}")
+    if not settings.provider.api_key:
+        raise ValueError("OPENAI_API_KEY is required")
+    return OpenAIProvider(settings.provider, logger, tracer=tracer)
 
 
 def create_runtime(settings: Settings | None = None) -> RuntimeContext:
     settings = settings or load_settings()
     logger = get_logger()
     tracer = build_tracer(settings)
-    repositories = build_repositories()
-    services = build_services(
-        settings=settings,
+    patient_repository = InMemoryPatientRepository()
+    appointment_repository = InMemoryAppointmentRepository()
+    session_store = InMemorySessionStore()
+    verification_service = VerificationService(patient_repository)
+    appointment_service = AppointmentService(appointment_repository)
+    session_service = SessionService(session_store, settings.session_ttl_minutes)
+    provider = build_provider(settings, logger, tracer=tracer)
+    graph = build_graph(
         logger=logger,
-        tracer=tracer,
-        repositories=repositories,
-        provider_factory=build_provider,
-    )
-    workflow_bundle = build_workflow(
-        logger=logger,
-        tracer=tracer,
-        repositories=repositories,
-        services=services,
+        provider=provider,
+        verification_service=verification_service,
+        appointment_service=appointment_service,
         max_verification_attempts=settings.max_verification_attempts,
+        checkpointer=InMemorySaver(),
     )
-    presenters = build_presenters()
-    use_cases = build_use_cases(
-        services=services,
-        workflow_bundle=workflow_bundle,
-        presenters=presenters,
-    )
+    workflow = LangGraphWorkflow(graph, logger, tracer=tracer)
     return RuntimeContext(
         settings=settings,
         logger=logger,
         tracer=tracer,
-        graph=workflow_bundle.graph,
-        workflow=workflow_bundle.workflow,
-        provider=services.provider,
-        session_service=services.session_service,
-        create_session_use_case=use_cases.create_session_use_case,
-        handle_chat_turn_use_case=use_cases.handle_chat_turn_use_case,
+        graph=graph,
+        workflow=workflow,
+        provider=provider,
+        session_service=session_service,
     )
 
 
 def close_runtime(runtime: RuntimeContext | None) -> None:
+    _ = runtime
     return None
 
 

@@ -1,7 +1,7 @@
 import pytest
 
-from app.domain.models import AppointmentStatus
-from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository
+from app.models import AppointmentStatus
+from app.repositories import InMemoryAppointmentRepository
 
 
 def test_list_by_patient_returns_only_owned_appointments():

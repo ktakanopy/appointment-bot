@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from app.application.contracts.conversation import ConversationOperation, ConversationWorkflowInput
+from app.models import ConversationOperation, ConversationWorkflowInput
 from tests.support import build_test_workflow
 
 

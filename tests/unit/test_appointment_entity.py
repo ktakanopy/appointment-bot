@@ -3,8 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.domain.errors import AppointmentNotConfirmableError
-from app.domain.models import Appointment, AppointmentMutationOutcome, AppointmentStatus
+from app.models import ActionOutcome, Appointment, AppointmentNotConfirmableError, AppointmentStatus
 
 
 def test_appointment_confirm_is_idempotent_for_confirmed_status():
@@ -13,7 +12,7 @@ def test_appointment_confirm_is_idempotent_for_confirmed_status():
     updated, outcome = appointment.confirm()
 
     assert updated is appointment
-    assert outcome == AppointmentMutationOutcome.ALREADY_CONFIRMED
+    assert outcome == ActionOutcome.ALREADY_CONFIRMED
 
 
 def test_appointment_confirm_transitions_scheduled_status():
@@ -22,7 +21,7 @@ def test_appointment_confirm_transitions_scheduled_status():
     updated, outcome = appointment.confirm()
 
     assert updated.status == AppointmentStatus.CONFIRMED
-    assert outcome == AppointmentMutationOutcome.CONFIRMED
+    assert outcome == ActionOutcome.CONFIRMED
 
 
 def test_appointment_confirm_rejects_canceled_status():
@@ -38,7 +37,7 @@ def test_appointment_cancel_is_idempotent_for_canceled_status():
     updated, outcome = appointment.cancel()
 
     assert updated is appointment
-    assert outcome == AppointmentMutationOutcome.ALREADY_CANCELED
+    assert outcome == ActionOutcome.ALREADY_CANCELED
 
 
 def test_appointment_cancel_transitions_scheduled_or_confirmed_status():
@@ -49,9 +48,9 @@ def test_appointment_cancel_transitions_scheduled_or_confirmed_status():
     confirmed_updated, confirmed_outcome = confirmed.cancel()
 
     assert scheduled_updated.status == AppointmentStatus.CANCELED
-    assert scheduled_outcome == AppointmentMutationOutcome.CANCELED
+    assert scheduled_outcome == ActionOutcome.CANCELED
     assert confirmed_updated.status == AppointmentStatus.CANCELED
-    assert confirmed_outcome == AppointmentMutationOutcome.CANCELED
+    assert confirmed_outcome == ActionOutcome.CANCELED
 
 
 def test_appointment_cancel_rejects_unhandled_status():

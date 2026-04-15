@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from app.evals.intent_entity_loader import load_intent_entity_cases
-from app.graph.normalize import normalize_dob, normalize_full_name, normalize_phone
+from app.graph.parsing import normalize_dob, normalize_full_name, normalize_phone
 from tests.support import TestProvider
 
 

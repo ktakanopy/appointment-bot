@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import re
 
-from app.application.contracts.conversation import ConversationOperation
-from app.domain.models import Appointment, DateOfBirth, FullName, Phone
+from app.models import Appointment, ConversationOperation, DateOfBirth, FullName, Phone
 
 ORDINAL_WORDS = {
     "first": 1,
@@ -115,3 +114,30 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
             return appointments[0]
 
     return None
+
+
+def normalize_full_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return FullName(value).value
+    except ValueError:
+        return None
+
+
+def normalize_phone(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return extract_phone(value)
+    except ValueError:
+        return None
+
+
+def normalize_dob(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return DateOfBirth(value).value
+    except ValueError:
+        return None

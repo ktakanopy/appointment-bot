@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.services import AppointmentService, VerificationService
+from langgraph.checkpoint.memory import InMemorySaver
+
 from app.graph.builder import build_graph
-from app.graph import text_extraction
-from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
-from app.infrastructure.workflow.in_memory_checkpoint import InMemoryCheckpointStore
-from app.infrastructure.workflow.langgraph_runner import LangGraphConversationWorkflow
+from app.graph.parsing import (
+    extract_appointment_reference,
+    extract_dob,
+    extract_full_name,
+    extract_phone,
+    extract_requested_operation,
+)
+from app.graph.workflow import LangGraphWorkflow
 from app.llm.schemas import IntentPrediction, JudgeResult
+from app.repositories import InMemoryAppointmentRepository, InMemoryPatientRepository
+from app.services import AppointmentService, VerificationService
 
 
 class TestProvider:
@@ -16,11 +23,11 @@ class TestProvider:
 
     def interpret(self, message, state):
         return IntentPrediction(
-            requested_operation=text_extraction.extract_requested_operation(message, state),
-            full_name=text_extraction.extract_full_name(message),
-            phone=text_extraction.extract_phone(message),
-            dob=text_extraction.extract_dob(message),
-            appointment_reference=text_extraction.extract_appointment_reference(message),
+            requested_operation=extract_requested_operation(message, state),
+            full_name=extract_full_name(message),
+            phone=extract_phone(message),
+            dob=extract_dob(message),
+            appointment_reference=extract_appointment_reference(message),
         )
 
     def judge(self, scenario, transcript, observed_outcomes):
@@ -34,13 +41,13 @@ def build_test_graph(provider=None):
         verification_service=VerificationService(InMemoryPatientRepository()),
         appointment_service=AppointmentService(InMemoryAppointmentRepository()),
         max_verification_attempts=3,
-        checkpointer=InMemoryCheckpointStore().build_checkpointer(),
+        checkpointer=InMemorySaver(),
     )
 
 
 def build_test_workflow(provider=None):
     graph = build_test_graph(provider=provider)
-    return LangGraphConversationWorkflow(
+    return LangGraphWorkflow(
         graph,
         logger=logging.getLogger("appointment_bot"),
         tracer=None,

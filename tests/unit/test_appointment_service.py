@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.errors import AppointmentNotFoundError, AppointmentNotOwnedError
-from app.domain.models import AppointmentMutationOutcome, AppointmentStatus
-from app.domain.services import AppointmentService
-from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository
+from app.models import ActionOutcome, AppointmentNotFoundError, AppointmentNotOwnedError, AppointmentStatus
+from app.repositories import InMemoryAppointmentRepository
+from app.services import AppointmentService
 
 
 def test_appointment_service_lists_patient_appointments():
@@ -23,7 +22,7 @@ def test_appointment_service_confirms_scheduled_appointment():
     updated, action_result = service.confirm_appointment("p1", "a1")
 
     assert updated.status == AppointmentStatus.CONFIRMED
-    assert action_result == AppointmentMutationOutcome.CONFIRMED
+    assert action_result == ActionOutcome.CONFIRMED
 
 
 def test_appointment_service_reports_already_confirmed_appointment():
@@ -32,7 +31,7 @@ def test_appointment_service_reports_already_confirmed_appointment():
     updated, action_result = service.confirm_appointment("p1", "a2")
 
     assert updated.status == AppointmentStatus.CONFIRMED
-    assert action_result == AppointmentMutationOutcome.ALREADY_CONFIRMED
+    assert action_result == ActionOutcome.ALREADY_CONFIRMED
 
 
 def test_appointment_service_cancels_appointment():
@@ -41,7 +40,7 @@ def test_appointment_service_cancels_appointment():
     updated, action_result = service.cancel_appointment("p1", "a2")
 
     assert updated.status == AppointmentStatus.CANCELED
-    assert action_result == AppointmentMutationOutcome.CANCELED
+    assert action_result == ActionOutcome.CANCELED
 
 
 def test_appointment_service_reports_already_canceled_appointment():
@@ -54,7 +53,7 @@ def test_appointment_service_reports_already_canceled_appointment():
     updated, action_result = service.cancel_appointment("p1", "a1")
 
     assert updated.status == AppointmentStatus.CANCELED
-    assert action_result == AppointmentMutationOutcome.ALREADY_CANCELED
+    assert action_result == ActionOutcome.ALREADY_CANCELED
 
 
 def test_appointment_service_rejects_wrong_patient():

@@ -4,14 +4,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.application.contracts.conversation import (
+from app.models import (
+    Appointment,
     ConversationOperation,
     ConversationOperationResult,
     ResponseKey,
     TurnIssue,
     VerificationStatus,
 )
-from app.domain.models import Appointment
 
 
 class StateModel(BaseModel):
@@ -80,6 +80,14 @@ class VerificationState(StateModel):
             return None
         return missing[0]
 
+    @property
+    def status(self) -> VerificationStatus:
+        return self.verification_status
+
+    @property
+    def failures(self) -> int:
+        return self.verification_failures
+
 
 class TurnState(StateModel):
     requested_operation: ConversationOperation = ConversationOperation.UNKNOWN
@@ -135,6 +143,14 @@ class ConversationState(StateModel):
         if limit <= 0:
             return []
         return self.messages[-limit:]
+
+    @property
+    def listed_appointments(self) -> list[Appointment]:
+        return self.appointments.listed_appointments
+
+    @property
+    def appointment_reference(self) -> str | None:
+        return self.appointments.appointment_reference
 
 
 def verification_state(state: ConversationState) -> VerificationState:

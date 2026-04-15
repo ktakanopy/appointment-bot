@@ -1,4 +1,4 @@
-from app.application.contracts.conversation import ConversationWorkflowInput, TurnIssue, VerificationStatus
+from app.models import ConversationWorkflowInput, TurnIssue, VerificationStatus
 from tests.support import build_test_workflow
 
 

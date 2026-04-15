@@ -1,8 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.application.errors import DependencyUnavailableError
-from app.api import routes
 from app.main import app
+from app.models import DependencyUnavailableError
 
 
 client = TestClient(app)
@@ -27,7 +26,7 @@ def test_repository_failure_returns_503(monkeypatch):
         raise DependencyUnavailableError("boom")
 
     session = client.post("/sessions/new").json()
-    monkeypatch.setattr(app.state.runtime.handle_chat_turn_use_case.workflow, "run", fail_run)
+    monkeypatch.setattr(app.state.runtime.workflow, "run", fail_run)
 
     response = client.post("/chat", json={"session_id": session["session_id"], "message": "show my appointments"})
 

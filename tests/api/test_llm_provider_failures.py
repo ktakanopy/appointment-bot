@@ -4,8 +4,7 @@ import app.runtime as runtime_module
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api import routes
-from app.main import app
+from app.main import app, reset_runtime
 
 
 client = TestClient(app)
@@ -23,7 +22,7 @@ class BrokenProvider:
 
 def test_api_raises_when_provider_fails(monkeypatch):
     monkeypatch.setattr(runtime_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
-    routes.reset_runtime(app)
+    reset_runtime(app)
     session = client.post("/sessions/new").json()
 
     with pytest.raises(RuntimeError, match="interpret failed"):

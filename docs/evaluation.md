@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios through the application use-case boundary and uses the configured LLM provider as the judge.
+The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios through the runtime and workflow boundary and uses the configured LLM provider as the judge.
 
 ## 2. Framework Components
 
@@ -26,7 +26,7 @@ Pydantic model with fields:
 ### Runner (`app/evals/runner.py`)
 
 - Creates a fresh `RuntimeContext` via `create_runtime()` for isolation
-- For each scenario: creates a fresh session through `create_session_use_case.execute()`, replays each turn via `handle_chat_turn_use_case.execute()`, and collects the transcript and `observed_outcomes` from the final turn
+- For each scenario: creates a fresh session through `SessionService.create_session()`, replays each turn through `LangGraphWorkflow.run()`, then builds the final response via `app/responses.py`
 - `observed_outcomes` extracted: `verified`, `current_operation`, `issue`, `last_outcome`
 - Passes scenario + transcript + `observed_outcomes` to the judge
 - Exceptions during replay set `status="error"` with the exception message
@@ -121,7 +121,7 @@ The dataset is intentionally small (~25-30 cases) and covers a practical spread 
 
 ### Normalization reuse
 
-The regression test applies the same normalization functions used in production (`app/graph/normalize.py`). This ensures the test validates real normalized behaviour, not a duplicated approximation.
+The regression test applies the same normalization functions used in production (`app/graph/parsing.py`). This ensures the test validates real normalized behaviour, not a duplicated approximation.
 
 ### Running
 

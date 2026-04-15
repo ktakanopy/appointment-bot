@@ -16,8 +16,8 @@ Events emitted through `record_trace_event` and `record_provider_event`:
 
 | Event | Emitter | Payload |
 |-------|---------|---------|
-| workflow.start | `LangGraphConversationWorkflow.run()` | thread_id, full workflow payload (redacted) |
-| workflow.end | `LangGraphConversationWorkflow.run()` | thread_id, full workflow result (redacted) |
+| workflow.start | `LangGraphWorkflow.run()` | thread_id, full workflow payload (redacted) |
+| workflow.end | `LangGraphWorkflow.run()` | thread_id, full workflow result (redacted) |
 | provider.interpret | OpenAIProvider.interpret | provider name, status |
 | provider.judge | OpenAIProvider.judge | provider name, status |
 

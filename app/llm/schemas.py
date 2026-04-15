@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field
 
-from app.application.contracts.conversation import ConversationOperation
+from app.models import ConversationOperation
 
 
 class IntentPrediction(BaseModel):

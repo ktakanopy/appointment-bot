@@ -5,6 +5,7 @@ import json
 from app.evals.judge import run_judge
 from app.evals.models import EvaluationResult
 from app.evals.scenarios.core_scenarios import CORE_SCENARIOS
+from app.responses import build_chat_response, build_response_text
 from app.runtime import close_runtime, create_runtime
 
 
@@ -21,14 +22,16 @@ def run_scenarios(scenarios=None) -> list[EvaluationResult]:
             summary = "Scenario completed."
             score = 1.0
             try:
-                session = runtime.create_session_use_case.execute()
+                runtime.session_service.cleanup_expired()
+                session = runtime.session_service.create_session()
                 session_id = session.session_id
                 for turn in scenario.input_turns:
                     transcript.append({"role": "user", "content": turn})
-                    result = runtime.handle_chat_turn_use_case.execute(
-                        session_id=session_id,
-                        message=turn,
-                    )
+                    runtime.session_service.cleanup_expired()
+                    active_session = runtime.session_service.require_session(session_id)
+                    state = runtime.workflow.run(active_session.thread_id, turn)
+                    response_text = build_response_text(state)
+                    result = build_chat_response(active_session.thread_id, response_text, state)
                     transcript.append({"role": "assistant", "content": result.response})
                     observed_outcomes = {
                         "verified": result.verified,

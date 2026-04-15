@@ -1,15 +1,8 @@
 import pytest
 
-from app.application.contracts.conversation import (
-    ConversationOperation,
-    ConversationWorkflowResult,
-    ResponseKey,
-    TurnSnapshot,
-)
-from app.application.contracts.workflow_dtos import WorkflowAppointmentSnapshot
-from app.application.services.response_policy import ResponsePolicy
-from app.domain.models import Appointment, AppointmentStatus
-from app.graph.state import VerificationState
+from app.graph.state import ConversationState, VerificationState
+from app.models import Appointment, AppointmentStatus, ConversationOperation, ResponseKey
+from app.responses import STATIC_RESPONSES, build_response_text
 
 
 def test_missing_verification_fields_tracks_unset_values():
@@ -37,47 +30,45 @@ def test_action_and_appointment_rules_cover_status_and_ownership():
     assert scheduled.is_owned_by("p2") is False
 
 
-def test_response_policy_registry_covers_every_response_key():
-    policy = ResponsePolicy()
-
-    assert policy.covered_response_keys() == set(ResponseKey)
+def test_static_responses_cover_all_non_dynamic_response_keys():
+    dynamic_keys = {
+        ResponseKey.APPOINTMENTS_LIST,
+        ResponseKey.CONFIRM_SUCCESS,
+        ResponseKey.CONFIRM_ALREADY_CONFIRMED,
+        ResponseKey.CANCEL_SUCCESS,
+        ResponseKey.CANCEL_ALREADY_CANCELED,
+    }
+    assert set(STATIC_RESPONSES) == set(ResponseKey) - dynamic_keys
 
 
 @pytest.mark.parametrize("response_key", list(ResponseKey))
-def test_response_policy_builds_text_for_every_response_key(response_key: ResponseKey):
-    policy = ResponsePolicy()
-    subject = None
-    listed_appointments = []
+def test_build_response_text_returns_text_for_every_response_key(response_key: ResponseKey):
+    state = ConversationState(thread_id="thread-1")
     if response_key in {
         ResponseKey.CONFIRM_SUCCESS,
         ResponseKey.CONFIRM_ALREADY_CONFIRMED,
         ResponseKey.CANCEL_SUCCESS,
         ResponseKey.CANCEL_ALREADY_CANCELED,
     }:
-        subject = WorkflowAppointmentSnapshot(
-            id="a1",
-            date="2026-04-20",
-            time="14:00",
-            doctor="Dr. Costa",
-            status="scheduled",
+        state.turn.subject_appointment = Appointment(
+            "a1",
+            "p1",
+            "2026-04-20",
+            "14:00",
+            "Dr. Costa",
+            AppointmentStatus.SCHEDULED,
         )
     if response_key == ResponseKey.APPOINTMENTS_LIST:
-        listed_appointments = [
-            WorkflowAppointmentSnapshot(
-                id="a1",
-                date="2026-04-20",
-                time="14:00",
-                doctor="Dr. Costa",
-                status="scheduled",
+        state.appointments.listed_appointments = [
+            Appointment(
+                "a1",
+                "p1",
+                "2026-04-20",
+                "14:00",
+                "Dr. Costa",
+                AppointmentStatus.SCHEDULED,
             )
         ]
-    workflow_result = ConversationWorkflowResult(
-        thread_id="thread-1",
-        turn=TurnSnapshot(
-            response_key=response_key,
-            subject_appointment=subject,
-        ),
-        listed_appointments=listed_appointments,
-    )
+    state.turn.response_key = response_key
 
-    assert policy.build_fallback_text(workflow_result)
+    assert build_response_text(state)

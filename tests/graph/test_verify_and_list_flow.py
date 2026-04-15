@@ -1,8 +1,4 @@
-from app.application.contracts.conversation import (
-    ConversationOperation,
-    ConversationWorkflowInput,
-    ResponseKey,
-)
+from app.models import ConversationOperation, ConversationWorkflowInput, ResponseKey
 from app.llm.schemas import IntentPrediction, JudgeResult
 from tests.support import build_test_workflow
 

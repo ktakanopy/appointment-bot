@@ -1,8 +1,4 @@
-from app.application.contracts.conversation import (
-    ConversationOperation,
-    ConversationOperationOutcome,
-    ConversationWorkflowInput,
-)
+from app.models import ActionOutcome, ConversationOperation, ConversationWorkflowInput
 from tests.support import build_test_workflow
 
 
@@ -22,7 +18,7 @@ def test_cancel_then_reroute_back_to_list():
         ConversationWorkflowInput(thread_id="graph-cancel", incoming_message="show me my appointments again")
     )
 
-    assert canceled.turn.operation_result.outcome == ConversationOperationOutcome.CANCELED
+    assert canceled.turn.operation_result.outcome == ActionOutcome.CANCELED
     assert canceled.listed_appointments[0].status == "canceled"
     assert refreshed.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
     assert refreshed.listed_appointments[0].status == "canceled"
@@ -44,7 +40,7 @@ def test_cancel_second_reference_replaces_previous_selection():
         ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message="cancel the second one")
     )
 
-    assert canceled.turn.operation_result.outcome == ConversationOperationOutcome.CANCELED
+    assert canceled.turn.operation_result.outcome == ActionOutcome.CANCELED
     assert canceled.turn.operation_result.appointment_id == "a2"
     assert canceled.listed_appointments[0].status == "confirmed"
     assert canceled.listed_appointments[1].status == "canceled"

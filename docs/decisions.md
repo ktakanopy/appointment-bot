@@ -36,9 +36,9 @@
 
 **Context:** The exercise uses demo patient and appointment data. A full database would add complexity without demonstrating the core conversational AI patterns.
 
-**Decision:** Keep PatientRepository and AppointmentRepository as in-memory implementations with hardcoded seed data. Use Protocol-based ports so implementations can be swapped.
+**Decision:** Keep patient and appointment repositories as in-memory implementations with hardcoded seed data in `app/repositories.py`.
 
-**Consequences:** Patient and appointment data resets on restart. The Protocol pattern means production implementations can be added without changing domain or graph code.
+**Consequences:** Patient and appointment data resets on restart. The current code stays smaller and easier to review for the exercise. Production persistence can still be introduced later behind the same service calls if the scope expands.
 
 ## ADR-005: LLM as Non-Authoritative Boundary
 
@@ -48,7 +48,7 @@
 
 **Decision:** Limit the LLM to intent extraction at the workflow boundary. All authorization, routing, state mutation, and final response wording are deterministic Python. A configured provider is required for runtime startup.
 
-**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors on the interpret step. Final responses are produced by `ResponsePolicy` and are never affected by provider failures.
+**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors on the interpret step. Final responses are produced deterministically by `app/responses.py` and are never affected by provider failures.
 
 ## ADR-006: Remembered Identity Deferred From Delivered Scope
 
@@ -104,17 +104,17 @@
 
 **Status:** Accepted
 
-**Context:** The initial design used the LLM to rewrite deterministic fallback text into "polished" patient-facing wording (`generate_response`). The `ResponsePolicy` already produces complete, correct responses for every workflow outcome, making the rewrite step redundant for this use case. Adding an LLM call at the presentation layer introduces nondeterminism, extra latency, extra cost, an additional failure surface, and test complexity without a meaningful quality benefit in a tightly scoped exercise.
+**Context:** The initial design used the LLM to rewrite deterministic fallback text into "polished" patient-facing wording (`generate_response`). The deterministic response builder already produces complete, correct responses for every workflow outcome, making the rewrite step redundant for this use case. Adding an LLM call at the presentation layer introduces nondeterminism, extra latency, extra cost, an additional failure surface, and test complexity without a meaningful quality benefit in a tightly scoped exercise.
 
-**Decision:** Remove `generate_response` from the `LLMProvider` protocol and `OpenAIProvider`. `ChatResponseService.generate()` returns the `ResponsePolicy` output directly. The LLM is retained only for intent and entity extraction at the workflow boundary.
+**Decision:** Remove `generate_response` from the provider surface and keep the LLM focused on intent and entity extraction. Final wording is generated deterministically by `build_response_text()` in `app/responses.py`.
 
 **Consequences:**
-- **Lower complexity:** `ChatResponseService` becomes a one-liner; no LLM call or provider dependency in the presentation layer.
+- **Lower complexity:** the delivery layer no longer depends on an LLM for final wording.
 - **Lower latency:** Every chat turn saves one full LLM round-trip.
 - **Lower cost:** One fewer provider call per turn.
 - **Easier testing:** Response tests assert against exact, deterministic strings without mocking a provider.
 - **Less failure surface:** Provider errors can no longer occur during response rendering; the only provider call remaining is `interpret`.
-- **Sufficient quality:** `ResponsePolicy` strings are concise, patient-facing, and correct for every workflow outcome. LLM rewriting added stylistic variation without improving accuracy or safety.
+- **Sufficient quality:** deterministic response strings are concise, patient-facing, and correct for every workflow outcome. LLM rewriting added stylistic variation without improving accuracy or safety.
 - **LLM boundary preserved:** The model still handles the intent and entity extraction task where nondeterminism is unavoidable and valuable. The workflow and all policy outcomes remain fully deterministic Python.
 
 ## ADR-012: Keep One Action Per Turn for This Delivery

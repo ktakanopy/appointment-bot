@@ -1,10 +1,19 @@
 # Architecture
 
-This document describes the current architecture of the conversational appointment management service after the application/workflow boundary refactor.
+This document describes the simplified architecture of the conversational appointment service after the flattening refactor.
 
 ## 1. System Overview
 
-The system is split into a browser-facing UI, a FastAPI delivery layer, explicit application use cases and response services, a LangGraph-backed workflow adapter, and in-memory infrastructure adapters. LLM inference and optional tracing remain out-of-process dependencies.
+The system now keeps a small number of explicit modules:
+
+- `app/main.py` handles the FastAPI routes
+- `app/runtime.py` wires the runtime
+- `app/models.py` holds shared domain and API-facing models
+- `app/repositories.py` contains the in-memory repositories and session store
+- `app/services.py` contains verification, appointment, and session services
+- `app/responses.py` builds deterministic user-facing responses
+- `app/graph/` contains the LangGraph workflow
+- `app/llm/` contains the OpenAI provider and typed schemas
 
 ```mermaid
 flowchart LR
@@ -12,127 +21,97 @@ flowchart LR
         streamlit[Streamlit frontend]
     end
 
-    subgraph interface [Interface]
-        api[FastAPI routes]
+    subgraph delivery [Delivery]
+        api[FastAPI app]
+        runtime[Runtime wiring]
     end
 
-    subgraph application [Application]
-        useCases[Use cases]
-        presenters[Presenters]
-        appPorts[Ports]
+    subgraph core [Core]
+        models[Shared models]
+        services[Business services]
+        repos[In-memory repositories]
+        responses[Deterministic responses]
     end
 
     subgraph workflowLayer [Workflow]
-        workflow[Conversation workflow]
+        graph[LangGraph workflow]
+        parsing[Parsing helpers]
     end
 
-    subgraph domain [Domain]
-        domainCore[Entities and domain services]
-    end
-
-    subgraph infrastructure [Infrastructure]
-        repos[In-memory repositories]
-        sessions[In-memory session store]
-        checkpoints[LangGraph checkpointer adapter]
-        llm[OpenAI provider]
+    subgraph llmLayer [LLM]
+        provider[OpenAI provider]
     end
 
     streamlit --> api
-    api --> useCases
-    useCases --> presenters
-    useCases --> appPorts
-    useCases --> workflow
-    workflow --> domainCore
-    infrastructure -.implements.-> appPorts
-    infrastructure -.implements.-> domainCore
+    api --> runtime
+    api --> responses
+    runtime --> repos
+    runtime --> services
+    runtime --> graph
+    runtime --> provider
+    graph --> services
+    graph --> parsing
+    graph --> models
+    responses --> models
 ```
 
-## 2. Layering
+## 2. Module Responsibilities
 
-The codebase follows a Clean Architecture split with explicit use cases and workflow contracts.
+### `app/models.py`
 
-### Domain
+This is the shared type module. It contains:
 
-`app/domain/` contains clinic concepts only:
 - value objects such as `FullName`, `Phone`, and `DateOfBirth`
 - entities such as `Appointment` and `Patient`
-- domain services such as `VerificationService` and `AppointmentService`
-- repository protocols in `app/domain/ports.py`
+- enums such as `ConversationOperation`, `ResponseKey`, and `VerificationStatus`
+- application errors and domain errors
+- request and response DTOs such as `ChatRequest`, `ChatTurnResponse`, and `NewSessionResponseData`
 
-The domain no longer contains chatbot-specific action enums or public API result DTOs.
+### `app/repositories.py`
 
-### Application
+This file contains the concrete in-memory adapters used by the exercise:
 
-`app/application/` owns orchestration and boundary contracts:
-- contracts in `app/application/contracts/`
-- ports in `app/application/ports/`
-- presenters in `app/application/presenters/`
-- services in `app/application/services/`
-- use cases in `app/application/use_cases/`
-- session coordination in `app/application/session_service.py`
+- `InMemoryPatientRepository`
+- `InMemoryAppointmentRepository`
+- `InMemorySessionStore`
 
-The primary use cases are:
-- `CreateSessionUseCase`
-- `HandleChatTurnUseCase`
+### `app/services.py`
 
-The primary application services are:
-- `ChatResponseService`
-- `ResponsePolicy`
+This file contains the main business services:
 
-### Workflow
+- `VerificationService`
+- `AppointmentService`
+- `SessionService`
 
-`app/graph/` remains the deterministic conversation workflow package. It interprets intent, enforces verification, executes domain actions, and produces typed workflow outcomes. Response wording is no longer a graph node responsibility.
+### `app/graph/`
 
-`app/infrastructure/workflow/langgraph_runner.py` is the adapter that implements the `ConversationWorkflow` port. It is the single place that maps `ConversationWorkflowInput` into graph input and maps graph state back into `ConversationWorkflowResult`.
+The workflow remains deterministic and explicit:
 
-### Infrastructure
+- `builder.py` compiles the graph
+- `state.py` defines the persisted conversation state
+- `routing.py` contains the graph routing decisions
+- `nodes.py` contains the graph node implementations
+- `parsing.py` contains extraction and normalization helpers
+- `workflow.py` wraps the compiled graph for runtime use
 
-`app/infrastructure/` provides adapter implementations:
-- `app/infrastructure/persistence/in_memory.py`
-- `app/infrastructure/session/in_memory.py`
-- `app/infrastructure/workflow/in_memory_checkpoint.py`
-- `app/infrastructure/workflow/langgraph_runner.py`
-- `app/infrastructure/llm/openai_provider.py`
-- `app/infrastructure/llm/factory.py`
+### `app/llm/`
 
-### Interface
+The LLM boundary is intentionally small:
 
-`app/api/routes.py`, `app/api/schemas.py`, `app/main.py`, and the Streamlit frontend are now thin delivery adapters. They call use cases and render results rather than orchestrating workflow logic directly.
+- `provider.py` contains `OpenAIProvider`
+- `schemas.py` contains `IntentPrediction` and `JudgeResult`
+- `prompt.py` contains the intent prompt
 
-## 3. Port and Adapter Boundaries
+### Delivery
 
-```mermaid
-flowchart TB
-    subgraph domainPorts [Domain ports]
-        appointmentRepo[AppointmentRepository]
-        patientRepo[PatientRepository]
-    end
+The delivery layer is now mostly two files:
 
-    subgraph applicationPorts [Application ports]
-        sessionStore[SessionStore]
-        workflowPort[ConversationWorkflow]
-        checkpointStore[CheckpointStore]
-    end
+- `app/main.py` for HTTP endpoints
+- `app/runtime.py` for dependency wiring
 
-    subgraph adapters [Current adapters]
-        inMemAppointment[InMemoryAppointmentRepository]
-        inMemPatient[InMemoryPatientRepository]
-        inMemSession[InMemorySessionStore]
-        inMemCheckpoint[InMemoryCheckpointStore]
-        langgraphRunner[LangGraphConversationWorkflow]
-        openaiProvider[OpenAIProvider]
-    end
+There is no separate application, presenter, or runtime-assembly layer anymore.
 
-    inMemAppointment -.-> appointmentRepo
-    inMemPatient -.-> patientRepo
-    inMemSession -.-> sessionStore
-    inMemCheckpoint -.-> checkpointStore
-    langgraphRunner -.-> workflowPort
-```
-
-The important architectural change is that `app/runtime.py` is now the only composition root. The workflow builder no longer creates default repositories, providers, settings, or tracers.
-
-## 4. Request Lifecycle
+## 3. Request Lifecycle
 
 ### POST /sessions/new
 
@@ -140,17 +119,13 @@ The important architectural change is that `app/runtime.py` is now the only comp
 sequenceDiagram
     participant client as Client
     participant api as FastAPI
-    participant uc as CreateSessionUseCase
     participant sessionSvc as SessionService
 
     client->>api: POST /sessions/new
-    api->>uc: execute()
-    uc->>sessionSvc: cleanup_expired()
-    uc->>sessionSvc: create_session()
+    api->>sessionSvc: cleanup_expired()
+    api->>sessionSvc: create_session()
     api-->>client: NewSessionResponse
 ```
-
-`CreateSessionUseCase` creates the session record and returns the initial greeting payload for the chat UI.
 
 ### POST /chat
 
@@ -158,56 +133,49 @@ sequenceDiagram
 sequenceDiagram
     participant client as Client
     participant api as FastAPI
-    participant uc as HandleChatTurnUseCase
     participant sessionSvc as SessionService
-    participant workflow as ConversationWorkflow
-    participant responseSvc as ChatResponseService
-    participant presenter as ChatPresenter
+    participant workflow as LangGraphWorkflow
+    participant responses as responses.py
 
     client->>api: POST /chat
-    api->>uc: execute(session_id, message)
-    uc->>sessionSvc: cleanup_expired()
-    uc->>sessionSvc: require_session(session_id)
-    uc->>workflow: run(ConversationWorkflowInput)
-    uc->>responseSvc: generate(workflow_result)
-    uc->>presenter: present(response_text, workflow_result)
+    api->>sessionSvc: cleanup_expired()
+    api->>sessionSvc: require_session(session_id)
+    api->>workflow: run(thread_id, message)
+    api->>responses: build_response_text(state)
+    api->>responses: build_chat_response(thread_id, text, state)
     api-->>client: ChatResponse
 ```
 
-`HandleChatTurnUseCase` owns the application flow: session validation, workflow execution, response generation, and presentation.
+## 4. Runtime Lifecycle
 
-## 5. Runtime Lifecycle
+`create_runtime()` in `app/runtime.py` now does all composition directly:
 
-`create_runtime()` in `app/runtime.py`:
 - loads `Settings`
 - builds the logger and optional Langfuse tracer
-- delegates repository construction to `app/runtime_assembly/repositories.py`
-- delegates provider and service construction to `app/runtime_assembly/services.py`
-- delegates workflow assembly to `app/runtime_assembly/workflow.py`
-- delegates presenter construction to `app/runtime_assembly/presenters.py`
-- delegates use case wiring to `app/runtime_assembly/use_cases.py`
+- creates the in-memory repositories
+- creates `VerificationService`, `AppointmentService`, and `SessionService`
+- creates the configured `OpenAIProvider`
+- compiles the LangGraph workflow with `InMemorySaver`
+- exposes the resulting runtime through `RuntimeContext`
 
-`RuntimeContext` now holds the use cases as first-class dependencies:
-- `create_session_use_case`
-- `handle_chat_turn_use_case`
+This is the only composition root in the project.
 
-`app/main.py` still registers a lifespan that creates the runtime on startup and closes it on shutdown. `app/api/routes.py` reads `request.app.state.runtime` and lazily creates one only if needed.
+## 5. Session and Workflow State
 
-## 6. Session and Workflow State
+- Session records are stored in `InMemorySessionStore`
+- LangGraph thread state is stored through `InMemorySaver`
+- Verification, deferred actions, and appointment-list context live in `ConversationState`
+- Cross-session remembered identity remains intentionally out of scope
 
-Session records are now stored through `SessionStore`, currently backed by `InMemorySessionStore`.
+## 6. File Mapping
 
-LangGraph checkpoint persistence is behind `CheckpointStore`, currently backed by `InMemoryCheckpointStore`.
-
-Cross-session remembered identity was intentionally removed from the delivered product. If it is revisited later, it should return as a separate scope expansion rather than hidden session bootstrap state.
-
-## 7. File-to-Layer Mapping
-
-| Layer | Files |
+| Area | Files |
 |---|---|
-| Domain | `app/domain/models.py`, `app/domain/services.py`, `app/domain/ports.py`, `app/domain/errors.py` |
-| Application | `app/application/contracts/*`, `app/application/ports/*`, `app/application/presenters/*`, `app/application/services/*`, `app/application/use_cases/*`, `app/application/session_service.py` |
-| Workflow | `app/graph/builder.py`, `app/graph/routing.py`, `app/graph/state.py`, `app/graph/text_extraction.py`, `app/graph/nodes/*` |
-| Infrastructure | `app/infrastructure/persistence/*`, `app/infrastructure/session/*`, `app/infrastructure/workflow/*`, `app/infrastructure/llm/*`, `app/observability.py` |
-| Interface | `app/main.py`, `app/api/routes.py`, `app/api/schemas.py`, `frontend/streamlit_app.py`, `frontend/lib/api_client.py` |
-| Cross-cutting | `app/config.py`, `app/runtime.py`, `app/runtime_assembly/*`, `app/prompts/*`, `app/evals/*` |
+| Delivery | `app/main.py`, `app/runtime.py`, `frontend/streamlit_app.py`, `frontend/lib/api_client.py` |
+| Shared models | `app/models.py` |
+| Services | `app/services.py` |
+| Repositories | `app/repositories.py` |
+| Responses | `app/responses.py` |
+| Workflow | `app/graph/builder.py`, `app/graph/routing.py`, `app/graph/state.py`, `app/graph/nodes.py`, `app/graph/parsing.py`, `app/graph/workflow.py` |
+| LLM | `app/llm/provider.py`, `app/llm/schemas.py`, `app/llm/prompt.py` |
+| Cross-cutting | `app/config.py`, `app/observability.py`, `app/evals/*` |

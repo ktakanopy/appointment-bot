@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.application.contracts.conversation import ConversationOperation, ConversationWorkflowInput, ResponseKey
+from app.models import ConversationOperation, ConversationWorkflowInput, ResponseKey
 from tests.support import build_test_workflow
 
 

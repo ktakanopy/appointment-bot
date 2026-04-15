@@ -5,28 +5,26 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
-from app.domain.services import AppointmentService, VerificationService
-from app.graph.nodes.appointments import (
+from app.graph.nodes import (
     make_cancel_node,
     make_confirm_node,
     make_execute_action_node,
+    make_help_node,
+    make_ingest_node,
+    make_interpret_node,
     make_list_node,
+    make_verification_node,
 )
-from app.graph.nodes.ingest import make_ingest_node
-from app.graph.nodes.interpret import make_interpret_node
-from app.graph.nodes.response import make_help_node
 from app.graph.routing import route_after_interpret, route_after_verify
-from app.graph.nodes.verification import make_verification_node
 from app.graph.state import ConversationState
-from app.llm.base import LLMProvider
 
 
 def build_graph(
     *,
     logger: logging.Logger,
-    provider: LLMProvider,
-    verification_service: VerificationService,
-    appointment_service: AppointmentService,
+    provider,
+    verification_service,
+    appointment_service,
     max_verification_attempts: int,
     checkpointer: Any,
 ):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.contracts.conversation import ConversationWorkflowInput
+from app.models import ConversationWorkflowInput
 from tests.support import build_test_workflow
 
 

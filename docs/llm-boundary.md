@@ -8,11 +8,11 @@ The LLM is non-authoritative. It performs exactly one product role:
 
 1. **Intent extraction** — parse the user message into a structured operation label and entity fields.
 
-The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Final patient-facing response wording is produced deterministically by `ResponsePolicy` and is not rewritten by the model. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
+The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Final patient-facing response wording is produced deterministically by `app/responses.py` and is not rewritten by the model. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
 
-## 2. Provider protocol
+## 2. Provider surface
 
-`LLMProvider` in `app/llm/base.py` is a `Protocol` with two methods:
+`OpenAIProvider` in `app/llm/provider.py` exposes two methods:
 
 | Method | Role |
 |--------|------|
@@ -21,21 +21,21 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 `IntentPrediction` and `JudgeResult` are Pydantic models in `app/llm/schemas.py`. They constrain what the implementation may return and keep the boundary typed.
 
-## 3. Factory pattern
+## 3. Runtime construction
 
-`build_provider` in `app/infrastructure/llm/factory.py` constructs a concrete provider from `Settings`. It returns `OpenAIProvider` when `ProviderSettings.provider_name` is `"openai"` and `ProviderSettings.api_key` is present. Those values come from environment configuration (`LLM_PROVIDER` defaults to `openai`; `OPENAI_API_KEY` supplies the key). If configuration is missing or unsupported, the factory raises and runtime startup fails fast.
+`build_provider` in `app/runtime.py` constructs the provider from `Settings`. It returns `OpenAIProvider` when `ProviderSettings.provider_name` is `"openai"` and `ProviderSettings.api_key` is present. Those values come from environment configuration (`LLM_PROVIDER` defaults to `openai`; `OPENAI_API_KEY` supplies the key). If configuration is missing or unsupported, runtime startup fails fast.
 
 ## 4. Runtime behavior
 
 - **`interpret`** delegates action and entity extraction to the configured provider.
-- **`ChatResponseService.generate()`** returns the deterministic `ResponsePolicy` output directly. No provider call is made for response rendering.
+- **`build_response_text()`** returns deterministic patient-facing text directly. No provider call is made for response rendering.
 - Verification, appointment ownership, idempotency, issue classification, and workflow routing stay in deterministic Python code outside the provider.
 
 ## 5. Prompt design
 
 One system prompt for the live chat graph:
 
-**Intent** (`app/prompts/intent_prompt.py`, `INTENT_PROMPT`):
+**Intent** (`app/llm/prompt.py`, `INTENT_PROMPT`):
 
 ```text
 Return strict JSON with keys requested_operation, full_name, phone, dob, appointment_reference.
@@ -67,7 +67,7 @@ flowchart LR
     execute[execute_action]
   end
   subgraph application [Application]
-    responseService[ChatResponseService.generate]
+    responses[build_response_text]
   end
 ```
 
@@ -76,7 +76,7 @@ flowchart LR
 | `interpret` | Yes | No |
 | `verify` | No | Yes |
 | `execute_action` | No | Yes |
-| `ChatResponseService.generate()` | No | Yes (`ResponsePolicy` output) |
+| `build_response_text()` | No | Yes |
 
 ## 7. Why not a ReAct agent
 

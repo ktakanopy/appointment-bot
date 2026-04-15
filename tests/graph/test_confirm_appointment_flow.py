@@ -1,4 +1,4 @@
-from app.application.contracts.conversation import ConversationOperationOutcome, ConversationWorkflowInput
+from app.models import ActionOutcome, ConversationWorkflowInput
 from tests.support import build_test_workflow
 
 
@@ -18,8 +18,8 @@ def test_confirm_flow_resolves_first_appointment_and_is_idempotent():
         ConversationWorkflowInput(thread_id="graph-confirm", incoming_message="confirm the first one")
     )
 
-    assert confirmed.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED
-    assert confirmed_again.turn.operation_result.outcome == ConversationOperationOutcome.ALREADY_CONFIRMED
+    assert confirmed.turn.operation_result.outcome == ActionOutcome.CONFIRMED
+    assert confirmed_again.turn.operation_result.outcome == ActionOutcome.ALREADY_CONFIRMED
     assert confirmed.listed_appointments[0].status == "confirmed"
     assert confirmed_again.listed_appointments[0].status == "confirmed"
 
@@ -41,5 +41,5 @@ def test_confirm_flow_resolves_date_reference_after_listing():
         )
     )
 
-    assert confirmed.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED
+    assert confirmed.turn.operation_result.outcome == ActionOutcome.CONFIRMED
     assert confirmed.listed_appointments[0].status == "confirmed"

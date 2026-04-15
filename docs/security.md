@@ -4,9 +4,9 @@ This document describes security-related behavior in the healthcare appointment 
 
 ## 1. Verification gating
 
-**Protected operations** (`ConversationOperation.requires_verification` in `app/application/contracts/conversation.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
+**Protected operations** (`ConversationOperation.requires_verification` in `app/models.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
 
-**Verification-first operations** (`ConversationOperation.triggers_verification_flow` in `app/application/contracts/conversation.py`): `help`, `unknown`, `verify_identity`.
+**Verification-first operations** (`ConversationOperation.triggers_verification_flow` in `app/models.py`): `help`, `unknown`, `verify_identity`.
 
 **Verification gate** (`verification_required` in `app/graph/routing.py`): after interpretation, the workflow routes into `verify` whenever the interpreted operation is protected, is verification-first, or already has a `deferred_operation`.
 
@@ -16,11 +16,11 @@ This document describes security-related behavior in the healthcare appointment 
 
 **Matching**: verification uses normalized comparison: case-insensitive name, digits-only phone, ISO date.
 
-**Failure handling**: when a field format is invalid, the workflow returns a typed `issue` and a presenter response key for that field without consuming a verification attempt. When all three fields are syntactically valid but do not match a patient record, the flow clears the collected identity fields, increments the verification failure counter, and restarts from full name.
+**Failure handling**: when a field format is invalid, the workflow returns a typed `issue` and a deterministic response key for that field without consuming a verification attempt. When all three fields are syntactically valid but do not match a patient record, the flow clears the collected identity fields, increments the verification failure counter, and restarts from full name.
 
 ## 2. Session validation
 
-`/sessions/new` creates a `SessionRecord` in `SessionStore`, currently backed by `InMemorySessionStore`.
+`/sessions/new` creates a `SessionRecord` in `InMemorySessionStore`.
 
 `/chat` uses `SessionService.require_session`, which returns HTTP 404 if `session_id` is not in the registry.
 
@@ -54,9 +54,9 @@ The same redaction applies to structured log output and Langfuse trace events.
 
 ## 5. Appointment ownership
 
-`Appointment.is_owned_by()` in `app/domain/models.py` requires `appointment.patient_id == patient_id`.
+`Appointment.is_owned_by()` in `app/models.py` requires `appointment.patient_id == patient_id`.
 
-`AppointmentService` and `app/graph/nodes/appointments.py` enforce this before confirm or cancel operations.
+`AppointmentService` in `app/services.py` and the appointment node handlers in `app/graph/nodes.py` enforce this before confirm or cancel operations.
 
 If ownership does not hold, the workflow returns `issue=appointment_not_owned`.
 

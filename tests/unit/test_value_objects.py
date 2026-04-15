@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import DateOfBirth, FullName, Phone
+from app.models import DateOfBirth, FullName, Phone
 
 
 def test_phone_normalizes_digits():

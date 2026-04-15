@@ -1,9 +1,8 @@
 import pytest
 
-from app.main import app
-from app.api import routes
+from app.main import app, reset_runtime
 
 
 @pytest.fixture(autouse=True)
 def reset_api_graph():
-    routes.reset_runtime(app)
+    reset_runtime(app)

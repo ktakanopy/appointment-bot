@@ -1,4 +1,4 @@
-from app.application.contracts.conversation import ConversationOperation, ConversationOperationOutcome, ConversationWorkflowInput
+from app.models import ActionOutcome, ConversationOperation, ConversationWorkflowInput
 from app.llm.schemas import IntentPrediction, JudgeResult
 from tests.support import build_test_workflow
 
@@ -19,7 +19,7 @@ def test_confirm_ordinal_after_verification_uses_auto_list_context():
 
     assert result.turn.issue is None
     assert result.turn.operation_result is not None
-    assert result.turn.operation_result.outcome == ConversationOperationOutcome.CONFIRMED
+    assert result.turn.operation_result.outcome == ActionOutcome.CONFIRMED
 
 
 class HistoryAwareProvider:
@@ -67,4 +67,4 @@ def test_history_context_supports_follow_up_reference_resolution():
 
     assert result.turn.issue is None
     assert result.turn.operation_result is not None
-    assert result.turn.operation_result.outcome == ConversationOperationOutcome.CANCELED
+    assert result.turn.operation_result.outcome == ActionOutcome.CANCELED

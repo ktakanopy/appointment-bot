@@ -8,9 +8,9 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from app.config import ProviderSettings
+from app.llm.prompt import INTENT_PROMPT
 from app.llm.schemas import IntentPrediction, JudgeResult
 from app.observability import record_provider_event
-from app.prompts.intent_prompt import INTENT_PROMPT
 
 T = TypeVar("T", bound=BaseModel)
 

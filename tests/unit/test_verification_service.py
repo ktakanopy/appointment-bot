@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.services import VerificationService
-from app.infrastructure.persistence.in_memory import InMemoryPatientRepository
+from app.repositories import InMemoryPatientRepository
+from app.services import VerificationService
 
 
 def test_verification_service_returns_matching_patient():
