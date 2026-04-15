@@ -45,7 +45,7 @@ flowchart TB
 
 ### Graph orchestration
 
-`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. The runtime graph is intentionally linear: `ingest_user_message`, `parse_intent_and_entities`, `verify`, `execute_action`, and `generate_response`. Verification and action dispatch still use deterministic helpers in `app/graph/routing.py`, but branching no longer happens at the graph-edge level. The graph remains the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
+`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. The runtime graph uses explicit conditional edges around `parse_intent_and_entities` and `verify`, so verification gating and action execution are visible in the graph definition itself rather than being hidden entirely inside node internals. The graph remains the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
 
 ### Domain services
 
@@ -58,6 +58,10 @@ flowchart TB
 ### LLM boundary
 
 `app/llm/` exposes an `LLMProvider` protocol with an `OpenAIProvider` implementation. The provider is used for intent extraction and response polishing in graph nodes, not for direct HTTP handling. The runtime requires a configured provider and fails fast at startup if the provider cannot be built. See `docs/llm-boundary.md` for scope and constraints.
+
+### Why this workflow instead of a ReAct agent
+
+This exercise is a better fit for a deterministic workflow than for a ReAct loop. The core system decisions are verification gating, appointment ownership checks, lockout, and idempotent confirm or cancel behavior. Those are policy and state-transition concerns, so keeping them in explicit Python branches yields a smaller attack surface, more predictable behavior, and stronger tests. The LLM still adds value at the boundary for intent extraction and response wording, but it does not need to drive the control flow.
 
 ## 3. Request Lifecycle
 

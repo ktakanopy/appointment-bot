@@ -24,6 +24,7 @@ def test_resolve_appointment_reference_supports_ordinals_and_dates():
     ]
 
     assert parsing.resolve_appointment_reference("0", appointments) == appointments[0]
+    assert parsing.resolve_appointment_reference("1", appointments) == appointments[0]
     assert parsing.resolve_appointment_reference("2", appointments) == appointments[1]
     assert parsing.resolve_appointment_reference("2026-04-23", appointments) == appointments[1]
 

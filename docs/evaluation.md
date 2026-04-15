@@ -75,4 +75,4 @@ The test `test_eval_runner_returns_results_for_default_scenarios` verifies that 
 
 ## 6. State Isolation
 
-Each eval run creates its own `RuntimeContext` with a fresh SQLite checkpoint database. Each scenario gets a unique thread id (`eval-{id}-{uuid}`) so conversations never cross-contaminate. The runtime is closed after all scenarios complete.
+Each eval run creates its own `RuntimeContext` with a fresh in-memory graph and repository state. Each scenario gets a unique thread id (`eval-{id}-{uuid}`) so conversations never cross-contaminate. The runtime is closed after all scenarios complete.

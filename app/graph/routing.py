@@ -20,3 +20,15 @@ def verification_required(state: ConversationState) -> bool:
 
 def should_skip_action_execution(state: ConversationState) -> bool:
     return bool(state.turn.response_text)
+
+
+def route_after_interpret(state: ConversationState) -> str:
+    if verification_required(state):
+        return "verify"
+    return "execute_action"
+
+
+def route_after_verify(state: ConversationState) -> str:
+    if should_skip_action_execution(state):
+        return "generate_response"
+    return "execute_action"

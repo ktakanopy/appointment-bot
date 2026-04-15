@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.domain import parsing, policies
-from app.graph.state import AppointmentState, ConversationState, TurnState, appointment_state, turn_state, verification_state
+from app.graph.state import AppointmentState, ConversationState, TurnState, VerificationState, appointment_state, turn_state, verification_state
 from app.observability import log_event
 
 APPOINTMENT_ACTIONS = {"confirm_appointment", "cancel_appointment"}

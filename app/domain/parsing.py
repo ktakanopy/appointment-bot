@@ -6,12 +6,12 @@ from datetime import datetime
 from app.domain.models import Appointment
 
 ORDINAL_WORDS = {
-    "first": 0,
-    "1st": 0,
-    "second": 1,
-    "2nd": 1,
-    "third": 2,
-    "3rd": 2,
+    "first": 1,
+    "1st": 1,
+    "second": 2,
+    "2nd": 2,
+    "third": 3,
+    "3rd": 3,
 }
 
 
@@ -121,9 +121,9 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
 
     if reference.isdigit():
         index = int(reference)
-        if 0 <= index < len(appointments):
-            return appointments[index]
         if 1 <= index <= len(appointments):
             return appointments[index - 1]
+        if index == 0 and appointments:
+            return appointments[0]
 
     return None

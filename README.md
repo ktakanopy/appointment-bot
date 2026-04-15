@@ -12,7 +12,7 @@ The main endpoint accepts natural language messages and lets a patient:
 
 ## How This Project Was Built
 
-I started from the exercise statement in `task_description.pdf`.
+I started from the exercise statement provided for the hiring process.
 
 The first step was turning that prompt into a clearer working specification
 through a discussion with `gpt-5.4`, using the PDF as the source of truth for
@@ -33,7 +33,7 @@ the following artifacts:
 The main artifacts from that process live in:
 
 - `specs/001-appointment-management/`
-- `.specify/`
+- `specs/002-frontend-llm-memory/`
 
 ## Architecture
 
@@ -59,8 +59,11 @@ Key design decisions:
 - in-memory repositories for patients, appointments, and remembered identity
 
 One alternative here would have been to use a ReAct-style agent. I chose an
-explicit workflow instead because it gave me a simpler execution model and more
-control over verification, routing, and protected appointment actions.
+explicit deterministic workflow instead because this problem is mostly a
+stateful policy flow, not an open-ended tool-usage problem. In this healthcare
+context, deterministic workflow was a better fit because verification gating,
+appointment ownership, idempotent mutations, and lockout behavior stay
+inspectable, testable, and resistant to prompt-injection-style failures.
 
 Main structure:
 
@@ -83,6 +86,28 @@ docs/
 specs/001-appointment-management/
 specs/002-frontend-llm-memory/
 ```
+
+Workflow graph:
+
+```mermaid
+flowchart TD
+    start([Start]) --> ingest[ingest_user_message]
+    ingest --> interpret[parse_intent_and_entities]
+    interpret --> need_verify{verification_required?}
+    need_verify -->|yes| verify[verify]
+    need_verify -->|no| execute[execute_action]
+    verify --> ready_for_action{response already prepared?}
+    ready_for_action -->|yes| respond[generate_response]
+    ready_for_action -->|no| execute
+    execute --> respond
+    respond --> finish([End])
+```
+
+Why deterministic workflow over a ReAct agent:
+
+- The critical decisions in this exercise are policy decisions, not reasoning-heavy tool-selection decisions.
+- Verification gating and appointment mutations need predictable control flow that is easy to test and audit.
+- A ReAct loop would add more model authority than the problem requires, which is a worse trade-off for a healthcare-facing workflow.
 
 ## Important Business Rules
 

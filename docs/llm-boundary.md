@@ -51,6 +51,8 @@ Use only these requested_action values:
 - help
 - unknown
 Do not decide authorization or mutate appointment state.
+Leave unknown fields as null.
+If the message asks to confirm or cancel an appointment by number, treat the number as patient-facing and 1-indexed.
 ```
 
 **Response** (`app/prompts/response_prompt.py`, `RESPONSE_PROMPT`):
@@ -59,6 +61,8 @@ Do not decide authorization or mutate appointment state.
 Return strict JSON with key response_text.
 Keep the wording concise and patient-facing.
 Do not invent new actions, permissions, or workflow outcomes.
+Keep the same operational meaning as the provided fallback text.
+Do not add medical advice, extra policy, or details not already present in the fallback text.
 ```
 
 `OpenAIProvider._complete` in `app/llm/openai_provider.py` passes `response_format={"type": "json_object"}` on chat completions so the API returns parseable JSON. The intent and response prompts explicitly steer the model away from authorization and policy decisions; the judge path uses its own minimal JSON instruction for eval-only calls.
@@ -88,6 +92,10 @@ flowchart LR
 | execute_action | No | Yes |
 | generate_response | Yes | Yes (upstream business outcome only) |
 
-## 7. Error isolation
+## 7. Why not a ReAct agent
+
+For this use case, a ReAct agent would give the model too much control over a workflow that is mostly policy-driven. The critical decisions are whether the patient is verified, whether an appointment belongs to that patient, whether a mutation is idempotent, and whether the session is locked. Those decisions are deterministic and easy to encode directly in Python, which makes the system easier to test, reason about, and defend against prompt-injection attempts. The chosen design keeps the model useful at the boundaries without turning it into the workflow authority.
+
+## 8. Error isolation
 
 Tracing failures do not abort the graph, but provider failures now do. The `interpret` and `generate_response` node implementations call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.

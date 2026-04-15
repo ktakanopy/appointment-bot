@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.config import Settings, load_settings
 from app.domain.services import AppointmentService, VerificationService
+from app.graph.routing import route_after_interpret, route_after_verify
 from app.graph.nodes.appointments import (
     make_cancel_node,
     make_confirm_node,
@@ -35,7 +36,7 @@ def build_graph(
     verification_service: VerificationService | None = None,
     appointment_service: AppointmentService | None = None,
 ):
-    """Build the linear conversation workflow with persisted per-session state."""
+    """Build the conversation workflow with persisted per-session state."""
     settings = settings or load_settings()
     logger = logger or get_logger()
     if tracer is _UNSET:
@@ -79,8 +80,22 @@ def build_graph(
 
     builder.add_edge(START, "ingest_user_message")
     builder.add_edge("ingest_user_message", "parse_intent_and_entities")
-    builder.add_edge("parse_intent_and_entities", "verify")
-    builder.add_edge("verify", "execute_action")
+    builder.add_conditional_edges(
+        "parse_intent_and_entities",
+        route_after_interpret,
+        {
+            "verify": "verify",
+            "execute_action": "execute_action",
+        },
+    )
+    builder.add_conditional_edges(
+        "verify",
+        route_after_verify,
+        {
+            "generate_response": "generate_response",
+            "execute_action": "execute_action",
+        },
+    )
     builder.add_edge("execute_action", "generate_response")
     builder.add_edge("generate_response", END)
 

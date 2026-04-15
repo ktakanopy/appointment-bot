@@ -14,11 +14,11 @@
 
 **Status:** Accepted
 
-**Context:** The conversation requires multi-step flows (verification then action) with conditional routing. Raw LangChain agents would mix LLM control with business logic. LangGraph's StateGraph provides explicit, inspectable, deterministic routing.
+**Context:** The conversation requires multi-step flows (verification then action) with conditional routing. A ReAct-style agent would give the model more authority than this workflow needs and would mix LLM control with business logic. LangGraph's StateGraph provides explicit, inspectable, deterministic routing.
 
 **Decision:** Use LangGraph StateGraph with typed ConversationState and pure-function routing.
 
-**Consequences:** Routing logic is testable without an LLM. The graph can be visualized as a diagram. State mutations are explicit and auditable, and the graph is compiled once and reused across requests.
+**Consequences:** Routing logic is testable without an LLM. The graph can be visualized as a diagram. State mutations are explicit and auditable, and the graph is compiled once and reused across requests. The design is easier to reason about than a ReAct loop for verification-gated healthcare workflows.
 
 ## ADR-003: InMemorySaver for Conversation State
 
