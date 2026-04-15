@@ -315,6 +315,7 @@ branching and fallback complexity beyond the scope of the exercise.
 In a production version, likely next steps would be:
 
 - deterministic fallback for intent and entity extraction in well-covered cases
+- agent response streaming to deliver partial updates in real time and improve chat usability
 - stronger persistence for sessions, appointments, and remembered identity
 - stronger evaluation and regression coverage for natural language understanding
 - more production-grade error handling and operational resilience
