@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.application.contracts.conversation import ConversationOperation
-from app.domain.models import DateOfBirth, FullName
+from app.graph.normalize import normalize_dob, normalize_full_name, normalize_phone
 from app.graph.state import (
     AppointmentState,
     ConversationState,
@@ -11,7 +11,6 @@ from app.graph.state import (
     turn_state,
     verification_state,
 )
-from app.graph.text_extraction import extract_phone
 from app.observability import log_event
 
 APPOINTMENT_ACTIONS = {
@@ -40,9 +39,9 @@ def make_interpret_node(logger, provider):
         requested_operation = result.requested_operation
 
         verification.fill_missing_fields(
-            phone=_normalize_phone(result.phone),
-            dob=_normalize_dob(result.dob),
-            full_name=_normalize_full_name(result.full_name),
+            phone=normalize_phone(result.phone),
+            dob=normalize_dob(result.dob),
+            full_name=normalize_full_name(result.full_name),
         )
 
         turn.requested_operation = requested_operation
@@ -78,30 +77,3 @@ def _update_appointment_reference(
         return
     if appointments.appointment_reference is None and appointment_reference:
         appointments.appointment_reference = appointment_reference
-
-
-def _normalize_full_name(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return FullName(value).value
-    except ValueError:
-        return None
-
-
-def _normalize_phone(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return extract_phone(value)
-    except ValueError:
-        return None
-
-
-def _normalize_dob(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return DateOfBirth(value).value
-    except ValueError:
-        return None

@@ -1,0 +1,27 @@
+{"id": "list-happy", "utterance": "show my appointments", "expected": {"requested_operation": "list_appointments", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "list-synonym-see", "utterance": "I want to see my appointments", "expected": {"requested_operation": "list_appointments", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "list-keyword", "utterance": "list appointments", "expected": {"requested_operation": "list_appointments", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "list-polite", "utterance": "please show me my appointments", "expected": {"requested_operation": "list_appointments", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "confirm-first", "utterance": "confirm the first one", "expected": {"requested_operation": "confirm_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "1"}}
+{"id": "confirm-ordinal-1st", "utterance": "confirm the 1st", "expected": {"requested_operation": "confirm_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "1"}}
+{"id": "confirm-number", "utterance": "confirm 2", "expected": {"requested_operation": "confirm_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "2"}}
+{"id": "confirm-bare", "utterance": "confirm", "expected": {"requested_operation": "confirm_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "cancel-second", "utterance": "cancel the second appointment", "expected": {"requested_operation": "cancel_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "2"}}
+{"id": "cancel-third", "utterance": "cancel the third", "expected": {"requested_operation": "cancel_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "3"}}
+{"id": "cancel-polite", "utterance": "could you cancel the first appointment", "expected": {"requested_operation": "cancel_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "1"}}
+{"id": "cancel-bare", "utterance": "cancel", "expected": {"requested_operation": "cancel_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "cancel-number", "utterance": "cancel appointment 1", "expected": {"requested_operation": "cancel_appointment", "full_name": null, "phone": null, "dob": null, "appointment_reference": "1"}}
+{"id": "help-keyword", "utterance": "help", "expected": {"requested_operation": "help", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "help-options", "utterance": "options", "expected": {"requested_operation": "help", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "unknown-greeting", "utterance": "hello", "expected": {"requested_operation": "unknown", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "unknown-thanks", "utterance": "thanks", "expected": {"requested_operation": "unknown", "full_name": null, "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "name-bare", "utterance": "Ana Silva", "expected": {"requested_operation": "unknown", "full_name": "Ana Silva", "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "name-prefix-mynameis", "utterance": "my name is Carlos Souza", "expected": {"requested_operation": "unknown", "full_name": "Carlos Souza", "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "name-prefix-im", "utterance": "I'm Maria Santos", "expected": {"requested_operation": "unknown", "full_name": "Maria Santos", "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "phone-digits", "utterance": "11999998888", "expected": {"requested_operation": "unknown", "full_name": null, "phone": "11999998888", "dob": null}}
+{"id": "phone-longer", "utterance": "11987654321", "expected": {"requested_operation": "unknown", "full_name": null, "phone": "11987654321", "dob": null}}
+{"id": "phone-formatted", "utterance": "(11) 99999-8888", "expected": {"requested_operation": "unknown", "full_name": null, "phone": "11999998888", "dob": null}}
+{"id": "dob-iso", "utterance": "1990-05-10", "expected": {"requested_operation": "unknown", "full_name": null, "phone": null, "dob": "1990-05-10"}}
+{"id": "dob-slash", "utterance": "10/05/1990", "expected": {"requested_operation": "unknown", "full_name": null, "phone": null, "dob": "1990-05-10"}}
+{"id": "deferred-resumes", "utterance": "Ana Silva", "state": {"turn": {"deferred_operation": "list_appointments"}}, "expected": {"requested_operation": "list_appointments", "full_name": "Ana Silva", "phone": null, "dob": null, "appointment_reference": null}}
+{"id": "name-accent", "utterance": "José Oliveira", "expected": {"requested_operation": "unknown", "full_name": "José Oliveira", "phone": null, "dob": null, "appointment_reference": null}}
