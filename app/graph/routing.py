@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from app.domain.policies import PROTECTED_ACTIONS
+from app.domain.actions import Action
 from app.graph.state import ConversationState
-
-VERIFICATION_FIRST_ACTIONS = {"help", "unknown", "verify_identity"}
-
 
 def verification_required(state: ConversationState) -> bool:
     action = state.turn.requested_action
     return bool(
         not state.verification.verified
         and (
-            action in PROTECTED_ACTIONS
-            or action in VERIFICATION_FIRST_ACTIONS
+            action is not None
+            and (action.requires_verification or action.triggers_verification_flow)
             or state.turn.deferred_action
         )
     )

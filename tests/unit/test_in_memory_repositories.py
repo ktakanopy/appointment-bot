@@ -1,7 +1,7 @@
 import pytest
 
 from app.domain.models import AppointmentStatus
-from app.repositories.in_memory import InMemoryAppointmentRepository
+from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository
 
 
 def test_list_by_patient_returns_only_owned_appointments():
@@ -16,10 +16,15 @@ def test_list_by_patient_returns_only_owned_appointments():
 def test_confirm_and_cancel_are_idempotent_for_same_patient():
     repository = InMemoryAppointmentRepository()
 
-    confirmed = repository.confirm("p1", "a1")
-    confirmed_again = repository.confirm("p1", "a1")
-    canceled = repository.cancel("p1", "a1")
-    canceled_again = repository.cancel("p1", "a1")
+    appointment = repository.get_by_id("a1")
+    confirmed, _ = appointment.confirm()
+    repository.save(confirmed)
+    confirmed_again, _ = repository.get_by_id("a1").confirm()
+    repository.save(confirmed_again)
+    canceled, _ = repository.get_by_id("a1").cancel()
+    repository.save(canceled)
+    canceled_again, _ = repository.get_by_id("a1").cancel()
+    repository.save(canceled_again)
 
     assert confirmed.status == AppointmentStatus.CONFIRMED
     assert confirmed_again.status == AppointmentStatus.CONFIRMED
@@ -29,6 +34,6 @@ def test_confirm_and_cancel_are_idempotent_for_same_patient():
 
 def test_repository_rejects_wrong_patient_mutation():
     repository = InMemoryAppointmentRepository()
+    appointment = repository.get_by_id("a3")
 
-    with pytest.raises(ValueError):
-        repository.confirm("p1", "a3")
+    assert appointment.is_owned_by("p1") is False

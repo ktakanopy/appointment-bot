@@ -79,8 +79,8 @@ stateDiagram-v2
 | provided_full_name | str or None | Name provided by the patient during verification |
 | provided_phone | str or None | Phone provided by the patient during verification |
 | provided_dob | str or None | Date of birth provided by the patient during verification |
-| requested_action | ActionName or None | Current action being processed |
-| deferred_action | ActionName or None | Protected action deferred until verification completes |
+| requested_action | Action or None | Current action being processed |
+| deferred_action | Action or None | Protected action deferred until verification completes |
 | listed_appointments | list[Appointment] | Appointments returned by the last list action |
 | appointment_reference | str or None | User's reference to a specific appointment (ordinal, date, id) |
 | last_action_result | dict or None | Outcome of the last appointment action |
@@ -95,7 +95,7 @@ stateDiagram-v2
 | Appointment records | In-memory (InMemoryAppointmentRepository) | Process lifetime |
 | Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
 | Remembered identity | In-memory (InMemoryRememberedIdentityRepository) | Process lifetime, TTL + revoke |
-| Session registry | In-memory (runtime.sessions dict) | Process lifetime, TTL-based cleanup |
+| Session registry | In-memory (`runtime.session_service.sessions`) | Process lifetime, TTL-based cleanup |
 | Session bootstrap | In-memory on each `SessionRecord` | 300s TTL |
 
 In-memory storage is intentional for demo scope. A production system would back conversation state, remembered identity, patient data, and appointment data with external persistence.

@@ -37,27 +37,92 @@ flowchart TB
   RC -. optional .-> LF
 ```
 
-## 2. Layered Architecture
+## 2. Clean Architecture
 
-### HTTP layer
+The refactored codebase follows four concentric layers. Dependencies point strictly inward: interface code can depend on application and domain code, infrastructure can implement domain ports, but the domain does not depend on infrastructure or frameworks.
 
-`app/api/routes.py` and `app/api/schemas.py` define FastAPI routes, Pydantic request and response models, and session validation. Dependencies resolve `RuntimeContext` via `Depends(get_runtime)`. The `POST /chat` endpoint runs the synchronous `graph.invoke` inside `asyncio.to_thread` so the asyncio event loop is not blocked. The layer maps HTTP concerns to graph payloads and responses; it does not embed business rules beyond validation and orchestration.
+```mermaid
+graph TB
+    subgraph interface [Interface / Frameworks]
+        direction TB
+        routes["app/api/routes.py"]
+        mainApp["app/main.py"]
+        streamlit["frontend/streamlit_app.py"]
+    end
 
-### Graph orchestration
+    subgraph infra [Infrastructure / Adapters]
+        direction TB
+        persistence["app/infrastructure/persistence/in_memory.py"]
+        llmAdapter["app/infrastructure/llm/openai_provider.py"]
+        observability["app/observability.py"]
+    end
 
-`app/graph/` defines a LangGraph `StateGraph(ConversationState)` compiled with `InMemorySaver`. The runtime graph uses explicit conditional edges around `parse_intent_and_entities` and `verify`, so verification gating and action execution are visible in the graph definition itself rather than being hidden entirely inside node internals. The graph remains the workflow engine: it does not call HTTP, does not import FastAPI, and operates on state and injected services only.
+    subgraph application [Application / Use Cases]
+        direction TB
+        sessionService["app/application/session_service.py"]
+        chatService["app/application/chat_service.py"]
+        graphNodes["app/graph/"]
+    end
 
-### Domain services
+    subgraph domain [Domain]
+        direction TB
+        models["app/domain/models.py"]
+        services["app/domain/services.py"]
+        ports["app/domain/ports.py"]
+        actions["app/domain/actions.py"]
+        errors["app/domain/errors.py"]
+    end
 
-`app/domain/` provides `VerificationService`, `AppointmentService`, and `RememberedIdentityService`. These encapsulate identity matching, idempotent appointment confirm and cancel semantics, and remembered-identity fingerprinting and lifecycle. They depend on repository protocols, not on storage technology or the graph.
+    interface --> application
+    interface --> infra
+    application --> domain
+    infra -.->|implements ports| domain
+```
 
-### Repositories
+### Dependency Rule
 
-`app/repositories/` defines protocol-style ports: patient, appointment, and remembered-identity repositories. Patient, appointment, and remembered-identity data use in-memory implementations for the demo.
+- The **domain** is the center of the system. It contains entities, value objects, domain services, domain exceptions, and repository protocols.
+- The **application layer** orchestrates use cases such as session bootstrapping, remembered-identity restoration, and graph response mapping. It imports domain code but does not depend on FastAPI, Streamlit, or concrete persistence.
+- The **infrastructure layer** implements domain ports with concrete adapters such as the in-memory repositories and the OpenAI-backed LLM provider.
+- The **interface layer** owns HTTP and UI concerns only. `app/api/routes.py` delegates to application services and the LangGraph runtime rather than embedding the orchestration directly in route handlers.
 
-### LLM boundary
+### Port / Adapter Boundaries
 
-`app/llm/` exposes an `LLMProvider` protocol with an `OpenAIProvider` implementation. The provider is used for intent extraction and response polishing in graph nodes, not for direct HTTP handling. The runtime requires a configured provider and fails fast at startup if the provider cannot be built. See `docs/llm-boundary.md` for scope and constraints.
+```mermaid
+graph LR
+    subgraph portsLayer [Domain Ports]
+        AppointmentRepo["AppointmentRepository"]
+        PatientRepo["PatientRepository"]
+        IdentityRepo["RememberedIdentityRepository"]
+        LLMProvider["LLMProvider"]
+    end
+
+    subgraph adaptersLayer [Current Adapters]
+        InMemAppointment["InMemoryAppointmentRepository"]
+        InMemPatient["InMemoryPatientRepository"]
+        InMemIdentity["InMemoryRememberedIdentityRepository"]
+        OpenAIProvider["OpenAIProvider"]
+    end
+
+    subgraph futureAdapters [Future Adapters]
+        SqlAppointment["SQLAppointmentRepository"]
+        SqlPatient["SQLPatientRepository"]
+        SqlIdentity["SQLRememberedIdentityRepository"]
+        AnthropicProvider["AnthropicProvider"]
+    end
+
+    InMemAppointment -.->|implements| AppointmentRepo
+    InMemPatient -.->|implements| PatientRepo
+    InMemIdentity -.->|implements| IdentityRepo
+    OpenAIProvider -.->|implements| LLMProvider
+
+    SqlAppointment -.->|implements| AppointmentRepo
+    SqlPatient -.->|implements| PatientRepo
+    SqlIdentity -.->|implements| IdentityRepo
+    AnthropicProvider -.->|implements| LLMProvider
+```
+
+Adding a new persistence or model provider adapter should only require a new implementation in `app/infrastructure/` plus wiring in `create_runtime()`. The domain and graph should not need to change for that substitution.
 
 ### Why this workflow instead of a ReAct agent
 
@@ -71,18 +136,15 @@ This exercise is a better fit for a deterministic workflow than for a ReAct loop
 sequenceDiagram
   participant C as Client
   participant API as FastAPI
-  participant RT as RuntimeContext
-  participant IS as IdentityService
+  participant SS as SessionService
 
   C->>API: POST /sessions/new
-  API->>RT: cleanup expired entries
+  API->>SS: create_session(remembered_identity_id)
   API->>API: generate session_id, thread_id (UUID)
-  API->>RT: register SessionRecord in sessions
   alt remembered_identity_id provided
-    API->>IS: restore_identity(id)
-    IS-->>API: identity or None
+    SS->>SS: restore remembered identity
     opt active identity restored
-      API->>RT: store SessionBootstrap (300s TTL)
+      SS->>SS: store SessionBootstrap (300s TTL)
     end
   end
   API-->>C: NewSessionResponse
@@ -90,10 +152,10 @@ sequenceDiagram
 
 Steps:
 
-1. Generate a UUID `session_id`; `thread_id` matches `session_id` for checkpoint threading.
-2. Register a `SessionRecord` in `runtime.sessions` with monotonic timestamps.
-3. If `remembered_identity_id` is present, attempt restore via `RememberedIdentityService`. If an active identity is restored, store a one-time `SessionBootstrap` on the `SessionRecord` for the next chat turn.
-4. Return `NewSessionResponse` including greeting text and identity summary fields.
+1. `SessionService.create_session()` generates a UUID `session_id`; `thread_id` matches `session_id` for checkpoint threading.
+2. The service registers a `SessionRecord` with monotonic timestamps in its in-memory registry.
+3. If `remembered_identity_id` is present, `RememberedIdentityService` attempts restore. If an active identity is restored, `SessionService` stores a one-time `SessionBootstrap` on the `SessionRecord` for the next chat turn.
+4. The route returns `NewSessionResponse` produced from the service output.
 
 ### POST /chat
 
@@ -101,28 +163,28 @@ Steps:
 sequenceDiagram
   participant C as Client
   participant API as FastAPI
-  participant RT as RuntimeContext
+  participant CS as ChatService
   participant G as LangGraph
 
   C->>API: POST /chat
-  API->>RT: _build_chat_payload
-  RT->>RT: cleanup, require session (404 if missing)
-  RT->>RT: consume SessionBootstrap from SessionRecord if present
-  RT-->>API: payload + config(thread_id)
+  API->>CS: build_payload(session_id, message, remembered_identity_id)
+  CS->>CS: cleanup, require session (404 if missing)
+  CS->>CS: consume SessionBootstrap from SessionRecord if present
+  CS-->>API: payload + config(thread_id)
   API->>G: asyncio.to_thread(graph.invoke, payload, config)
   G-->>API: result dict
-  API->>API: _build_chat_response (appointments, action, identity)
+  API->>CS: build_response(session_id, remembered_identity_id, result)
   API-->>C: ChatResponse
 ```
 
 Steps:
 
-1. Validate the session exists via `runtime.sessions`; missing sessions yield HTTP 404.
-2. Consume at most one `SessionBootstrap` from that session record when building the payload (one-time use). If there is no bootstrap but `remembered_identity_id` is sent on the request, the handler may synthesize bootstrap state from a fresh restore.
-3. Build the graph payload: `thread_id`, `incoming_message`, plus optional bootstrap fields merged into state.
+1. `ChatService.build_payload()` validates the session exists via `SessionService`; missing sessions yield HTTP 404.
+2. The service consumes at most one `SessionBootstrap` from that session record when building the payload. If there is no bootstrap but `remembered_identity_id` is sent on the request, the service may synthesize bootstrap state from a fresh restore.
+3. It builds the graph payload: `thread_id`, `incoming_message`, plus optional bootstrap fields merged into state.
 4. Run `await asyncio.to_thread(runtime.graph.invoke, payload, config)` with `configurable.thread_id` set to the session id.
-5. Map the graph result to `ChatResponse` (response text, verification flags, appointments, last action, errors).
-6. Call `_ensure_remembered_identity` so verified sessions create or update remembered identity as appropriate; attach `remembered_identity_status` to the response.
+5. `ChatService.build_response()` maps the graph result to public response fields (response text, verification flags, appointments, last action, errors).
+6. `ChatService.ensure_remembered_identity()` makes sure verified sessions create or update remembered identity as appropriate; it attaches `remembered_identity_status` to the response.
 7. Return `ChatResponse`.
 
 ### POST /remembered-identity/forget
@@ -146,13 +208,13 @@ Steps:
 
 ## 4. Runtime Lifecycle
 
-`create_runtime()` in `app/runtime.py` loads `Settings` via `load_settings()`, constructs the logger (`get_logger`), optional Langfuse-backed tracer (`build_tracer`), required LLM provider (`build_provider`), wires `InMemoryRememberedIdentityRepository` and `RememberedIdentityService`, and compiles the graph via `build_graph(...)`. The result is a `RuntimeContext` dataclass holding settings, logger, tracer, graph, provider, identity service, and an empty `sessions` map.
+`create_runtime()` in `app/runtime.py` loads `Settings` via `load_settings()`, constructs the logger (`get_logger`), optional Langfuse-backed tracer (`build_tracer`), required LLM provider (`build_provider`), wires `InMemoryRememberedIdentityRepository` and `RememberedIdentityService`, creates `SessionService` and `ChatService`, and compiles the graph via `build_graph(...)`. The result is a `RuntimeContext` dataclass holding settings, logger, tracer, graph, provider, identity service, and the application services.
 
 `app/main.py` registers an async lifespan: on startup it assigns `create_runtime()` to `app.state.runtime`; on shutdown it calls `close_runtime`.
 
 `get_runtime` reads `request.app.state.runtime`, or lazily creates and stores a runtime if missing (useful for tests or atypical mounting).
 
-`runtime.sessions` maps `session_id` to `SessionRecord`. `_cleanup_expired_runtime_entries` removes sessions whose `last_seen_at` is older than `settings.session_ttl_minutes` (default 60), using monotonic time. Chat handlers refresh `last_seen_at` on each authorized request via `_require_session`.
+`runtime.session_service.sessions` maps `session_id` to `SessionRecord`. `SessionService.cleanup_expired()` removes sessions whose `last_seen_at` is older than `settings.session_ttl_minutes` (default 60), using monotonic time. Chat handlers refresh `last_seen_at` on each authorized request via `SessionService.require_session()`.
 
 Each `SessionRecord` may hold a `SessionBootstrap` value with a 300 second TTL from creation time; expired bootstrap state is cleared during cleanup. Bootstrap is consumed when the first eligible chat request builds its payload.
 
@@ -164,14 +226,10 @@ Each `SessionRecord` may hold a `SessionBootstrap` value with a 300 second TTL f
 
 ## 6. File-to-Layer Mapping
 
-| Layer | Files |
-|-------|-------|
-| HTTP | `app/main.py`, `app/api/routes.py`, `app/api/schemas.py` |
-| Runtime | `app/runtime.py`, `app/config.py` |
-| Graph | `app/graph/builder.py`, `app/graph/routing.py`, `app/graph/state.py`, `app/graph/nodes/*` |
-| Domain | `app/domain/models.py`, `app/domain/services.py`, `app/domain/policies.py` |
-| Repositories | `app/repositories/*` |
-| LLM | `app/llm/*`, `app/prompts/*` |
-| Observability | `app/observability.py` |
-| Evaluation | `app/evals/*` |
-| Frontend | `frontend/streamlit_app.py`, `frontend/lib/api_client.py` |
+| Clean Architecture layer | Files |
+|---|---|
+| Domain (innermost) | `app/domain/models.py`, `app/domain/services.py`, `app/domain/ports.py`, `app/domain/actions.py`, `app/domain/errors.py` |
+| Application | `app/application/session_service.py`, `app/application/chat_service.py`, `app/graph/builder.py`, `app/graph/routing.py`, `app/graph/state.py`, `app/graph/text_extraction.py`, `app/graph/nodes/*` |
+| Infrastructure | `app/infrastructure/persistence/*`, `app/infrastructure/llm/*`, `app/observability.py` |
+| Interface (outermost) | `app/main.py`, `app/api/routes.py`, `app/api/schemas.py`, `frontend/streamlit_app.py`, `frontend/lib/api_client.py` |
+| Cross-cutting | `app/config.py`, `app/runtime.py`, `app/prompts/*`, `app/evals/*` |

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from app.domain import parsing
+from app.domain.actions import Action
 from app.graph.routing import verification_required
 from app.graph.state import ConversationState, TurnState, VerificationState, turn_state, verification_state
+from app.graph.text_extraction import extract_dob, extract_full_name, extract_phone
 from app.observability import log_event
 
 
@@ -72,7 +73,7 @@ def _set_locked_response(
     response_text: str,
     state: ConversationState,
 ) -> ConversationState:
-    turn.requested_action = "verify_identity"
+    turn.requested_action = Action.VERIFY_IDENTITY
     turn.response_text = response_text
     turn.error_code = "verification_locked"
     log_event(logger, "verify_identity", state, outcome="locked")
@@ -89,7 +90,7 @@ def _collect_missing_field(
     state: ConversationState,
 ) -> ConversationState:
     verification.mark_collecting()
-    turn.requested_action = "verify_identity"
+    turn.requested_action = Action.VERIFY_IDENTITY
     invalid_response = _invalid_response_for_field(state, field_name, previous_status)
     if invalid_response is None:
         turn.response_text = PROMPTS[field_name]
@@ -110,7 +111,7 @@ def _handle_failed_verification(
 ) -> ConversationState:
     verification.verification_failures += 1
     verification.reset_failed_verification()
-    turn.requested_action = "verify_identity"
+    turn.requested_action = Action.VERIFY_IDENTITY
     if verification.verification_failures >= max_verification_attempts:
         verification.verification_status = "locked"
         return _set_locked_response(
@@ -150,9 +151,9 @@ def _invalid_response_for_field(
     message = (state.incoming_message or "").strip()
     if not message:
         return None
-    parsed_name = parsing.extract_full_name(message)
-    parsed_phone = parsing.extract_phone(message)
-    parsed_dob = parsing.extract_dob(message)
+    parsed_name = extract_full_name(message)
+    parsed_phone = extract_phone(message)
+    parsed_dob = extract_dob(message)
     if field_name == "full_name" and parsed_name is None and parsed_phone is None and parsed_dob is None:
         return INVALID_RESPONSES[field_name]
     if field_name == "phone" and parsed_phone is None and parsed_name is None and parsed_dob is None:

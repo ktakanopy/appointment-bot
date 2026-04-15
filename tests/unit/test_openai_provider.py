@@ -5,7 +5,7 @@ import logging
 import pytest
 
 from app.config import ProviderSettings
-from app.llm.openai_provider import OpenAIProvider
+from app.infrastructure.llm.openai_provider import OpenAIProvider
 
 
 class FakeCompletions:

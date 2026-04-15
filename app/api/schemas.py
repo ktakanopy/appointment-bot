@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.action_names import ActionName
+from app.domain.actions import Action
 
 
 class ChatRequest(BaseModel):
@@ -47,7 +47,7 @@ class ChatResponse(BaseModel):
 
     response: str
     verified: bool
-    current_action: ActionName
+    current_action: Action
     thread_id: str
     appointments: list[AppointmentSummary] | None = None
     last_action_result: ActionResultResponse | None = None

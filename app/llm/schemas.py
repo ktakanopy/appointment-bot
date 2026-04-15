@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.action_names import ActionName
+from app.domain.actions import Action
 
 
 class IntentPrediction(BaseModel):
-    requested_action: ActionName = "unknown"
+    requested_action: Action = Action.UNKNOWN
     full_name: str | None = None
     phone: str | None = None
     dob: str | None = None

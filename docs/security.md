@@ -4,9 +4,9 @@ This document describes security-related behavior in the healthcare appointment 
 
 ## 1. Verification gating
 
-**Protected actions** (`PROTECTED_ACTIONS` in `app/domain/policies.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
+**Protected actions** (`Action.requires_verification` in `app/domain/actions.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
 
-**Verification-first actions** (`VERIFICATION_FIRST_ACTIONS` in `app/graph/routing.py`): `help`, `unknown`, `verify_identity`.
+**Verification-first actions** (`Action.triggers_verification_flow` in `app/domain/actions.py`): `help`, `unknown`, `verify_identity`.
 
 **Verification gate** (`verification_required` in `app/graph/routing.py`): after interpretation, the graph conditionally routes into `verify` whenever the interpreted action is protected, is verification-first, or already has a `deferred_action`. Other turns can skip verification and proceed directly to action execution.
 
@@ -20,9 +20,9 @@ This document describes security-related behavior in the healthcare appointment 
 
 ## 2. Session validation
 
-`/sessions/new` creates a `SessionRecord` in `runtime.sessions` with a UUID `session_id`.
+`/sessions/new` creates a `SessionRecord` in `runtime.session_service.sessions` with a UUID `session_id`.
 
-`/chat` calls `_require_session`, which returns HTTP 404 if `session_id` is not in the registry.
+`/chat` uses `SessionService.require_session`, which returns HTTP 404 if `session_id` is not in the registry.
 
 Sessions use a TTL (`SESSION_TTL_MINUTES`, default 60 minutes). Expired sessions are removed during request handling.
 
@@ -54,7 +54,7 @@ The same redaction applies to structured log output and Langfuse trace events.
 
 ## 5. Remembered identity lifecycle
 
-After successful verification, `_ensure_remembered_identity` in `app/api/routes.py` may create a `RememberedIdentity` record with:
+After successful verification, `ChatService.ensure_remembered_identity` in `app/application/chat_service.py` may create a `RememberedIdentity` record with:
 
 - A SHA-256 fingerprint over normalized name, phone, date of birth, and `patient_id`
 - TTL from `REMEMBERED_IDENTITY_TTL_HOURS` (default 24 hours)
@@ -68,9 +68,9 @@ Expired records are handled on read: `RememberedIdentityService._is_active` perf
 
 ## 6. Appointment ownership
 
-`appointment_is_owned_by_patient` in `app/domain/policies.py` requires `appointment.patient_id == patient_id`.
+`Appointment.is_owned_by()` in `app/domain/models.py` requires `appointment.patient_id == patient_id`.
 
-`_resolve_target_appointment` in `app/graph/nodes/appointments.py` enforces this before confirm or cancel operations.
+`AppointmentService` and `app/graph/nodes/appointments.py` enforce this before confirm or cancel operations.
 
 If ownership does not hold, the response uses `error_code=appointment_not_owned`.
 

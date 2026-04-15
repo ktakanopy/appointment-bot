@@ -70,11 +70,12 @@ Main structure:
 ```text
 app/
   api/
+  application/
+  domain/
   evals/
   graph/
-  domain/
+  infrastructure/
   llm/
-  repositories/
   prompts/
 frontend/
 tests/
@@ -204,7 +205,7 @@ or send traces somewhere else.
 
 ### Valid chatbot inputs
 
-The project uses seeded in-memory patient data from `app/repositories/in_memory.py`.
+The project uses seeded in-memory patient data from `app/infrastructure/persistence/in_memory.py`.
 To complete identity verification in the chat UI, provide one of these exact
 combinations when the bot asks for them:
 

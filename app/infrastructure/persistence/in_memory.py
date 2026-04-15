@@ -1,19 +1,27 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from dataclasses import replace
 
-from app.domain.models import Appointment, AppointmentStatus, Patient, RememberedIdentity, RememberedIdentityStatus
+from app.domain.models import (
+    Appointment,
+    AppointmentStatus,
+    DateOfBirth,
+    FullName,
+    Patient,
+    Phone,
+    RememberedIdentity,
+    RememberedIdentityStatus,
+)
 
 
 class InMemoryPatientRepository:
     def __init__(self, patients: list[Patient] | None = None):
         self._patients = patients or [
-            Patient("p1", "Ana Silva", "11999998888", "1990-05-10"),
-            Patient("p2", "Carlos Souza", "11911112222", "1985-09-22"),
+            Patient("p1", FullName("Ana Silva"), Phone("11999998888"), DateOfBirth("1990-05-10")),
+            Patient("p2", FullName("Carlos Souza"), Phone("11911112222"), DateOfBirth("1985-09-22")),
         ]
 
-    def find_by_identity(self, full_name: str, phone: str, dob: str) -> Patient | None:
+    def find_by_identity(self, full_name: FullName, phone: Phone, dob: DateOfBirth) -> Patient | None:
         for patient in self._patients:
             if patient.full_name == full_name and patient.phone == phone and patient.date_of_birth == dob:
                 return patient
@@ -41,31 +49,14 @@ class InMemoryAppointmentRepository:
     def get_by_id(self, appointment_id: str) -> Appointment | None:
         return self._appointments.get(appointment_id)
 
-    def confirm(self, patient_id: str, appointment_id: str) -> Appointment:
-        appointment = self._appointments[appointment_id]
-        if appointment.patient_id != patient_id:
-            raise ValueError("appointment does not belong to patient")
-        if appointment.status != AppointmentStatus.CONFIRMED:
-            appointment = replace(appointment, status=AppointmentStatus.CONFIRMED)
-            self._appointments[appointment_id] = appointment
-        return appointment
-
-    def cancel(self, patient_id: str, appointment_id: str) -> Appointment:
-        appointment = self._appointments[appointment_id]
-        if appointment.patient_id != patient_id:
-            raise ValueError("appointment does not belong to patient")
-        if appointment.status != AppointmentStatus.CANCELED:
-            appointment = replace(appointment, status=AppointmentStatus.CANCELED)
-            self._appointments[appointment_id] = appointment
+    def save(self, appointment: Appointment) -> Appointment:
+        self._appointments[appointment.id] = appointment
         return appointment
 
 
 class InMemoryRememberedIdentityRepository:
     def __init__(self, identities: list[RememberedIdentity] | None = None):
-        self._identities = {
-            identity.remembered_identity_id: identity
-            for identity in (identities or [])
-        }
+        self._identities = {identity.remembered_identity_id: identity for identity in (identities or [])}
 
     def get_by_id(self, remembered_identity_id: str) -> RememberedIdentity | None:
         return self._identities.get(remembered_identity_id)
@@ -90,9 +81,10 @@ class InMemoryRememberedIdentityRepository:
         identity = self._identities.get(remembered_identity_id)
         if identity is None or identity.revoked_at is not None:
             return False
-        self._identities[remembered_identity_id] = replace(
-            identity,
-            revoked_at=datetime.now(UTC),
-            status=RememberedIdentityStatus.REVOKED,
+        self._identities[remembered_identity_id] = identity.model_copy(
+            update={
+                "revoked_at": datetime.now(UTC),
+                "status": RememberedIdentityStatus.REVOKED,
+            }
         )
         return True

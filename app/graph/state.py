@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.action_names import ActionName
+from app.domain.actions import Action
 from app.domain.models import Appointment
 
 
@@ -16,18 +17,6 @@ class StateModel(BaseModel):
 
     def __setitem__(self, key: str, value: Any) -> None:
         setattr(self, key, value)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        try:
-            return getattr(self, key)
-        except AttributeError:
-            return default
-
-    def setdefault(self, key: str, default: Any = None) -> Any:
-        value = getattr(self, key, None)
-        if value is None:
-            setattr(self, key, default)
-        return getattr(self, key)
 
 
 class VerificationState(StateModel):
@@ -88,8 +77,8 @@ class VerificationState(StateModel):
 
 
 class TurnState(StateModel):
-    requested_action: Optional[ActionName] = None
-    deferred_action: Optional[ActionName] = None
+    requested_action: Optional[Action] = None
+    deferred_action: Optional[Action] = None
     last_action_result: Optional[dict[str, Optional[str]]] = None
     response_text: Optional[str] = None
     error_code: Optional[str] = None

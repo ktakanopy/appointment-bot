@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
 
-from app.domain.models import Appointment
+from app.domain.actions import Action
+from app.domain.models import Appointment, DateOfBirth, FullName, Phone
 
 ORDINAL_WORDS = {
     "first": 1,
@@ -15,42 +15,30 @@ ORDINAL_WORDS = {
 }
 
 
-def normalize_phone(value: str) -> str:
-    return "".join(character for character in value if character.isdigit())
-
-
-def normalize_name(value: str) -> str:
-    return " ".join(part for part in value.strip().split())
-
-
-def normalize_dob(value: str) -> str | None:
-    cleaned = value.strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    return None
-
-
 def is_help_request(message: str) -> bool:
     return any(word in message for word in ["help", "what can you do", "options"])
 
 
 def extract_phone(message: str) -> str | None:
-    digits = normalize_phone(message)
-    if len(digits) >= 10:
-        return digits
-    return None
+    digits = "".join(character for character in message if character.isdigit())
+    if len(digits) < 10:
+        return None
+    return Phone(digits).digits
 
 
 def extract_dob(message: str) -> str | None:
     direct_match = re.search(r"\b\d{4}-\d{2}-\d{2}\b", message)
     if direct_match:
-        return normalize_dob(direct_match.group(0))
+        try:
+            return DateOfBirth(direct_match.group(0)).value
+        except ValueError:
+            return None
     slash_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", message)
     if slash_match:
-        return normalize_dob(slash_match.group(0))
+        try:
+            return DateOfBirth(slash_match.group(0)).value
+        except ValueError:
+            return None
     return None
 
 
@@ -60,32 +48,32 @@ def extract_full_name(message: str) -> str | None:
         pattern = rf"{marker}\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)+)"
         match = re.search(pattern, lowered)
         if match:
-            return normalize_name(match.group(1)).title()
+            return FullName(match.group(1)).value
 
     cleaned = re.sub(r"[^A-Za-zÀ-ÿ\s]", " ", message)
-    candidate = normalize_name(cleaned)
-    if len(candidate.split()) >= 2:
-        blocked_words = {"phone", "number", "birth", "date", "appointment", "appointments", "confirm", "cancel", "show", "list"}
-        if any(word in blocked_words for word in {part.lower() for part in candidate.split()}):
-            return None
-        return candidate.title()
-    return None
+    candidate = " ".join(part for part in cleaned.strip().split())
+    if len(candidate.split()) < 2:
+        return None
+    blocked_words = {"phone", "number", "birth", "date", "appointment", "appointments", "confirm", "cancel", "show", "list"}
+    if any(word in blocked_words for word in {part.lower() for part in candidate.split()}):
+        return None
+    return FullName(candidate).value
 
 
-def extract_requested_action(message: str, state: dict) -> str:
+def extract_requested_action(message: str, state: dict) -> Action:
     lowered = message.lower()
     if "cancel" in lowered:
-        return "cancel_appointment"
+        return Action.CANCEL_APPOINTMENT
     if "confirm" in lowered:
-        return "confirm_appointment"
+        return Action.CONFIRM_APPOINTMENT
     if any(keyword in lowered for keyword in ["appointment", "appointments", "show", "see", "list"]):
-        return "list_appointments"
+        return Action.LIST_APPOINTMENTS
     if is_help_request(lowered):
-        return "help"
+        return Action.HELP
     deferred_action = state.get("turn", {}).get("deferred_action")
     if deferred_action:
-        return deferred_action
-    return "unknown"
+        return Action(deferred_action)
+    return Action.UNKNOWN
 
 
 def extract_appointment_reference(message: str) -> str | None:

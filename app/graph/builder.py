@@ -21,8 +21,8 @@ from app.graph.nodes.verification import make_verification_node
 from app.graph.state import ConversationState
 from app.llm.base import LLMProvider
 from app.llm.factory import build_provider
+from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
 from app.observability import build_tracer, get_logger
-from app.repositories.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
 
 _UNSET = object()
 

@@ -4,7 +4,7 @@ import logging
 
 from app.config import Settings
 from app.llm.base import LLMProvider
-from app.llm.openai_provider import OpenAIProvider
+from app.infrastructure.llm.openai_provider import OpenAIProvider
 
 
 def build_provider(

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from app.domain import parsing, policies
+from app.domain.actions import Action
+from app.domain.models import DateOfBirth, FullName
 from app.graph.state import AppointmentState, ConversationState, TurnState, VerificationState, appointment_state, turn_state, verification_state
+from app.graph.text_extraction import extract_phone
 from app.observability import log_event
 
-APPOINTMENT_ACTIONS = {"confirm_appointment", "cancel_appointment"}
+APPOINTMENT_ACTIONS = {Action.CONFIRM_APPOINTMENT, Action.CANCEL_APPOINTMENT}
 
 
 def make_interpret_node(logger, provider):
@@ -25,9 +27,9 @@ def make_interpret_node(logger, provider):
         requested_action = result.requested_action
 
         verification.fill_missing_fields(
-            phone=parsing.extract_phone(result.phone) if result.phone else None,
-            dob=parsing.normalize_dob(result.dob) if result.dob else None,
-            full_name=parsing.normalize_name(result.full_name).title() if result.full_name else None,
+            phone=_normalize_phone(result.phone),
+            dob=_normalize_dob(result.dob),
+            full_name=_normalize_full_name(result.full_name),
         )
 
         turn.requested_action = requested_action
@@ -44,14 +46,14 @@ def make_interpret_node(logger, provider):
     return interpret
 
 
-def _update_deferred_action(verification: VerificationState, turn: TurnState, requested_action: str) -> None:
-    if requested_action in policies.PROTECTED_ACTIONS and not verification.verified:
+def _update_deferred_action(verification: VerificationState, turn: TurnState, requested_action: Action) -> None:
+    if requested_action.requires_verification and not verification.verified:
         turn.deferred_action = requested_action
 
 
 def _update_appointment_reference(
     appointments: AppointmentState,
-    requested_action: str,
+    requested_action: Action,
     appointment_reference: str | None,
 ) -> None:
     if requested_action not in APPOINTMENT_ACTIONS:
@@ -59,3 +61,30 @@ def _update_appointment_reference(
         return
     if appointments.appointment_reference is None and appointment_reference:
         appointments.appointment_reference = appointment_reference
+
+
+def _normalize_full_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return FullName(value).value
+    except ValueError:
+        return None
+
+
+def _normalize_phone(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return extract_phone(value)
+    except ValueError:
+        return None
+
+
+def _normalize_dob(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return DateOfBirth(value).value
+    except ValueError:
+        return None

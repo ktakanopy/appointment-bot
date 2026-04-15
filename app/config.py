@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -18,24 +19,27 @@ def _env_int(name: str, default: int) -> int:
     return int(value)
 
 
-@dataclass(frozen=True, slots=True)
-class ProviderSettings:
+class ProviderSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     provider_name: str
     model_name: str
     api_key: str | None
     timeout_seconds: int
 
 
-@dataclass(frozen=True, slots=True)
-class TracingSettings:
+class TracingSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     enabled: bool
     public_key: str | None
     secret_key: str | None
     host: str | None
 
 
-@dataclass(frozen=True, slots=True)
-class Settings:
+class Settings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     remembered_identity_ttl_hours: int
     session_ttl_minutes: int
     max_verification_attempts: int

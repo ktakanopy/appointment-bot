@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.domain.models import RememberedIdentity, RememberedIdentityStatus
-from app.repositories.in_memory import InMemoryRememberedIdentityRepository
+from app.infrastructure.persistence.in_memory import InMemoryRememberedIdentityRepository
 
 
 def test_in_memory_identity_repository_round_trip():

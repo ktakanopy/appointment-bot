@@ -1,27 +1,27 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Callable
 from uuid import uuid4
 
+from app.domain.errors import (
+    AppointmentNotCancelableError,
+    AppointmentNotConfirmableError,
+    AppointmentNotOwnedError,
+    RepositoryUnavailableError,
+)
 from app.domain.models import (
     ActionResult,
     Appointment,
-    AppointmentStatus,
+    DateOfBirth,
+    FullName,
     Patient,
+    Phone,
     RememberedIdentity,
     RememberedIdentityStatus,
 )
-from app.domain.parsing import normalize_dob, normalize_name, normalize_phone
-from app.repositories.appointment_repository import AppointmentRepository
-from app.repositories.patient_repository import PatientRepository
-from app.repositories.remembered_identity_repository import RememberedIdentityRepository
-
-
-class RepositoryUnavailableError(RuntimeError):
-    pass
+from app.domain.ports import AppointmentRepository, PatientRepository, RememberedIdentityRepository
 
 
 class VerificationService:
@@ -31,9 +31,9 @@ class VerificationService:
     def verify_identity(self, full_name: str, phone: str, dob: str) -> Patient | None:
         try:
             return self.patient_repository.find_by_identity(
-                normalize_name(full_name),
-                normalize_phone(phone),
-                normalize_dob(dob) or dob,
+                FullName(full_name),
+                Phone(phone),
+                DateOfBirth(dob),
             )
         except Exception as error:  # pragma: no cover - defensive boundary
             raise RepositoryUnavailableError("patient repository unavailable") from error
@@ -60,24 +60,32 @@ class AppointmentService:
         if appointment is None:
             raise ValueError("appointment not found")
         try:
-            updated = self.appointment_repository.confirm(patient_id, appointment_id)
+            if not appointment.is_owned_by(patient_id):
+                raise AppointmentNotOwnedError(appointment_id)
+            updated, outcome = appointment.confirm()
+            saved = self.appointment_repository.save(updated)
         except Exception as error:  # pragma: no cover - defensive boundary
+            if isinstance(error, (AppointmentNotOwnedError, AppointmentNotConfirmableError)):
+                raise
             raise RepositoryUnavailableError("appointment repository unavailable") from error
 
-        outcome = "already_confirmed" if appointment.status == AppointmentStatus.CONFIRMED else "confirmed"
-        return updated, ActionResult("confirm_appointment", outcome, appointment_id)
+        return saved, ActionResult("confirm_appointment", outcome, appointment_id)
 
     def cancel_appointment(self, patient_id: str, appointment_id: str) -> tuple[Appointment, ActionResult]:
         appointment = self.get_appointment(appointment_id)
         if appointment is None:
             raise ValueError("appointment not found")
         try:
-            updated = self.appointment_repository.cancel(patient_id, appointment_id)
+            if not appointment.is_owned_by(patient_id):
+                raise AppointmentNotOwnedError(appointment_id)
+            updated, outcome = appointment.cancel()
+            saved = self.appointment_repository.save(updated)
         except Exception as error:  # pragma: no cover - defensive boundary
+            if isinstance(error, (AppointmentNotOwnedError, AppointmentNotCancelableError)):
+                raise
             raise RepositoryUnavailableError("appointment repository unavailable") from error
 
-        outcome = "already_canceled" if appointment.status == AppointmentStatus.CANCELED else "canceled"
-        return updated, ActionResult("cancel_appointment", outcome, appointment_id)
+        return saved, ActionResult("cancel_appointment", outcome, appointment_id)
 
 
 class RememberedIdentityService:
@@ -94,9 +102,9 @@ class RememberedIdentityService:
     def build_fingerprint(self, full_name: str | None, phone: str | None, dob: str | None, patient_id: str) -> str:
         payload = "|".join(
             [
-                normalize_name(full_name or ""),
-                normalize_phone(phone or ""),
-                normalize_dob(dob or "") or (dob or ""),
+                self._normalize_full_name(full_name),
+                self._normalize_phone(phone),
+                self._normalize_dob(dob),
                 patient_id,
             ]
         )
@@ -155,12 +163,32 @@ class RememberedIdentityService:
         }
 
     def _mark_expired(self, identity: RememberedIdentity) -> RememberedIdentity:
-        return replace(
-            identity,
-            status=RememberedIdentityStatus.EXPIRED if identity.revoked_at is None else RememberedIdentityStatus.REVOKED,
+        return identity.model_copy(
+            update={
+                "status": (
+                    RememberedIdentityStatus.EXPIRED
+                    if identity.revoked_at is None
+                    else RememberedIdentityStatus.REVOKED
+                )
+            }
         )
 
     def _is_active(self, identity: RememberedIdentity) -> bool:
         if identity.revoked_at is not None:
             return False
         return identity.expires_at > self.now_factory()
+
+    def _normalize_full_name(self, value: str | None) -> str:
+        if not value:
+            return ""
+        return FullName(value).value
+
+    def _normalize_phone(self, value: str | None) -> str:
+        if not value:
+            return ""
+        return Phone(value).digits
+
+    def _normalize_dob(self, value: str | None) -> str:
+        if not value:
+            return ""
+        return DateOfBirth(value).value

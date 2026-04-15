@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+from typing import Any
 
 from app.config import Settings
+
 
 def build_tracer(settings: Settings) -> object | None:
     if not settings.tracing.enabled:
@@ -35,11 +37,11 @@ def get_logger() -> logging.Logger:
     return logger
 
 
-def log_event(logger: logging.Logger, node: str, state: dict, **extra: object) -> None:
-    verification = state.get("verification", {})
-    turn = state.get("turn", {})
+def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) -> None:
+    verification = _as_mapping(_state_value(state, "verification"))
+    turn = _as_mapping(_state_value(state, "turn"))
     payload = {
-        "thread_id": state.get("thread_id"),
+        "thread_id": _state_value(state, "thread_id"),
         "node": node,
         "requested_action": turn.get("requested_action"),
         "verified": verification.get("verified"),
@@ -101,3 +103,19 @@ def _redact_message(value: str | None) -> str | None:
     result = re.sub(r"\b\d{2}/\d{2}/\d{4}\b", "[redacted-dob]", result)
     result = re.sub(r"\b\d{10,}\b", "[redacted-phone]", result)
     return result
+
+
+def _state_value(state: Any, key: str) -> Any:
+    if isinstance(state, dict):
+        return state.get(key)
+    return getattr(state, key, None)
+
+
+def _as_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if value is None:
+        return {}
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    return {}

@@ -56,8 +56,7 @@ class OpenAIProvider:
         return self._complete_model(
             event_name="generate_response",
             response_model=AssistantResponse,
-            system_message=RESPONSE_PROMPT
-            + "\nKeep the same meaning as fallback_text and do not invent new policy decisions.",
+            system_message=RESPONSE_PROMPT + "\nKeep the same meaning as fallback_text and do not invent new policy decisions.",
             payload=payload,
         )
 
@@ -88,7 +87,7 @@ class OpenAIProvider:
         try:
             content = self._complete(
                 system_message=system_message,
-                user_message=json.dumps(payload, ensure_ascii=True),
+                user_message=json.dumps(payload, ensure_ascii=True, default=str),
             )
             result = response_model.model_validate_json(content)
         except Exception as exc:

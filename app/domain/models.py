@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from datetime import datetime as dt
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class AppointmentStatus(str, Enum):
@@ -11,16 +13,89 @@ class AppointmentStatus(str, Enum):
     CANCELED = "canceled"
 
 
-@dataclass(slots=True)
-class Patient:
+class FullName(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    value: str
+
+    def __init__(self, raw: str):
+        super().__init__(value=raw)
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, value: str) -> str:
+        normalized = " ".join(part for part in value.strip().split())
+        if len(normalized.split()) < 2:
+            raise ValueError("full name requires first and last name")
+        return normalized.title()
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class Phone(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    digits: str
+
+    def __init__(self, raw: str):
+        super().__init__(digits=raw)
+
+    @field_validator("digits")
+    @classmethod
+    def validate_digits(cls, value: str) -> str:
+        digits = "".join(character for character in value if character.isdigit())
+        if len(digits) < 10:
+            raise ValueError("phone requires at least 10 digits")
+        return digits
+
+    def __str__(self) -> str:
+        return self.digits
+
+
+class DateOfBirth(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    value: str
+
+    def __init__(self, raw: str):
+        super().__init__(value=raw)
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, value: str) -> str:
+        cleaned = value.strip()
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                return dt.strptime(cleaned, fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        raise ValueError("date of birth must use YYYY-MM-DD or DD/MM/YYYY")
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class Patient(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     id: str
-    full_name: str
-    phone: str
-    date_of_birth: str
+    full_name: FullName
+    phone: Phone
+    date_of_birth: DateOfBirth
+
+    def __init__(self, id: str, full_name: FullName, phone: Phone, date_of_birth: DateOfBirth):
+        super().__init__(
+            id=id,
+            full_name=full_name,
+            phone=phone,
+            date_of_birth=date_of_birth,
+        )
 
 
-@dataclass(slots=True)
-class Appointment:
+class Appointment(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     id: str
     patient_id: str
     date: str
@@ -28,12 +103,63 @@ class Appointment:
     doctor: str
     status: AppointmentStatus
 
+    def __init__(
+        self,
+        id: str,
+        patient_id: str,
+        date: str,
+        time: str,
+        doctor: str,
+        status: AppointmentStatus,
+    ):
+        super().__init__(
+            id=id,
+            patient_id=patient_id,
+            date=date,
+            time=time,
+            doctor=doctor,
+            status=status,
+        )
 
-@dataclass(slots=True)
-class ActionResult:
+    def confirm(self) -> tuple[Appointment, str]:
+        if self.status == AppointmentStatus.CONFIRMED:
+            return self, "already_confirmed"
+        if self.status != AppointmentStatus.SCHEDULED:
+            from app.domain.errors import AppointmentNotConfirmableError
+
+            raise AppointmentNotConfirmableError(self.id)
+        return self.model_copy(update={"status": AppointmentStatus.CONFIRMED}), "confirmed"
+
+    def cancel(self) -> tuple[Appointment, str]:
+        if self.status == AppointmentStatus.CANCELED:
+            return self, "already_canceled"
+        if self.status not in {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}:
+            from app.domain.errors import AppointmentNotCancelableError
+
+            raise AppointmentNotCancelableError(self.id)
+        return self.model_copy(update={"status": AppointmentStatus.CANCELED}), "canceled"
+
+    def is_owned_by(self, patient_id: str | None) -> bool:
+        return bool(patient_id and self.patient_id == patient_id)
+
+    @property
+    def is_confirmable(self) -> bool:
+        return self.status == AppointmentStatus.SCHEDULED
+
+    @property
+    def is_cancelable(self) -> bool:
+        return self.status in {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}
+
+
+class ActionResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     action: str
     outcome: str
     appointment_id: str | None = None
+
+    def __init__(self, action: str, outcome: str, appointment_id: str | None = None):
+        super().__init__(action=action, outcome=outcome, appointment_id=appointment_id)
 
 
 class RememberedIdentityStatus(str, Enum):
@@ -43,8 +169,9 @@ class RememberedIdentityStatus(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
-@dataclass(slots=True)
-class RememberedIdentity:
+class RememberedIdentity(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     remembered_identity_id: str
     patient_id: str
     display_name: str | None
@@ -53,3 +180,25 @@ class RememberedIdentity:
     expires_at: datetime
     revoked_at: datetime | None
     status: RememberedIdentityStatus
+
+    def __init__(
+        self,
+        remembered_identity_id: str,
+        patient_id: str,
+        display_name: str | None,
+        verification_fingerprint: str,
+        issued_at: datetime,
+        expires_at: datetime,
+        revoked_at: datetime | None,
+        status: RememberedIdentityStatus,
+    ):
+        super().__init__(
+            remembered_identity_id=remembered_identity_id,
+            patient_id=patient_id,
+            display_name=display_name,
+            verification_fingerprint=verification_fingerprint,
+            issued_at=issued_at,
+            expires_at=expires_at,
+            revoked_at=revoked_at,
+            status=status,
+        )

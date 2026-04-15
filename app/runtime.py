@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 from typing import Any, Protocol
 
+from pydantic import BaseModel, ConfigDict
+
+from app.application.chat_service import ChatService
+from app.application.session_service import SessionService
 from app.config import Settings, load_settings
 from app.domain.services import RememberedIdentityService
 from app.graph.builder import build_graph
+from app.infrastructure.persistence.in_memory import InMemoryRememberedIdentityRepository
 from app.llm.base import LLMProvider
 from app.llm.factory import build_provider
 from app.observability import build_tracer, get_logger
-from app.repositories.in_memory import InMemoryRememberedIdentityRepository
 
 
 class InvokableGraph(Protocol):
@@ -18,58 +21,17 @@ class InvokableGraph(Protocol):
         ...
 
 
-@dataclass(slots=True)
-class SessionBootstrap:
-    """Temporary bootstrap state injected into the next chat turn for a session.
-
-    This record is created when a new session can start from previously restored
-    identity information. Its state payload is merged into the first eligible
-    chat request so the graph can begin with the correct verification context.
-    The timestamp is used to expire stale bootstrap entries that were never
-    consumed.
-    """
-
-    state: dict[str, Any]
-    created_at: float
-
-
-@dataclass(slots=True)
-class SessionRecord:
-    """Tracks a live API session registered in the in-memory runtime.
-
-    The record keeps the public session identifier, the graph thread identifier,
-    monotonic timestamps for creation and last activity, the latest remembered
-    identity id associated with the session, and optional bootstrap state for
-    the next eligible chat turn. These timestamps are used to validate active
-    sessions and to evict idle sessions after the configured timeout.
-    """
-
-    session_id: str
-    thread_id: str
-    created_at: float
-    last_seen_at: float
-    remembered_identity_id: str | None = None
-    bootstrap: SessionBootstrap | None = None
-
-
-@dataclass(slots=True)
-class RuntimeContext:
-    """Holds the shared application runtime used by request handlers.
-
-    A single instance is created at application startup and stored on the FastAPI
-    app state. It groups immutable runtime dependencies such as settings, logger,
-    tracer, graph, provider, and identity service together with mutable in-memory
-    session structures. Route handlers read and update this context to resolve
-    sessions, restore remembered identity, and execute the conversation graph.
-    """
+class RuntimeContext(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     settings: Settings
     logger: logging.Logger
     tracer: object | None
-    graph: InvokableGraph
-    provider: LLMProvider
+    graph: Any
+    provider: Any
     identity_service: RememberedIdentityService
-    sessions: dict[str, SessionRecord] = field(default_factory=dict)
+    session_service: SessionService
+    chat_service: ChatService
 
 
 def create_runtime(settings: Settings | None = None) -> RuntimeContext:
@@ -79,6 +41,8 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
     provider = build_provider(settings, logger, tracer=tracer)
     identity_repository = InMemoryRememberedIdentityRepository()
     identity_service = RememberedIdentityService(identity_repository, settings.remembered_identity_ttl_hours)
+    session_service = SessionService(settings, identity_service)
+    chat_service = ChatService(identity_service, session_service)
     graph = build_graph(
         settings=settings,
         logger=logger,
@@ -92,6 +56,8 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
         graph=graph,
         provider=provider,
         identity_service=identity_service,
+        session_service=session_service,
+        chat_service=chat_service,
     )
 
 

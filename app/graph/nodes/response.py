@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.domain.actions import Action
 from app.graph.state import ConversationState, turn_state, verification_state
 from app.observability import log_event
 
@@ -8,7 +9,7 @@ def make_help_node(logger):
     def help_or_unknown(state: ConversationState) -> ConversationState:
         verification = verification_state(state)
         turn = turn_state(state)
-        turn.requested_action = "help"
+        turn.requested_action = Action.HELP
         if verification.verified:
             turn.response_text = (
                 "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one."
