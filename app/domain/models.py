@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from datetime import datetime as dt
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -74,7 +73,7 @@ class DateOfBirth(BaseModel):
         cleaned = value.strip()
         for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
             try:
-                return dt.strptime(cleaned, fmt).strftime("%Y-%m-%d")
+                return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
             except ValueError:
                 continue
         raise ValueError("date of birth must use YYYY-MM-DD or DD/MM/YYYY")
