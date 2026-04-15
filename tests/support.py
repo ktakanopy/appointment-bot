@@ -8,7 +8,7 @@ from app.graph import text_extraction
 from app.infrastructure.persistence.in_memory import InMemoryAppointmentRepository, InMemoryPatientRepository
 from app.infrastructure.workflow.in_memory_checkpoint import InMemoryCheckpointStore
 from app.infrastructure.workflow.langgraph_runner import LangGraphConversationWorkflow
-from app.llm.schemas import AssistantResponse, IntentPrediction, JudgeResult
+from app.llm.schemas import IntentPrediction, JudgeResult
 
 
 class TestProvider:
@@ -22,9 +22,6 @@ class TestProvider:
             dob=text_extraction.extract_dob(message),
             appointment_reference=text_extraction.extract_appointment_reference(message),
         )
-
-    def generate_response(self, state, fallback_text):
-        return AssistantResponse(response_text=fallback_text)
 
     def judge(self, scenario, transcript, observed_outcomes):
         return JudgeResult(status="pass", summary="Test judge completed.", score=1.0)

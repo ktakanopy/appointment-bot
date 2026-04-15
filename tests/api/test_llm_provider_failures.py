@@ -17,9 +17,6 @@ class BrokenProvider:
     def interpret(self, message, state):
         raise RuntimeError("interpret failed")
 
-    def generate_response(self, state, fallback_text):
-        raise RuntimeError("response failed")
-
     def judge(self, scenario, transcript, observed_outcomes):
         raise RuntimeError("judge failed")
 
