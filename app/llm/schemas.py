@@ -19,10 +19,6 @@ class IntentPrediction(BaseModel):
     appointment_reference: str | None = None
 
 
-class AssistantResponse(BaseModel):
-    response_text: str
-
-
 class JudgeResult(BaseModel):
     status: Literal["pass", "fail", "error"]
     summary: str

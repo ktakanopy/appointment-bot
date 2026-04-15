@@ -53,16 +53,8 @@ def test_openai_provider_parses_structured_intent_response():
     assert result.full_name == "Ana Silva"
 
 
-def test_openai_provider_parses_structured_response_generation():
-    provider = _provider('{"response_text":"Your appointment is confirmed."}')
-
-    result = provider.generate_response({"requested_operation": "confirm_appointment"}, "fallback")
-
-    assert result.response_text == "Your appointment is confirmed."
-
-
 def test_openai_provider_raises_for_empty_content():
     provider = _provider("")
 
     with pytest.raises(ValueError, match="empty content"):
-        provider.generate_response({"requested_operation": "confirm_appointment"}, "fallback")
+        provider.interpret("show my appointments", {"verified": False})

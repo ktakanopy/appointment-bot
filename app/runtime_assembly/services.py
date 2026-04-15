@@ -24,7 +24,7 @@ def build_services(
     appointment_service = AppointmentService(repositories.appointment_repository)
     identity_service = RememberedIdentityService(identity_repository=repositories.identity_repository, ttl_hours=settings.remembered_identity_ttl_hours)
     session_service = SessionService(repositories.session_store, settings.session_ttl_minutes)
-    response_service = ChatResponseService(provider=provider, response_policy=ResponsePolicy())
+    response_service = ChatResponseService(response_policy=ResponsePolicy())
     return ServiceBundle(
         provider=provider,
         verification_service=verification_service,
