@@ -1,4 +1,4 @@
-from app.models import ActionOutcome, ConversationOperation, ConversationWorkflowInput
+from app.models import ActionOutcome, ConversationOperation
 from tests.support import build_test_workflow
 
 
@@ -11,17 +11,15 @@ def test_cancel_then_reroute_back_to_list():
         "11999998888",
         "1990-05-10",
     ]:
-        workflow.run(ConversationWorkflowInput(thread_id="graph-cancel", incoming_message=message))
+        workflow.run("graph-cancel", message)
 
-    canceled = workflow.run(ConversationWorkflowInput(thread_id="graph-cancel", incoming_message="cancel the first one"))
-    refreshed = workflow.run(
-        ConversationWorkflowInput(thread_id="graph-cancel", incoming_message="show me my appointments again")
-    )
+    canceled = workflow.run("graph-cancel", "cancel the first one")
+    refreshed = workflow.run("graph-cancel", "show me my appointments again")
 
     assert canceled.turn.operation_result.outcome == ActionOutcome.CANCELED
-    assert canceled.listed_appointments[0].status == "canceled"
+    assert canceled.appointments.listed_appointments[0].status == "canceled"
     assert refreshed.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
-    assert refreshed.listed_appointments[0].status == "canceled"
+    assert refreshed.appointments.listed_appointments[0].status == "canceled"
 
 
 def test_cancel_second_reference_replaces_previous_selection():
@@ -33,14 +31,12 @@ def test_cancel_second_reference_replaces_previous_selection():
         "11999998888",
         "1990-05-10",
     ]:
-        workflow.run(ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message=message))
+        workflow.run("graph-cancel-second", message)
 
-    workflow.run(ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message="confirm the first one"))
-    canceled = workflow.run(
-        ConversationWorkflowInput(thread_id="graph-cancel-second", incoming_message="cancel the second one")
-    )
+    workflow.run("graph-cancel-second", "confirm the first one")
+    canceled = workflow.run("graph-cancel-second", "cancel the second one")
 
     assert canceled.turn.operation_result.outcome == ActionOutcome.CANCELED
     assert canceled.turn.operation_result.appointment_id == "a2"
-    assert canceled.listed_appointments[0].status == "confirmed"
-    assert canceled.listed_appointments[1].status == "canceled"
+    assert canceled.appointments.listed_appointments[0].status == "confirmed"
+    assert canceled.appointments.listed_appointments[1].status == "canceled"

@@ -4,6 +4,7 @@ from app.graph.state import ConversationState
 from app.models import (
     ChatTurnResponse,
     ConversationOperation,
+    NewSessionResponseData,
     ResponseKey,
 )
 
@@ -28,6 +29,13 @@ STATIC_RESPONSES: dict[ResponseKey, str] = {
     ResponseKey.CANCEL_AMBIGUOUS_REFERENCE: "I couldn't tell which appointment you want to cancel. Please choose by number or date.",
 }
 
+APPOINTMENT_UPDATE_RESPONSES: dict[ResponseKey, str] = {
+    ResponseKey.CONFIRM_SUCCESS: "Confirmed. Here is your updated appointment list.",
+    ResponseKey.CONFIRM_ALREADY_CONFIRMED: "That appointment was already confirmed. Here is your updated appointment list.",
+    ResponseKey.CANCEL_SUCCESS: "Canceled. Here is your updated appointment list.",
+    ResponseKey.CANCEL_ALREADY_CANCELED: "That appointment was already canceled. Here is your updated appointment list.",
+}
+
 
 def build_response_text(state: ConversationState) -> str:
     response_key = state.turn.response_key
@@ -39,22 +47,8 @@ def build_response_text(state: ConversationState) -> str:
         lines = ["Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments."]
         lines.extend(_appointment_lines(state))
         return "\n".join(lines)
-    if response_key == ResponseKey.CONFIRM_SUCCESS:
-        if state.turn.subject_appointment is None:
-            return "I couldn't complete that request right now. Please try again."
-        return _with_appointments_list("Confirmed. Here is your updated appointment list.", state)
-    if response_key == ResponseKey.CONFIRM_ALREADY_CONFIRMED:
-        if state.turn.subject_appointment is None:
-            return "I couldn't complete that request right now. Please try again."
-        return _with_appointments_list("That appointment was already confirmed. Here is your updated appointment list.", state)
-    if response_key == ResponseKey.CANCEL_SUCCESS:
-        if state.turn.subject_appointment is None:
-            return "I couldn't complete that request right now. Please try again."
-        return _with_appointments_list("Canceled. Here is your updated appointment list.", state)
-    if response_key == ResponseKey.CANCEL_ALREADY_CANCELED:
-        if state.turn.subject_appointment is None:
-            return "I couldn't complete that request right now. Please try again."
-        return _with_appointments_list("That appointment was already canceled. Here is your updated appointment list.", state)
+    if response_key in APPOINTMENT_UPDATE_RESPONSES:
+        return _build_appointment_update_response(state, response_key)
     return STATIC_RESPONSES.get(response_key, "I couldn't complete that request right now. Please try again.")
 
 
@@ -93,12 +87,18 @@ def build_chat_response(thread_id: str, response_text: str, state: ConversationS
     )
 
 
-def build_new_session_response(session) -> dict[str, str]:
-    return {
-        "session_id": session.session_id,
-        "thread_id": session.thread_id,
-        "response": "Hello, I'm CAPY. I can help you with your appointments.",
-    }
+def build_new_session_response(session) -> NewSessionResponseData:
+    return NewSessionResponseData(
+        session_id=session.session_id,
+        thread_id=session.thread_id,
+        response="Hello, I'm CAPY. I can help you with your appointments.",
+    )
+
+
+def _build_appointment_update_response(state: ConversationState, response_key: ResponseKey) -> str:
+    if state.turn.subject_appointment is None:
+        return "I couldn't complete that request right now. Please try again."
+    return _with_appointments_list(APPOINTMENT_UPDATE_RESPONSES[response_key], state)
 
 
 def _with_appointments_list(text: str, state: ConversationState) -> str:

@@ -21,6 +21,14 @@ from app.runtime import RuntimeContext, close_runtime, create_runtime, reset_run
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage the FastAPI application lifecycle.
+
+    This function is an async context manager used by FastAPI to run startup
+    and shutdown logic around the application. It creates the shared runtime
+    before the app starts serving requests and closes it when the app stops,
+    which is useful because it centralizes dependency setup and cleanup in one
+    place instead of rebuilding runtime state on every request.
+    """
     app.state.runtime = create_runtime()
     yield
     close_runtime(getattr(app.state, "runtime", None))
@@ -38,6 +46,13 @@ def get_runtime(request: Request) -> RuntimeContext:
 
 
 def reset_runtime(target_app=None, settings=None) -> RuntimeContext:
+    """Rebuild the shared application runtime.
+
+    This function replaces the current runtime stored on the FastAPI app with a
+    freshly created one, optionally using custom settings. It is useful for
+    tests and runtime reconfiguration because it gives the application a clean
+    set of dependencies without restarting the whole process.
+    """
     if target_app is None:
         target_app = app
     return reset_runtime_context(target_app, settings=settings)
@@ -49,7 +64,7 @@ def create_session(
 ) -> NewSessionResponseData:
     runtime.session_service.cleanup_expired()
     session = runtime.session_service.create_session()
-    return NewSessionResponseData.model_validate(build_new_session_response(session))
+    return build_new_session_response(session)
 
 
 @app.post("/chat", response_model=ChatTurnResponse)

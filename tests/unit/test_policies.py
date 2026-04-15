@@ -16,9 +16,30 @@ def test_missing_verification_fields_tracks_unset_values():
 
 
 def test_action_and_appointment_rules_cover_status_and_ownership():
-    scheduled = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.SCHEDULED)
-    confirmed = Appointment("a2", "p1", "2026-04-23", "09:30", "Dr. Lima", AppointmentStatus.CONFIRMED)
-    canceled = Appointment("a3", "p1", "2026-04-25", "11:00", "Dr. Lima", AppointmentStatus.CANCELED)
+    scheduled = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.SCHEDULED,
+    )
+    confirmed = Appointment(
+        id="a2",
+        patient_id="p1",
+        date="2026-04-23",
+        time="09:30",
+        doctor="Dr. Lima",
+        status=AppointmentStatus.CONFIRMED,
+    )
+    canceled = Appointment(
+        id="a3",
+        patient_id="p1",
+        date="2026-04-25",
+        time="11:00",
+        doctor="Dr. Lima",
+        status=AppointmentStatus.CANCELED,
+    )
 
     assert ConversationOperation.LIST_APPOINTMENTS.requires_verification is True
     assert ConversationOperation.HELP.requires_verification is False
@@ -51,22 +72,22 @@ def test_build_response_text_returns_text_for_every_response_key(response_key: R
         ResponseKey.CANCEL_ALREADY_CANCELED,
     }:
         state.turn.subject_appointment = Appointment(
-            "a1",
-            "p1",
-            "2026-04-20",
-            "14:00",
-            "Dr. Costa",
-            AppointmentStatus.SCHEDULED,
+            id="a1",
+            patient_id="p1",
+            date="2026-04-20",
+            time="14:00",
+            doctor="Dr. Costa",
+            status=AppointmentStatus.SCHEDULED,
         )
     if response_key == ResponseKey.APPOINTMENTS_LIST:
         state.appointments.listed_appointments = [
             Appointment(
-                "a1",
-                "p1",
-                "2026-04-20",
-                "14:00",
-                "Dr. Costa",
-                AppointmentStatus.SCHEDULED,
+                id="a1",
+                patient_id="p1",
+                date="2026-04-20",
+                time="14:00",
+                doctor="Dr. Costa",
+                status=AppointmentStatus.SCHEDULED,
             )
         ]
     state.turn.response_key = response_key

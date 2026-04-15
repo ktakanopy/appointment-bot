@@ -7,7 +7,14 @@ from app.models import ActionOutcome, Appointment, AppointmentNotConfirmableErro
 
 
 def test_appointment_confirm_is_idempotent_for_confirmed_status():
-    appointment = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.CONFIRMED)
+    appointment = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.CONFIRMED,
+    )
 
     updated, outcome = appointment.confirm()
 
@@ -16,7 +23,14 @@ def test_appointment_confirm_is_idempotent_for_confirmed_status():
 
 
 def test_appointment_confirm_transitions_scheduled_status():
-    appointment = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.SCHEDULED)
+    appointment = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.SCHEDULED,
+    )
 
     updated, outcome = appointment.confirm()
 
@@ -25,14 +39,28 @@ def test_appointment_confirm_transitions_scheduled_status():
 
 
 def test_appointment_confirm_rejects_canceled_status():
-    appointment = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.CANCELED)
+    appointment = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.CANCELED,
+    )
 
     with pytest.raises(AppointmentNotConfirmableError):
         appointment.confirm()
 
 
 def test_appointment_cancel_is_idempotent_for_canceled_status():
-    appointment = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.CANCELED)
+    appointment = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.CANCELED,
+    )
 
     updated, outcome = appointment.cancel()
 
@@ -41,8 +69,22 @@ def test_appointment_cancel_is_idempotent_for_canceled_status():
 
 
 def test_appointment_cancel_transitions_scheduled_or_confirmed_status():
-    scheduled = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.SCHEDULED)
-    confirmed = Appointment("a2", "p1", "2026-04-23", "09:30", "Dr. Lima", AppointmentStatus.CONFIRMED)
+    scheduled = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.SCHEDULED,
+    )
+    confirmed = Appointment(
+        id="a2",
+        patient_id="p1",
+        date="2026-04-23",
+        time="09:30",
+        doctor="Dr. Lima",
+        status=AppointmentStatus.CONFIRMED,
+    )
 
     scheduled_updated, scheduled_outcome = scheduled.cancel()
     confirmed_updated, confirmed_outcome = confirmed.cancel()
@@ -58,11 +100,25 @@ def test_appointment_cancel_rejects_unhandled_status():
         pass
 
     with pytest.raises(ValidationError):
-        Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", UnknownStatus("other"))
+        Appointment(
+            id="a1",
+            patient_id="p1",
+            date="2026-04-20",
+            time="14:00",
+            doctor="Dr. Costa",
+            status=UnknownStatus("other"),
+        )
 
 
 def test_appointment_ownership_and_state_properties():
-    appointment = Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.SCHEDULED)
+    appointment = Appointment(
+        id="a1",
+        patient_id="p1",
+        date="2026-04-20",
+        time="14:00",
+        doctor="Dr. Costa",
+        status=AppointmentStatus.SCHEDULED,
+    )
 
     assert appointment.is_owned_by("p1") is True
     assert appointment.is_owned_by("p2") is False

@@ -37,13 +37,6 @@ class ConversationOperation(str, Enum):
         }
 
     @property
-    def is_appointment_mutation(self) -> bool:
-        return self in {
-            ConversationOperation.CONFIRM_APPOINTMENT,
-            ConversationOperation.CANCEL_APPOINTMENT,
-        }
-
-    @property
     def triggers_verification_flow(self) -> bool:
         return self in {
             ConversationOperation.HELP,
@@ -203,14 +196,6 @@ class Patient(BaseModel):
     phone: Phone
     date_of_birth: DateOfBirth
 
-    def __init__(self, id: str, full_name: FullName, phone: Phone, date_of_birth: DateOfBirth):
-        super().__init__(
-            id=id,
-            full_name=full_name,
-            phone=phone,
-            date_of_birth=date_of_birth,
-        )
-
 
 class Appointment(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -221,24 +206,6 @@ class Appointment(BaseModel):
     time: str
     doctor: str
     status: AppointmentStatus
-
-    def __init__(
-        self,
-        id: str,
-        patient_id: str,
-        date: str,
-        time: str,
-        doctor: str,
-        status: AppointmentStatus,
-    ):
-        super().__init__(
-            id=id,
-            patient_id=patient_id,
-            date=date,
-            time=time,
-            doctor=doctor,
-            status=status,
-        )
 
     def confirm(self) -> tuple[Appointment, ActionOutcome]:
         if self.status == AppointmentStatus.CONFIRMED:

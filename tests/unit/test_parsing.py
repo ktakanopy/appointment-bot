@@ -26,8 +26,22 @@ def test_resolve_appointment_reference_supports_ordinals_and_dates():
     from app.models import Appointment, AppointmentStatus
 
     appointments = [
-        Appointment("a1", "p1", "2026-04-20", "14:00", "Dr. Costa", AppointmentStatus.SCHEDULED),
-        Appointment("a2", "p1", "2026-04-23", "09:30", "Dr. Lima", AppointmentStatus.CONFIRMED),
+        Appointment(
+            id="a1",
+            patient_id="p1",
+            date="2026-04-20",
+            time="14:00",
+            doctor="Dr. Costa",
+            status=AppointmentStatus.SCHEDULED,
+        ),
+        Appointment(
+            id="a2",
+            patient_id="p1",
+            date="2026-04-23",
+            time="09:30",
+            doctor="Dr. Lima",
+            status=AppointmentStatus.CONFIRMED,
+        ),
     ]
 
     assert parsing.resolve_appointment_reference("0", appointments) == appointments[0]
@@ -40,8 +54,22 @@ def test_resolve_appointment_reference_returns_none_for_duplicate_date_matches()
     from app.models import Appointment, AppointmentStatus
 
     appointments = [
-        Appointment("a1", "p1", "2026-04-20", "09:00", "Dr. Costa", AppointmentStatus.SCHEDULED),
-        Appointment("a2", "p1", "2026-04-20", "14:00", "Dr. Lima", AppointmentStatus.SCHEDULED),
+        Appointment(
+            id="a1",
+            patient_id="p1",
+            date="2026-04-20",
+            time="09:00",
+            doctor="Dr. Costa",
+            status=AppointmentStatus.SCHEDULED,
+        ),
+        Appointment(
+            id="a2",
+            patient_id="p1",
+            date="2026-04-20",
+            time="14:00",
+            doctor="Dr. Lima",
+            status=AppointmentStatus.SCHEDULED,
+        ),
     ]
 
     assert parsing.resolve_appointment_reference("2026-04-20", appointments) is None

@@ -1,4 +1,4 @@
-from app.models import ActionOutcome, ConversationOperation, ConversationWorkflowInput
+from app.models import ActionOutcome, ConversationOperation
 from app.llm.schemas import IntentPrediction, JudgeResult
 from tests.support import build_test_workflow
 
@@ -11,11 +11,9 @@ def test_confirm_ordinal_after_verification_uses_auto_list_context():
         "11999998888",
         "1990-05-10",
     ]:
-        workflow.run(ConversationWorkflowInput(thread_id="graph-ambiguous", incoming_message=message))
+        workflow.run("graph-ambiguous", message)
 
-    result = workflow.run(
-        ConversationWorkflowInput(thread_id="graph-ambiguous", incoming_message="confirm the first one")
-    )
+    result = workflow.run("graph-ambiguous", "confirm the first one")
 
     assert result.turn.issue is None
     assert result.turn.operation_result is not None
@@ -59,11 +57,9 @@ def test_history_context_supports_follow_up_reference_resolution():
         "1990-05-10",
         "confirm the first one",
     ]:
-        workflow.run(ConversationWorkflowInput(thread_id="graph-history-reference", incoming_message=message))
+        workflow.run("graph-history-reference", message)
 
-    result = workflow.run(
-        ConversationWorkflowInput(thread_id="graph-history-reference", incoming_message="cancel it")
-    )
+    result = workflow.run("graph-history-reference", "cancel it")
 
     assert result.turn.issue is None
     assert result.turn.operation_result is not None

@@ -15,6 +15,7 @@ from app.models import (
     SessionNotFoundError,
     SessionRecord,
 )
+from app.repositories import InMemorySessionStore
 
 
 class VerificationService:
@@ -71,7 +72,7 @@ class AppointmentService:
 class SessionService:
     def __init__(
         self,
-        session_store,
+        session_store: InMemorySessionStore,
         session_ttl_minutes: int,
     ):
         self.session_store = session_store

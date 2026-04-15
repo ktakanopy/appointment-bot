@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.models import ConversationWorkflowInput
 from tests.support import build_test_workflow
 
 
@@ -20,4 +19,4 @@ def test_graph_raises_when_provider_fails():
     workflow = build_test_workflow(provider=BrokenProvider())
 
     with pytest.raises(RuntimeError, match="interpret failed"):
-        workflow.run(ConversationWorkflowInput(thread_id="graph-llm-fallback", incoming_message="show my appointments"))
+        workflow.run("graph-llm-fallback", "show my appointments")
