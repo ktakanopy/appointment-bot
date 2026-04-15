@@ -29,8 +29,8 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 ## 4. Runtime behavior
 
-- **`parse_intent_and_entities`** delegates action and entity extraction to the configured provider.
-- **`ChatPresenter.present()`** sends a deterministic fallback string plus workflow state to the provider for the final patient-facing wording.
+- **`interpret`** delegates action and entity extraction to the configured provider.
+- **`ChatResponseService.generate()`** sends a deterministic fallback string plus workflow state to the provider for the final patient-facing wording.
 - Verification, appointment ownership, idempotency, issue classification, and workflow routing stay in deterministic Python code outside the provider.
 
 Provider calls are no longer wrapped in local fallback logic. If the provider raises, the failure propagates instead of silently degrading to deterministic behavior.
@@ -74,21 +74,21 @@ The provider is now used once inside the workflow and once in the application pr
 ```mermaid
 flowchart LR
   subgraph workflow [Workflow]
-    interpret[parse_intent_and_entities]
+    interpret[interpret]
     verify[verify]
     execute[execute_action]
   end
   subgraph application [Application]
-    presenter[ChatPresenter.present]
+    responseService[ChatResponseService.generate]
   end
 ```
 
 | Stage | LLM | Deterministic |
 |------|-----|---------------|
-| `parse_intent_and_entities` | Yes | No |
+| `interpret` | Yes | No |
 | `verify` | No | Yes |
 | `execute_action` | No | Yes |
-| `ChatPresenter.present()` | Yes | Yes (fallback text and workflow state are deterministic inputs) |
+| `ChatResponseService.generate()` | Yes | Yes (fallback text and workflow state are deterministic inputs) |
 
 ## 7. Why not a ReAct agent
 
@@ -96,4 +96,4 @@ For this use case, a ReAct agent would give the model too much control over a wo
 
 ## 8. Error isolation
 
-Tracing failures do not abort the request path, but provider failures still do. `OpenAIProvider.interpret()` and `ChatPresenter.present()` both call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.
+Tracing failures do not abort the request path, but provider failures still do. `OpenAIProvider.interpret()` and `ChatResponseService.generate()` both call the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.

@@ -4,7 +4,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.models import Appointment
+from app.application.contracts.workflow_dtos import WorkflowAppointmentSnapshot
 
 
 class ConversationOperation(str, Enum):
@@ -126,7 +126,7 @@ class TurnSnapshot(BaseModel):
     response_key: ResponseKey | None = None
     issue: TurnIssue | None = None
     operation_result: ConversationOperationResult | None = None
-    subject_appointment: Appointment | None = None
+    subject_appointment: WorkflowAppointmentSnapshot | None = None
 
 
 class ConversationWorkflowInput(BaseModel):
@@ -141,5 +141,5 @@ class ConversationWorkflowResult(BaseModel):
     thread_id: str
     verification: VerificationSnapshot = Field(default_factory=VerificationSnapshot)
     turn: TurnSnapshot = Field(default_factory=TurnSnapshot)
-    listed_appointments: list[Appointment] = Field(default_factory=list)
+    listed_appointments: list[WorkflowAppointmentSnapshot] = Field(default_factory=list)
     appointment_reference: str | None = None

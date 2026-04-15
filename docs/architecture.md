@@ -4,7 +4,7 @@ This document describes the current architecture of the conversational appointme
 
 ## 1. System Overview
 
-The system is split into a browser-facing UI, a FastAPI delivery layer, explicit application use cases, a LangGraph-backed workflow runner, and in-memory infrastructure adapters. LLM inference and optional tracing remain out-of-process dependencies.
+The system is split into a browser-facing UI, a FastAPI delivery layer, explicit application use cases and response services, a LangGraph-backed workflow adapter, and in-memory infrastructure adapters. LLM inference and optional tracing remain out-of-process dependencies.
 
 ```mermaid
 flowchart LR
@@ -67,6 +67,7 @@ The domain no longer contains chatbot-specific action enums or public API result
 - contracts in `app/application/contracts/`
 - ports in `app/application/ports/`
 - presenters in `app/application/presenters/`
+- services in `app/application/services/`
 - use cases in `app/application/use_cases/`
 - session coordination in `app/application/session_service.py`
 
@@ -75,9 +76,15 @@ The primary use cases are:
 - `HandleChatTurnUseCase`
 - `ForgetRememberedIdentityUseCase`
 
+The primary application services are:
+- `ChatResponseService`
+- `ResponsePolicy`
+
 ### Workflow
 
 `app/graph/` remains the deterministic conversation workflow package. It interprets intent, enforces verification, executes domain actions, and produces typed workflow outcomes. Response wording is no longer a graph node responsibility.
+
+`app/infrastructure/workflow/langgraph_runner.py` is the adapter that implements the `ConversationWorkflow` port. It is the single place that maps `ConversationWorkflowInput` into graph input and maps graph state back into `ConversationWorkflowResult`.
 
 ### Infrastructure
 
@@ -161,6 +168,7 @@ sequenceDiagram
     participant uc as HandleChatTurnUseCase
     participant sessionSvc as SessionService
     participant workflow as ConversationWorkflow
+    participant responseSvc as ChatResponseService
     participant presenter as ChatPresenter
 
     client->>api: POST /chat
@@ -168,11 +176,12 @@ sequenceDiagram
     uc->>sessionSvc: cleanup_expired()
     uc->>sessionSvc: require_session(session_id)
     uc->>workflow: run(ConversationWorkflowInput)
-    uc->>presenter: present(workflow_result, identity_summary)
+    uc->>responseSvc: generate(workflow_result)
+    uc->>presenter: present(response_text, workflow_result, identity_summary)
     api-->>client: ChatResponse
 ```
 
-`HandleChatTurnUseCase` owns the application flow: session validation, workflow bootstrap, remembered identity update, and presentation.
+`HandleChatTurnUseCase` owns the application flow: session validation, workflow bootstrap, remembered identity update, response generation, and presentation.
 
 ### POST /remembered-identity/forget
 
@@ -183,12 +192,11 @@ sequenceDiagram
 `create_runtime()` in `app/runtime.py`:
 - loads `Settings`
 - builds the logger and optional Langfuse tracer
-- constructs the LLM provider via `app/infrastructure/llm/factory.py`
-- creates in-memory repository, session, and checkpoint adapters
-- constructs domain services
-- compiles the graph with injected collaborators
-- wraps the compiled graph in `LangGraphConversationWorkflow`
-- wires presenters and application use cases
+- delegates repository construction to `app/runtime_assembly/repositories.py`
+- delegates provider and service construction to `app/runtime_assembly/services.py`
+- delegates workflow assembly to `app/runtime_assembly/workflow.py`
+- delegates presenter construction to `app/runtime_assembly/presenters.py`
+- delegates use case wiring to `app/runtime_assembly/use_cases.py`
 
 `RuntimeContext` now holds the use cases as first-class dependencies:
 - `create_session_use_case`
@@ -210,8 +218,8 @@ LangGraph checkpoint persistence is behind `CheckpointStore`, currently backed b
 | Layer | Files |
 |---|---|
 | Domain | `app/domain/models.py`, `app/domain/services.py`, `app/domain/ports.py`, `app/domain/errors.py` |
-| Application | `app/application/contracts/*`, `app/application/ports/*`, `app/application/presenters/*`, `app/application/use_cases/*`, `app/application/session_service.py` |
+| Application | `app/application/contracts/*`, `app/application/ports/*`, `app/application/presenters/*`, `app/application/services/*`, `app/application/use_cases/*`, `app/application/session_service.py` |
 | Workflow | `app/graph/builder.py`, `app/graph/routing.py`, `app/graph/state.py`, `app/graph/text_extraction.py`, `app/graph/nodes/*` |
 | Infrastructure | `app/infrastructure/persistence/*`, `app/infrastructure/session/*`, `app/infrastructure/workflow/*`, `app/infrastructure/llm/*`, `app/observability.py` |
 | Interface | `app/main.py`, `app/api/routes.py`, `app/api/schemas.py`, `frontend/streamlit_app.py`, `frontend/lib/api_client.py` |
-| Cross-cutting | `app/config.py`, `app/runtime.py`, `app/prompts/*`, `app/evals/*` |
+| Cross-cutting | `app/config.py`, `app/runtime.py`, `app/runtime_assembly/*`, `app/prompts/*`, `app/evals/*` |

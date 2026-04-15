@@ -4,6 +4,7 @@ from app.application.contracts.conversation import ConversationWorkflowInput
 from app.application.contracts.public import ChatTurnResponse
 from app.application.presenters.chat_presenter import ChatPresenter
 from app.application.presenters.identity_presenter import IdentityPresenter
+from app.application.services.chat_response_service import ChatResponseService
 from app.application.session_service import SessionService
 from app.application.ports.workflow_runner import ConversationWorkflow
 from app.domain.services import RememberedIdentityService
@@ -15,12 +16,14 @@ class HandleChatTurnUseCase:
         session_service: SessionService,
         identity_service: RememberedIdentityService,
         workflow: ConversationWorkflow,
+        chat_response_service: ChatResponseService,
         chat_presenter: ChatPresenter,
         identity_presenter: IdentityPresenter,
     ):
         self.session_service = session_service
         self.identity_service = identity_service
         self.workflow = workflow
+        self.chat_response_service = chat_response_service
         self.chat_presenter = chat_presenter
         self.identity_presenter = identity_presenter
 
@@ -67,8 +70,10 @@ class HandleChatTurnUseCase:
             remembered_identity,
             remembered_identity_id or session.remembered_identity_id,
         )
+        response_text = self.chat_response_service.generate(workflow_result)
         return self.chat_presenter.present(
             thread_id=session.thread_id,
+            response_text=response_text,
             workflow_result=workflow_result,
             remembered_identity_status=remembered_identity_status,
         )

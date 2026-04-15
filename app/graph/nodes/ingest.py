@@ -8,7 +8,7 @@ def make_ingest_node(logger):
     def ingest(state: ConversationState) -> ConversationState:
         turn = turn_state(state)
         message = (state.incoming_message or "").strip()
-        turn.clear_transient_output()
+        turn.reset_turn_output()
         if message:
             state.add_user_message(message)
         log_event(logger, "ingest_user_message", state)

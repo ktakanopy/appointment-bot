@@ -16,7 +16,7 @@ def verification_required(state: ConversationState) -> bool:
 
 
 def should_skip_action_execution(state: ConversationState) -> bool:
-    return state.turn.response_key is not None
+    return state.turn.has_turn_output()
 
 
 def route_after_interpret(state: ConversationState) -> str:

@@ -94,11 +94,22 @@ class TurnState(StateModel):
             self.requested_operation = self.deferred_operation
             self.deferred_operation = None
 
-    def clear_transient_output(self) -> None:
+    def reset_turn_output(self) -> None:
         self.response_key = None
         self.issue = None
         self.operation_result = None
         self.subject_appointment = None
+
+    def has_turn_output(self) -> bool:
+        return any(
+            value is not None
+            for value in (
+                self.response_key,
+                self.issue,
+                self.operation_result,
+                self.subject_appointment,
+            )
+        )
 
 
 class AppointmentState(StateModel):

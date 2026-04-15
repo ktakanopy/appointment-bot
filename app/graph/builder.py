@@ -36,8 +36,8 @@ def build_graph(
     help_node = make_help_node(logger)
 
     builder = StateGraph(ConversationState)
-    builder.add_node("ingest_user_message", make_ingest_node(logger))
-    builder.add_node("parse_intent_and_entities", make_interpret_node(logger, provider=provider))
+    builder.add_node("ingest", make_ingest_node(logger))
+    builder.add_node("interpret", make_interpret_node(logger, provider=provider))
     builder.add_node(
         "verify",
         make_verification_node(
@@ -57,10 +57,10 @@ def build_graph(
         ),
     )
 
-    builder.add_edge(START, "ingest_user_message")
-    builder.add_edge("ingest_user_message", "parse_intent_and_entities")
+    builder.add_edge(START, "ingest")
+    builder.add_edge("ingest", "interpret")
     builder.add_conditional_edges(
-        "parse_intent_and_entities",
+        "interpret",
         route_after_interpret,
         {
             "verify": "verify",
