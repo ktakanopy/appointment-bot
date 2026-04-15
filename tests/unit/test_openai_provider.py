@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from app.application.contracts.conversation import ConversationOperation
 from app.config import ProviderSettings
 from app.infrastructure.llm.openai_provider import OpenAIProvider
@@ -49,3 +51,10 @@ def test_openai_provider_parses_structured_intent_response():
 
     assert result.requested_operation == ConversationOperation.LIST_APPOINTMENTS
     assert result.full_name == "Ana Silva"
+
+
+def test_openai_provider_raises_for_empty_content():
+    provider = _provider("")
+
+    with pytest.raises(ValueError, match="empty content"):
+        provider.interpret("show my appointments", {"verified": False})

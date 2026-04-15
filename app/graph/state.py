@@ -53,9 +53,9 @@ class VerificationState(StateModel):
     def fill_missing_fields(
         self,
         *,
-        full_name: Optional[str],
-        phone: Optional[str],
-        dob: Optional[str],
+        full_name: str | None,
+        phone: str | None,
+        dob: str | None,
     ) -> None:
         if self.provided_full_name is None and full_name:
             self.provided_full_name = full_name
@@ -74,7 +74,7 @@ class VerificationState(StateModel):
             missing.append("dob")
         return missing
 
-    def next_missing_field(self) -> Optional[str]:
+    def next_missing_field(self) -> str | None:
         missing = self.missing_fields()
         if not missing:
             return None

@@ -305,6 +305,21 @@ If this application needed to move beyond demo scope, the next improvements woul
 - add background workers and queueing for slower downstream operations or audits
 - add stronger auth, rate limiting, and production-grade observability around protected flows
 
+## Future Improvements
+
+A deliberate trade-off in this exercise was to not implement deterministic
+fallback for LLM failures. Today, provider failures propagate instead of
+degrading gracefully. This was kept intentionally to avoid adding more
+branching and fallback complexity beyond the scope of the exercise.
+
+In a production version, likely next steps would be:
+
+- deterministic fallback for intent and entity extraction in well-covered cases
+- agent response streaming to deliver partial updates in real time and improve chat usability
+- stronger persistence for sessions, appointments, and remembered identity
+- stronger evaluation and regression coverage for natural language understanding
+- more production-grade error handling and operational resilience
+
 ## Additional Docs
 
 - `docs/architecture.md` -- system overview, layered architecture, data flows

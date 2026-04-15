@@ -8,7 +8,7 @@ The LLM is non-authoritative. It performs exactly one product role:
 
 1. **Intent extraction** — parse the user message into a structured operation label and entity fields.
 
-Final patient-facing responses are generated deterministically by `ResponsePolicy`. The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Those responsibilities stay in deterministic Python code paths. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
+The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Final patient-facing response wording is produced deterministically by `ResponsePolicy` and is not rewritten by the model. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
 
 ## 2. Provider protocol
 
@@ -28,14 +28,12 @@ Final patient-facing responses are generated deterministically by `ResponsePolic
 ## 4. Runtime behavior
 
 - **`interpret`** delegates action and entity extraction to the configured provider.
-- **`ChatResponseService.generate()`** returns the deterministic response text produced by `ResponsePolicy` directly — no LLM call is made for response generation.
+- **`ChatResponseService.generate()`** returns the deterministic `ResponsePolicy` output directly. No provider call is made for response rendering.
 - Verification, appointment ownership, idempotency, issue classification, and workflow routing stay in deterministic Python code outside the provider.
-
-Provider calls are no longer wrapped in local fallback logic. If the provider raises, the failure propagates instead of silently degrading to deterministic behavior.
 
 ## 5. Prompt design
 
-One system prompt, kept short and task-scoped:
+One system prompt for the live chat graph:
 
 **Intent** (`app/prompts/intent_prompt.py`, `INTENT_PROMPT`):
 
@@ -57,7 +55,7 @@ If the message asks to confirm or cancel an appointment by number, treat the num
 
 ## 6. LLM vs deterministic flow map
 
-The provider is used once inside the workflow (intent extraction) and not in the application presentation layer.
+The provider is called once per turn, inside the workflow boundary.
 
 ```mermaid
 flowchart LR
@@ -76,7 +74,7 @@ flowchart LR
 | `interpret` | Yes | No |
 | `verify` | No | Yes |
 | `execute_action` | No | Yes |
-| `ChatResponseService.generate()` | No | Yes (ResponsePolicy) |
+| `ChatResponseService.generate()` | No | Yes (`ResponsePolicy` output) |
 
 ## 7. Why not a ReAct agent
 
@@ -84,4 +82,4 @@ For this use case, a ReAct agent would give the model too much control over a wo
 
 ## 8. Error isolation
 
-Tracing failures do not abort the request path, but provider failures still do. `OpenAIProvider.interpret()` calls the provider directly, so provider exceptions surface as runtime errors instead of being converted into degraded chat responses.
+Tracing failures do not abort the request path, but provider failures do. `OpenAIProvider.interpret()` is the only provider call in the live chat path, so provider exceptions surface as runtime errors on the interpret step only. Response rendering cannot produce provider errors because it is fully deterministic.
