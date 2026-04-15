@@ -16,6 +16,7 @@ dependencies = [
   "openai>=1.30,<2.0",
   "langfuse>=2.0,<3.0",
   "streamlit>=1.35,<2.0",
+  "langgraph-checkpoint-sqlite>=3.0.3",
 ]
 
 [project.optional-dependencies]

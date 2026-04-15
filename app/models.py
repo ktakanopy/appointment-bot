@@ -240,13 +240,6 @@ class SessionRecord(BaseModel):
     last_seen_at: float
 
 
-class ConversationWorkflowInput(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    thread_id: str
-    incoming_message: str
-
-
 class ConversationOperationResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 

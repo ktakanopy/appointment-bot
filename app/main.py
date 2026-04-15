@@ -64,7 +64,10 @@ def create_session(
 ) -> NewSessionResponseData:
     runtime.session_service.cleanup_expired()
     session = runtime.session_service.create_session()
-    return build_new_session_response(session)
+    response = build_new_session_response(session)
+    if response.response is not None:
+        runtime.workflow.append_assistant_message(session.thread_id, response.response)
+    return response
 
 
 @app.post("/chat", response_model=ChatTurnResponse)
@@ -77,6 +80,7 @@ def chat(
         session = runtime.session_service.require_session(request.session_id)
         state = runtime.workflow.run(session.thread_id, request.message)
         response_text = build_response_text(state)
+        runtime.workflow.append_assistant_message(session.thread_id, response_text)
         return build_chat_response(session.thread_id, response_text, state)
     except SessionNotFoundError as error:
         raise HTTPException(status_code=404, detail="Session not found. Start a new session.") from error

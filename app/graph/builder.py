@@ -15,8 +15,7 @@ from app.graph.nodes import (
     make_list_node,
     make_verification_node,
 )
-from app.graph.routing import route_after_interpret, route_after_verify
-from app.graph.state import ConversationState
+from app.graph.state import ConversationGraphInput, ConversationGraphState
 
 
 def build_graph(
@@ -33,7 +32,7 @@ def build_graph(
     cancel_node = make_cancel_node(appointment_service, logger)
     help_node = make_help_node(logger)
 
-    builder = StateGraph(ConversationState)
+    builder = StateGraph(ConversationGraphState, input_schema=ConversationGraphInput)
     builder.add_node("ingest", make_ingest_node(logger))
     builder.add_node("interpret", make_interpret_node(logger, provider=provider))
     builder.add_node(
@@ -57,22 +56,6 @@ def build_graph(
 
     builder.add_edge(START, "ingest")
     builder.add_edge("ingest", "interpret")
-    builder.add_conditional_edges(
-        "interpret",
-        route_after_interpret,
-        {
-            "verify": "verify",
-            "execute_action": "execute_action",
-        },
-    )
-    builder.add_conditional_edges(
-        "verify",
-        route_after_verify,
-        {
-            "end": END,
-            "execute_action": "execute_action",
-        },
-    )
     builder.add_edge("execute_action", END)
 
     return builder.compile(checkpointer=checkpointer)

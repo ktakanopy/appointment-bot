@@ -1,31 +1,21 @@
 from __future__ import annotations
 
-from app.graph.state import ConversationState
+from app.graph.state import ConversationGraphState, TurnState as TurnStateModel, turn_state, verification_state
 
 
-def verification_required(state: ConversationState) -> bool:
-    operation = state.turn.requested_operation
+def verification_required(state: ConversationGraphState) -> bool:
+    operation = turn_state(state)["requested_operation"]
+    verification = verification_state(state)
+    deferred_operation = turn_state(state)["deferred_operation"]
     return bool(
-        not state.verification.verified
+        not verification["verified"]
         and (
             operation.requires_verification
             or operation.triggers_verification_flow
-            or state.turn.deferred_operation
+            or deferred_operation
         )
     )
 
 
-def should_skip_action_execution(state: ConversationState) -> bool:
-    return state.turn.has_turn_output()
-
-
-def route_after_interpret(state: ConversationState) -> str:
-    if verification_required(state):
-        return "verify"
-    return "execute_action"
-
-
-def route_after_verify(state: ConversationState) -> str:
-    if should_skip_action_execution(state):
-        return "end"
-    return "execute_action"
+def should_skip_action_execution(state: ConversationGraphState) -> bool:
+    return TurnStateModel.model_validate(turn_state(state)).has_turn_output()

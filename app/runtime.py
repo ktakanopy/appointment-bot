@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.config import Settings, load_settings
 from app.graph.builder import build_graph
@@ -19,6 +21,7 @@ class RuntimeContext:
     settings: Settings
     logger: logging.Logger
     tracer: object | None
+    checkpoint_connection: sqlite3.Connection
     graph: object
     workflow: LangGraphWorkflow
     provider: OpenAIProvider
@@ -33,10 +36,20 @@ def build_provider(settings: Settings, logger: logging.Logger, tracer: object | 
     return OpenAIProvider(settings.provider, logger, tracer=tracer)
 
 
+def build_checkpointer(settings: Settings) -> tuple[SqliteSaver, sqlite3.Connection]:
+    checkpoint_path = Path(settings.checkpoint_db_path)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(checkpoint_path, check_same_thread=False)
+    checkpointer = SqliteSaver(connection)
+    checkpointer.setup()
+    return checkpointer, connection
+
+
 def create_runtime(settings: Settings | None = None) -> RuntimeContext:
     settings = settings or load_settings()
     logger = get_logger()
     tracer = build_tracer(settings)
+    checkpointer, checkpoint_connection = build_checkpointer(settings)
     patient_repository = InMemoryPatientRepository()
     appointment_repository = InMemoryAppointmentRepository()
     session_store = InMemorySessionStore()
@@ -50,13 +63,14 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
         verification_service=verification_service,
         appointment_service=appointment_service,
         max_verification_attempts=settings.max_verification_attempts,
-        checkpointer=InMemorySaver(),
+        checkpointer=checkpointer,
     )
     workflow = LangGraphWorkflow(graph, logger, tracer=tracer)
     return RuntimeContext(
         settings=settings,
         logger=logger,
         tracer=tracer,
+        checkpoint_connection=checkpoint_connection,
         graph=graph,
         workflow=workflow,
         provider=provider,
@@ -65,7 +79,9 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
 
 
 def close_runtime(runtime: RuntimeContext | None) -> None:
-    _ = runtime
+    if runtime is None:
+        return None
+    runtime.checkpoint_connection.close()
     return None
 
 

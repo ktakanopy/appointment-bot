@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
+
+from langgraph.graph import END
+from langgraph.types import Command
 
 from app.graph.parsing import (
     extract_dob,
@@ -13,10 +17,17 @@ from app.graph.parsing import (
 )
 from app.graph.routing import should_skip_action_execution, verification_required
 from app.graph.state import (
-    AppointmentState,
-    ConversationState,
-    TurnState,
-    VerificationState,
+    ConversationGraphState,
+    GraphAppointmentState,
+    GraphTurnState,
+    GraphVerificationState,
+    TurnState as TurnStateModel,
+    VerificationState as VerificationStateModel,
+    appointment_state,
+    latest_user_message,
+    serialize_messages,
+    turn_state,
+    verification_state,
 )
 from app.models import (
     ActionOutcome,
@@ -54,122 +65,189 @@ INVALID_RESPONSES = {
 
 
 def make_ingest_node(logger):
-    def ingest(state: ConversationState) -> ConversationState:
-        turn = state.turn
-        message = (state.incoming_message or "").strip()
-        turn.reset_turn_output()
-        if message:
-            state.add_user_message(message)
-        log_event(logger, "ingest_user_message", state)
-        return state
+    """
+    Build the graph node responsible for turn initialization.
+
+    At this stage the current user message is already part of the `messages`
+    channel because LangGraph merged the new input through the message reducer.
+    This node only clears per-turn output fields so later nodes work with a
+    clean response surface.
+    """
+
+    def ingest(state: ConversationGraphState) -> dict[str, GraphTurnState]:
+        turn = _reset_turn_output(turn_state(state))
+        updated_state = {**state, "turn": turn}
+        log_event(logger, "ingest_user_message", updated_state)
+        return {"turn": turn}
 
     return ingest
 
 
 def make_interpret_node(logger, provider):
-    def interpret(state: ConversationState) -> ConversationState:
-        message = (state.incoming_message or "").strip()
-        verification = state.verification
-        turn = state.turn
-        appointments = state.appointments
+    """
+    Build the node that maps the latest user message into structured intent.
+
+    The node reads the latest user turn from the LangGraph message channel,
+    prepares a bounded conversational context for the provider, merges any
+    extracted identity fields into verification state, and decides whether the
+    graph should continue into verification or move directly to action
+    execution.
+    """
+
+    def interpret(state: ConversationGraphState) -> Command[Literal["verify", "execute_action"]]:
+        message = latest_user_message(state)
+        verification = verification_state(state)
+        turn = turn_state(state)
+        appointments = appointment_state(state)
         provider_state = {
-            "verification": {"verified": verification.verified},
+            "verification": {"verified": verification["verified"]},
             "turn": {
-                "requested_operation": turn.requested_operation.value,
-                "deferred_operation": (
-                    turn.deferred_operation.value if turn.deferred_operation is not None else None
-                ),
+                "requested_operation": turn["requested_operation"].value,
+                "deferred_operation": turn["deferred_operation"].value if turn["deferred_operation"] is not None else None,
             },
-            "missing_verification_fields": verification.missing_fields(),
-            "messages": state.recent_messages(MESSAGE_HISTORY_LIMIT),
+            "missing_verification_fields": VerificationStateModel.model_validate(verification).missing_fields(),
+            "messages": serialize_messages(state.get("messages", []), MESSAGE_HISTORY_LIMIT),
         }
         result = provider.interpret(message, provider_state)
         requested_operation = result.requested_operation
-
-        verification.fill_missing_fields(
+        updated_verification = _fill_missing_fields(
+            verification,
+            full_name=normalize_full_name(result.full_name),
             phone=normalize_phone(result.phone),
             dob=normalize_dob(result.dob),
-            full_name=normalize_full_name(result.full_name),
         )
-
-        turn.requested_operation = requested_operation
-        _update_deferred_operation(verification, turn, requested_operation)
-        _update_appointment_reference(appointments, requested_operation, result.appointment_reference)
+        updated_turn = {**turn, "requested_operation": requested_operation}
+        updated_turn = _update_deferred_operation(updated_verification, updated_turn, requested_operation)
+        updated_appointments = _update_appointment_reference(appointments, requested_operation, result.appointment_reference)
+        updates = {
+            "verification": updated_verification,
+            "turn": updated_turn,
+            "appointments": updated_appointments,
+        }
+        next_state = {**state, **updates}
         log_event(
             logger,
             "parse_intent_and_entities",
-            state,
-            appointment_reference=appointments.appointment_reference,
+            next_state,
+            appointment_reference=updated_appointments["appointment_reference"],
         )
-        return state
+        goto = "verify" if verification_required(next_state) else "execute_action"
+        return Command(update=updates, goto=goto)
 
     return interpret
 
 
 def make_verification_node(verification_service, logger, max_verification_attempts: int):
-    def verify(state: ConversationState) -> ConversationState:
-        verification = state.verification
-        turn = state.turn
+    """
+    Build the node that owns the identity-verification lifecycle.
+
+    This node is the gatekeeper for protected actions. It collects missing
+    identity fields, checks the completed identity payload against the patient
+    repository, records failed attempts, and resumes deferred work after a
+    successful verification.
+    """
+
+    def verify(state: ConversationGraphState) -> Command[Literal["execute_action", "__end__"]]:
+        verification = verification_state(state)
+        turn = turn_state(state)
         if not verification_required(state):
-            return state
+            return Command(update={}, goto="execute_action")
+        if verification["verification_status"] == VerificationStatus.LOCKED:
+            updates = _set_locked_response(turn)
+            next_state = {**state, **updates}
+            log_event(logger, "verify_identity", next_state, outcome="locked")
+            return Command(update=updates, goto=END)
 
-        if verification.verification_status == VerificationStatus.LOCKED:
-            return _set_locked_response(turn, logger, state)
-
-        previous_status = verification.verification_status
-        missing_field = verification.next_missing_field()
-
-        if missing_field:
-            return _collect_missing_field(
+        previous_status = verification["verification_status"]
+        missing_field = VerificationStateModel.model_validate(verification).next_missing_field()
+        if missing_field is not None:
+            updates = _collect_missing_field(
                 verification,
                 turn,
-                logger,
                 field_name=missing_field,
                 previous_status=previous_status,
                 state=state,
             )
+            next_state = {**state, **updates}
+            log_event(logger, "collect_missing_verification_fields", next_state)
+            return Command(update=updates, goto=END)
 
         patient = verification_service.verify_identity(
-            verification.provided_full_name,
-            verification.provided_phone,
-            verification.provided_dob,
+            verification["provided_full_name"],
+            verification["provided_phone"],
+            verification["provided_dob"],
         )
         if patient is None:
-            return _handle_failed_verification(
+            updates, outcome = _handle_failed_verification(
                 verification,
                 turn,
-                logger,
                 max_verification_attempts=max_verification_attempts,
-                state=state,
             )
+            next_state = {**state, **updates}
+            log_event(logger, "verify_identity", next_state, outcome=outcome)
+            goto = END if should_skip_action_execution(next_state) else "execute_action"
+            return Command(update=updates, goto=goto)
 
-        return _handle_successful_verification(verification, turn, logger, patient_id=patient.id, state=state)
+        updates = _handle_successful_verification(verification, turn, patient_id=patient.id)
+        next_state = {**state, **updates}
+        log_event(logger, "verify_identity", next_state, outcome="verified")
+        goto = END if should_skip_action_execution(next_state) else "execute_action"
+        return Command(update=updates, goto=goto)
 
     return verify
 
 
 def make_list_node(appointment_service, logger):
-    def list_appointments(state: ConversationState) -> ConversationState:
-        verification = state.verification
-        appointments_state = state.appointments
-        turn = state.turn
-        appointments = appointment_service.list_appointments(verification.patient_id)
-        appointments_state.listed_appointments = appointments
-        turn.requested_operation = ConversationOperation.LIST_APPOINTMENTS
-        turn.operation_result = ConversationOperationResult(
-            operation=ConversationOperation.LIST_APPOINTMENTS,
-            outcome=ActionOutcome.LISTED,
-        )
-        turn.response_key = ResponseKey.APPOINTMENTS_LIST
-        turn.issue = None
-        log_event(logger, "list_appointments", state, appointment_count=len(appointments))
-        return state
+    """
+    Build the node that lists appointments for the verified patient.
+
+    Once verification is complete and the requested operation is
+    `LIST_APPOINTMENTS`, this node loads the current appointment list, caches it
+    for future reference resolution, and stamps the turn as a successful list
+    response.
+    """
+
+    def list_appointments(state: ConversationGraphState) -> dict[str, GraphAppointmentState | GraphTurnState]:
+        verification = verification_state(state)
+        turn = turn_state(state)
+        appointments = appointment_service.list_appointments(verification["patient_id"])
+        updated_appointments = {
+            "listed_appointments": appointments,
+            "appointment_reference": appointment_state(state)["appointment_reference"],
+        }
+        updated_turn = {
+            **turn,
+            "requested_operation": ConversationOperation.LIST_APPOINTMENTS,
+            "operation_result": ConversationOperationResult(
+                operation=ConversationOperation.LIST_APPOINTMENTS,
+                outcome=ActionOutcome.LISTED,
+            ),
+            "response_key": ResponseKey.APPOINTMENTS_LIST,
+            "issue": None,
+            "subject_appointment": None,
+        }
+        updates = {
+            "appointments": updated_appointments,
+            "turn": updated_turn,
+        }
+        log_event(logger, "list_appointments", {**state, **updates}, appointment_count=len(appointments))
+        return updates
 
     return list_appointments
 
 
 def make_confirm_node(appointment_service, logger):
-    def confirm_appointment(state: ConversationState) -> ConversationState:
+    """
+    Build the confirm-action node.
+
+    Confirming and canceling share the same skeleton: resolve a target
+    appointment, call the service mutation, translate domain failures into
+    turn-level responses, refresh the cached list, and emit telemetry. This
+    wrapper keeps the confirm-specific details explicit while delegating the
+    common mechanics.
+    """
+
+    def confirm_appointment(state: ConversationGraphState) -> dict[str, GraphAppointmentState | GraphTurnState]:
         return _execute_appointment_mutation(
             state,
             appointment_service,
@@ -192,7 +270,15 @@ def make_confirm_node(appointment_service, logger):
 
 
 def make_cancel_node(appointment_service, logger):
-    def cancel_appointment(state: ConversationState) -> ConversationState:
+    """
+    Build the cancel-action node.
+
+    This wrapper keeps cancel as a first-class business action while still
+    sharing the generic mutation workflow used by confirm. The cancel-specific
+    response keys and allowed-error semantics stay visible at the call site.
+    """
+
+    def cancel_appointment(state: ConversationGraphState) -> dict[str, GraphAppointmentState | GraphTurnState]:
         return _execute_appointment_mutation(
             state,
             appointment_service,
@@ -215,16 +301,27 @@ def make_cancel_node(appointment_service, logger):
 
 
 def make_help_node(logger):
-    def help_or_unknown(state: ConversationState) -> ConversationState:
-        verification = state.verification
-        turn = state.turn
-        turn.requested_operation = ConversationOperation.HELP
-        if verification.verified:
-            turn.response_key = ResponseKey.HELP_VERIFIED
-        else:
-            turn.response_key = ResponseKey.HELP_UNVERIFIED
-        log_event(logger, "handle_help_or_unknown", state)
-        return state
+    """
+    Build the fallback node for help and unsupported requests.
+
+    When the graph does not need to execute a protected appointment action, it
+    routes here to produce a helpful response that still respects whether the
+    user has already been verified.
+    """
+
+    def help_or_unknown(state: ConversationGraphState) -> dict[str, GraphTurnState]:
+        verification = verification_state(state)
+        updated_turn = {
+            **turn_state(state),
+            "requested_operation": ConversationOperation.HELP,
+            "response_key": ResponseKey.HELP_VERIFIED if verification["verified"] else ResponseKey.HELP_UNVERIFIED,
+            "issue": None,
+            "operation_result": None,
+            "subject_appointment": None,
+        }
+        updates = {"turn": updated_turn}
+        log_event(logger, "handle_help_or_unknown", {**state, **updates})
+        return updates
 
     return help_or_unknown
 
@@ -232,16 +329,24 @@ def make_help_node(logger):
 def make_execute_action_node(
     logger,
     *,
-    list_node: Callable[[ConversationState], ConversationState],
-    confirm_node: Callable[[ConversationState], ConversationState],
-    cancel_node: Callable[[ConversationState], ConversationState],
-    help_node: Callable[[ConversationState], ConversationState],
+    list_node: Callable[[ConversationGraphState], dict[str, GraphAppointmentState | GraphTurnState]],
+    confirm_node: Callable[[ConversationGraphState], dict[str, GraphAppointmentState | GraphTurnState]],
+    cancel_node: Callable[[ConversationGraphState], dict[str, GraphAppointmentState | GraphTurnState]],
+    help_node: Callable[[ConversationGraphState], dict[str, GraphTurnState]],
 ):
-    def execute_action(state: ConversationState) -> ConversationState:
+    """
+    Build the dispatcher that executes the concrete business action.
+
+    After interpretation and, when needed, verification, the graph reaches this
+    node with a single requested operation that acts as the source of truth for
+    which business action should run.
+    """
+
+    def execute_action(state: ConversationGraphState) -> dict[str, GraphAppointmentState | GraphTurnState]:
         if should_skip_action_execution(state):
             log_event(logger, "execute_action", state, outcome="skipped")
-            return state
-        operation = state.turn.requested_operation
+            return {}
+        operation = turn_state(state)["requested_operation"]
         if operation == ConversationOperation.LIST_APPOINTMENTS:
             return list_node(state)
         if operation == ConversationOperation.CONFIRM_APPOINTMENT:
@@ -254,30 +359,31 @@ def make_execute_action_node(
 
 
 def _update_deferred_operation(
-    verification: VerificationState,
-    turn: TurnState,
+    verification: GraphVerificationState,
+    turn: GraphTurnState,
     requested_operation: ConversationOperation,
-) -> None:
-    if verification.verified or not requested_operation.requires_verification:
-        return
-    if turn.deferred_operation is None:
-        turn.deferred_operation = requested_operation
+) -> GraphTurnState:
+    if verification["verified"] or not requested_operation.requires_verification:
+        return turn
+    if turn["deferred_operation"] is not None:
+        return turn
+    return {**turn, "deferred_operation": requested_operation}
 
 
 def _update_appointment_reference(
-    appointments: AppointmentState,
+    appointments: GraphAppointmentState,
     requested_operation: ConversationOperation,
     appointment_reference: str | None,
-) -> None:
+) -> GraphAppointmentState:
     if requested_operation not in APPOINTMENT_ACTIONS:
-        appointments.appointment_reference = None
-        return
+        return {**appointments, "appointment_reference": None}
     if appointment_reference:
-        appointments.appointment_reference = appointment_reference
+        return {**appointments, "appointment_reference": appointment_reference}
+    return appointments
 
 
 def _execute_appointment_mutation(
-    state: ConversationState,
+    state: ConversationGraphState,
     appointment_service,
     logger,
     *,
@@ -293,132 +399,196 @@ def _execute_appointment_mutation(
     missing_list_context_key: ResponseKey,
     ambiguous_key: ResponseKey,
     event_name: str,
-) -> ConversationState:
-    verification = state.verification
-    appointments_state = state.appointments
-    turn = state.turn
-    appointment = _resolve_target_appointment(
+) -> dict[str, GraphAppointmentState | GraphTurnState]:
+    verification = verification_state(state)
+    appointments = appointment_state(state)
+    turn = turn_state(state)
+    appointment, resolve_updates = _resolve_target_appointment(
         state,
         appointment_service,
-        logger,
         operation=operation,
         missing_list_context_key=missing_list_context_key,
         ambiguous_key=ambiguous_key,
     )
     if appointment is None:
-        return state
+        log_event(logger, "resolve_appointment_reference", {**state, **resolve_updates}, outcome=resolve_updates["turn"]["issue"].value)
+        return resolve_updates
 
     try:
-        updated, outcome = mutate_appointment(verification.patient_id, appointment.id)
+        updated, outcome = mutate_appointment(verification["patient_id"], appointment.id)
     except not_allowed_error:
-        turn.response_key = not_allowed_response_key
-        turn.issue = not_allowed_issue
-        log_event(logger, event_name, state, outcome=not_allowed_outcome)
-        return state
+        updated_turn = {
+            **turn,
+            "requested_operation": operation,
+            "response_key": not_allowed_response_key,
+            "issue": not_allowed_issue,
+            "operation_result": None,
+            "subject_appointment": None,
+        }
+        updates = {"turn": updated_turn}
+        log_event(logger, event_name, {**state, **updates}, outcome=not_allowed_outcome)
+        return updates
     except AppointmentNotOwnedError:
-        turn.response_key = ResponseKey.APPOINTMENT_NOT_OWNED
-        turn.issue = TurnIssue.APPOINTMENT_NOT_OWNED
-        log_event(logger, event_name, state, outcome="not_owned")
-        return state
+        updated_turn = {
+            **turn,
+            "requested_operation": operation,
+            "response_key": ResponseKey.APPOINTMENT_NOT_OWNED,
+            "issue": TurnIssue.APPOINTMENT_NOT_OWNED,
+            "operation_result": None,
+            "subject_appointment": None,
+        }
+        updates = {"turn": updated_turn}
+        log_event(logger, event_name, {**state, **updates}, outcome="not_owned")
+        return updates
     except AppointmentNotFoundError:
-        turn.response_key = ResponseKey.APPOINTMENT_NOT_FOUND
-        turn.issue = TurnIssue.APPOINTMENT_NOT_FOUND
-        log_event(logger, event_name, state, outcome="not_found")
-        return state
+        updated_turn = {
+            **turn,
+            "requested_operation": operation,
+            "response_key": ResponseKey.APPOINTMENT_NOT_FOUND,
+            "issue": TurnIssue.APPOINTMENT_NOT_FOUND,
+            "operation_result": None,
+            "subject_appointment": None,
+        }
+        updates = {"turn": updated_turn}
+        log_event(logger, event_name, {**state, **updates}, outcome="not_found")
+        return updates
 
-    turn.response_key = already_done_response_key if outcome == already_done_outcome else success_response_key
-    turn.issue = None
-    turn.subject_appointment = updated
-    turn.operation_result = ConversationOperationResult(
-        operation=operation,
-        outcome=outcome,
-        appointment_id=appointment.id,
-    )
-    appointments_state.listed_appointments = appointment_service.list_appointments(verification.patient_id)
-    log_event(logger, event_name, state, outcome=outcome.value, appointment_id=appointment.id)
-    return state
+    updated_turn = {
+        **turn,
+        "requested_operation": operation,
+        "response_key": already_done_response_key if outcome == already_done_outcome else success_response_key,
+        "issue": None,
+        "subject_appointment": updated,
+        "operation_result": ConversationOperationResult(
+            operation=operation,
+            outcome=outcome,
+            appointment_id=appointment.id,
+        ),
+    }
+    updated_appointments = {
+        **appointments,
+        "listed_appointments": appointment_service.list_appointments(verification["patient_id"]),
+    }
+    updates = {
+        "turn": updated_turn,
+        "appointments": updated_appointments,
+    }
+    log_event(logger, event_name, {**state, **updates}, outcome=outcome.value, appointment_id=appointment.id)
+    return updates
 
 
-def _set_locked_response(
-    turn: TurnState,
-    logger,
-    state: ConversationState,
-) -> ConversationState:
-    turn.requested_operation = ConversationOperation.VERIFY_IDENTITY
-    turn.response_key = ResponseKey.VERIFICATION_LOCKED
-    turn.issue = TurnIssue.VERIFICATION_LOCKED
-    log_event(logger, "verify_identity", state, outcome="locked")
-    return state
+def _set_locked_response(turn: GraphTurnState) -> dict[str, GraphTurnState]:
+    updated_turn = {
+        **turn,
+        "requested_operation": ConversationOperation.VERIFY_IDENTITY,
+        "response_key": ResponseKey.VERIFICATION_LOCKED,
+        "issue": TurnIssue.VERIFICATION_LOCKED,
+        "operation_result": None,
+        "subject_appointment": None,
+    }
+    return {"turn": updated_turn}
 
 
 def _collect_missing_field(
-    verification: VerificationState,
-    turn: TurnState,
-    logger,
+    verification: GraphVerificationState,
+    turn: GraphTurnState,
     *,
     field_name: str,
     previous_status: VerificationStatus,
-    state: ConversationState,
-) -> ConversationState:
-    verification.mark_collecting()
-    turn.requested_operation = ConversationOperation.VERIFY_IDENTITY
+    state: ConversationGraphState,
+) -> dict[str, GraphVerificationState | GraphTurnState]:
+    updated_verification = {**verification, "verification_status": VerificationStatus.COLLECTING}
     invalid_response = _invalid_response_for_field(state, field_name, previous_status)
-    if invalid_response is None:
-        turn.response_key = PROMPTS[field_name]
-        turn.issue = None
-    else:
-        turn.response_key, turn.issue = invalid_response
-    log_event(logger, "collect_missing_verification_fields", state)
-    return state
+    updated_turn = {
+        **turn,
+        "requested_operation": ConversationOperation.VERIFY_IDENTITY,
+        "response_key": PROMPTS[field_name] if invalid_response is None else invalid_response[0],
+        "issue": None if invalid_response is None else invalid_response[1],
+        "operation_result": None,
+        "subject_appointment": None,
+    }
+    return {
+        "verification": updated_verification,
+        "turn": updated_turn,
+    }
 
 
 def _handle_failed_verification(
-    verification: VerificationState,
-    turn: TurnState,
-    logger,
+    verification: GraphVerificationState,
+    turn: GraphTurnState,
     *,
     max_verification_attempts: int,
-    state: ConversationState,
-) -> ConversationState:
-    verification.verification_failures += 1
-    verification.reset_failed_verification()
-    turn.requested_operation = ConversationOperation.VERIFY_IDENTITY
-    if verification.verification_failures >= max_verification_attempts:
-        verification.verification_status = VerificationStatus.LOCKED
-        return _set_locked_response(turn, logger, state)
-    turn.response_key = ResponseKey.VERIFICATION_FAILED
-    turn.issue = TurnIssue.INVALID_IDENTITY
-    log_event(logger, "verify_identity", state, outcome="failed")
-    return state
+) -> tuple[dict[str, GraphVerificationState | GraphTurnState], str]:
+    failures = verification["verification_failures"] + 1
+    updated_verification = {
+        **verification,
+        "verification_failures": failures,
+        "verification_status": VerificationStatus.FAILED,
+        "verified": False,
+        "patient_id": None,
+        "provided_full_name": None,
+        "provided_phone": None,
+        "provided_dob": None,
+    }
+    if failures >= max_verification_attempts:
+        updated_verification["verification_status"] = VerificationStatus.LOCKED
+        updates = {
+            "verification": updated_verification,
+            **_set_locked_response(turn),
+        }
+        return updates, "locked"
+    updated_turn = {
+        **turn,
+        "requested_operation": ConversationOperation.VERIFY_IDENTITY,
+        "response_key": ResponseKey.VERIFICATION_FAILED,
+        "issue": TurnIssue.INVALID_IDENTITY,
+        "operation_result": None,
+        "subject_appointment": None,
+    }
+    return {
+        "verification": updated_verification,
+        "turn": updated_turn,
+    }, "failed"
 
 
 def _handle_successful_verification(
-    verification: VerificationState,
-    turn: TurnState,
-    logger,
+    verification: GraphVerificationState,
+    turn: GraphTurnState,
     *,
     patient_id: str,
-    state: ConversationState,
-) -> ConversationState:
-    had_deferred_operation = turn.deferred_operation is not None
-    verification.mark_verified(patient_id)
-    turn.issue = None
-    turn.response_key = None
-    turn.resume_deferred_operation()
-    if not had_deferred_operation:
-        turn.requested_operation = ConversationOperation.LIST_APPOINTMENTS
-    log_event(logger, "verify_identity", state, outcome="verified")
-    return state
+) -> dict[str, GraphVerificationState | GraphTurnState]:
+    had_deferred_operation = turn["deferred_operation"] is not None
+    updated_verification = {
+        **verification,
+        "verification_status": VerificationStatus.VERIFIED,
+        "verified": True,
+        "verification_failures": 0,
+        "patient_id": patient_id,
+    }
+    requested_operation = turn["deferred_operation"] if had_deferred_operation else ConversationOperation.LIST_APPOINTMENTS
+    updated_turn = {
+        **turn,
+        "requested_operation": requested_operation,
+        "deferred_operation": None,
+        "response_key": None,
+        "issue": None,
+        "operation_result": None,
+        "subject_appointment": None,
+    }
+    return {
+        "verification": updated_verification,
+        "turn": updated_turn,
+    }
 
 
 def _invalid_response_for_field(
-    state: ConversationState,
+    state: ConversationGraphState,
     field_name: str,
     previous_status: VerificationStatus,
 ) -> tuple[ResponseKey, TurnIssue] | None:
     if previous_status not in {VerificationStatus.COLLECTING, VerificationStatus.FAILED}:
         return None
-    message = (state.incoming_message or "").strip()
+    message = latest_user_message(state)
     if not message:
         return None
     parsed_name = extract_full_name(message)
@@ -434,33 +604,67 @@ def _invalid_response_for_field(
 
 
 def _resolve_target_appointment(
-    state: ConversationState,
+    state: ConversationGraphState,
     appointment_service,
-    logger,
     *,
     operation: ConversationOperation,
     missing_list_context_key: ResponseKey,
     ambiguous_key: ResponseKey,
-) -> Appointment | None:
-    appointments_state = state.appointments
-    turn = state.turn
-    verification = state.verification
-    listed_appointments = appointments_state.listed_appointments or []
-    reference = appointments_state.appointment_reference
+) -> tuple[Appointment | None, dict[str, GraphTurnState]]:
+    appointments = appointment_state(state)
+    turn = turn_state(state)
+    verification = verification_state(state)
+    listed_appointments = appointments["listed_appointments"] or []
+    reference = appointments["appointment_reference"]
     if reference and reference.isdigit() and not listed_appointments:
-        turn.requested_operation = operation
-        turn.response_key = missing_list_context_key
-        turn.issue = TurnIssue.MISSING_LIST_CONTEXT
-        log_event(logger, "resolve_appointment_reference", state, outcome="missing_list_context")
-        return None
-
-    appointments = listed_appointments or appointment_service.list_appointments(verification.patient_id)
-    appointment = resolve_appointment_reference(reference, appointments)
-    turn.requested_operation = operation
+        return None, {
+            "turn": {
+                **turn,
+                "requested_operation": operation,
+                "response_key": missing_list_context_key,
+                "issue": TurnIssue.MISSING_LIST_CONTEXT,
+                "operation_result": None,
+                "subject_appointment": None,
+            }
+        }
+    appointment_options = listed_appointments or appointment_service.list_appointments(verification["patient_id"])
+    appointment = resolve_appointment_reference(reference, appointment_options)
     if appointment is None:
-        turn.response_key = ambiguous_key
-        turn.issue = TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE
-        log_event(logger, "resolve_appointment_reference", state, outcome="ambiguous")
-        return None
+        return None, {
+            "turn": {
+                **turn,
+                "requested_operation": operation,
+                "response_key": ambiguous_key,
+                "issue": TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE,
+                "operation_result": None,
+                "subject_appointment": None,
+            }
+        }
+    return appointment, {}
 
-    return appointment
+
+def _fill_missing_fields(
+    verification: GraphVerificationState,
+    *,
+    full_name: str | None,
+    phone: str | None,
+    dob: str | None,
+) -> GraphVerificationState:
+    updated_verification = dict(verification)
+    if updated_verification["provided_full_name"] is None and full_name:
+        updated_verification["provided_full_name"] = full_name
+    if updated_verification["provided_phone"] is None and phone:
+        updated_verification["provided_phone"] = phone
+    if updated_verification["provided_dob"] is None and dob:
+        updated_verification["provided_dob"] = dob
+    return updated_verification
+
+
+def _reset_turn_output(turn: GraphTurnState) -> GraphTurnState:
+    return {
+        **turn,
+        "response_key": None,
+        "issue": None,
+        "operation_result": None,
+        "subject_appointment": None,
+    }
