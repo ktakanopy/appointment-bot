@@ -29,7 +29,6 @@ class GraphVerificationState(TypedDict):
 
 class GraphTurnState(TypedDict):
     requested_operation: ConversationOperation
-    deferred_operation: ConversationOperation | None
     operation_result: ConversationOperationResult | None
     response_key: ResponseKey | None
     issue: TurnIssue | None
@@ -84,7 +83,6 @@ class TurnState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     requested_operation: ConversationOperation = ConversationOperation.UNKNOWN
-    deferred_operation: ConversationOperation | None = None
     operation_result: ConversationOperationResult | None = None
     response_key: ResponseKey | None = None
     issue: TurnIssue | None = None
@@ -134,7 +132,6 @@ def default_verification_state() -> GraphVerificationState:
 def default_turn_state() -> GraphTurnState:
     return {
         "requested_operation": ConversationOperation.UNKNOWN,
-        "deferred_operation": None,
         "operation_result": None,
         "response_key": None,
         "issue": None,

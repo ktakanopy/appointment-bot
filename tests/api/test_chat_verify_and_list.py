@@ -74,7 +74,7 @@ def test_api_identify_request_starts_verification_before_capabilities():
     assert "full name" in body["response"].lower()
 
 
-def test_api_verification_without_deferred_action_auto_lists_appointments():
+def test_api_verification_without_prior_action_lists_appointments():
     session_id = client.post("/sessions/new").json()["session_id"]
 
     client.post("/chat", json={"session_id": session_id, "message": "Ana Silva"})

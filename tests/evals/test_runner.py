@@ -16,7 +16,7 @@ def test_eval_runner_returns_results_for_default_scenarios():
         "switch-intent-mid-verification",
         "verification-lock-after-max-failures",
         "recovery-after-invalid-field",
-        "deferred-action-resumes",
+        "verify-then-list-after-protected-request",
         "list-mutate-list",
         "ambiguous-confirm",
         "out-of-scope-request",

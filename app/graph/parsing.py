@@ -69,9 +69,6 @@ def extract_requested_operation(message: str, state: dict) -> ConversationOperat
         return ConversationOperation.LIST_APPOINTMENTS
     if is_help_request(lowered):
         return ConversationOperation.HELP
-    deferred_operation = state.get("turn", {}).get("deferred_operation")
-    if deferred_operation:
-        return ConversationOperation(deferred_operation)
     return ConversationOperation.UNKNOWN
 
 

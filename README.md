@@ -113,10 +113,10 @@ Each user message runs through four steps:
 
 - **ingest** — resets per-turn output fields so the current turn starts clean. Persisted state (verification status, appointment history) is left untouched.
 - **interpret** — the only step that calls the LLM. It classifies the user's intent and extracts any identity fields they provided. After this, all routing is deterministic.
-- **verify** — the safety gate for protected operations. It collects missing identity fields one at a time, validates each one, and attempts the identity match when all three are present. If the user originally asked for an appointment action before being verified, that intent is stored as `deferred_operation` and resumed automatically once verification succeeds — the user never has to repeat themselves.
+- **verify** — the safety gate for protected operations. It collects missing identity fields one at a time, validates each one, and attempts the identity match when all three are present.
 - **execute_action** — runs the actual business logic: listing appointments, confirming, or canceling. Only runs when verification already passed or was not required.
 
-The graph is what makes the conversational flow predictable. Verification gating, deferred action resume, and routing decisions are all encoded in the graph, not inside LLM output. See [docs/graph.md](docs/graph.md) for a full walkthrough.
+The graph is what makes the conversational flow predictable. Verification gating and routing decisions are encoded in the graph, not inside LLM output. See [docs/graph.md](docs/graph.md) for a full walkthrough.
 
 Why deterministic workflow over a ReAct agent:
 
@@ -128,13 +128,12 @@ Why deterministic workflow over a ReAct agent:
 
 - listing, confirming, and canceling appointments only work after verification
 - verification requires full name, phone number, and date of birth
-- deferred protected actions resume automatically after successful verification
-- confirmation and cancellation are idempotent — meaning that performing the same action more than once produces the same result as performing it once. Confirming an already-confirmed appointment, or canceling an already-canceled one, leaves the system in exactly the same state and returns a consistent response instead of raising an error. This is useful because it makes retries safe: if a user sends the same request twice (by accident, or because they weren't sure the first one went through), the outcome is predictable and no duplicate side-effects occur
+- confirmation and cancellation are idempotent — calling the same operation more than once produces the same result as calling it once, with no side effects. Re-confirming an already-confirmed appointment returns `already_confirmed` instead of an error; re-canceling an already-canceled appointment returns `already_canceled`. This matters in a conversational interface where users may send the same intent multiple times (e.g., double-tapping, retrying after a perceived failure, or the LLM issuing a duplicate tool call). The implementation lives in `Appointment.confirm()` and `Appointment.cancel()` in `app/models.py`: each method checks the current status first, and if the transition is a no-op, it returns the unchanged appointment along with the outcome signal rather than mutating state or raising an error.
 - the system avoids exposing another patient's data
 
 ## UX Scope Notes
 
-- after successful verification, the intended UX is to show appointments automatically, so asking `list appointments` becomes optional for the happy path
+- after successful verification, the workflow shows appointments automatically so the patient lands in a clear post-verification state
 - the explicit `list appointments` intent still exists and remains valid
 - the current delivery supports one primary appointment action per user message
 

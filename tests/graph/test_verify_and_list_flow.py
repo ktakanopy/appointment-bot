@@ -30,7 +30,7 @@ class DeferredListProvider:
         return JudgeResult(status="pass", summary="Test judge completed.", score=1.0)
 
 
-def test_verify_then_list_flow_resumes_deferred_action():
+def test_verify_then_list_flow_lists_after_verification():
     workflow = build_test_workflow()
 
     first = workflow.run("graph-verify-list", "I want to see my appointments")
@@ -47,7 +47,7 @@ def test_verify_then_list_flow_resumes_deferred_action():
     assert final.turn.response_key == ResponseKey.APPOINTMENTS_LIST
 
 
-def test_verify_then_list_keeps_original_deferred_action_during_identity_collection():
+def test_verify_then_list_ignores_operation_changes_during_identity_collection():
     workflow = build_test_workflow(provider=DeferredListProvider())
 
     workflow.run("graph-verify-stable-list", "I want to see my appointments")
@@ -61,7 +61,7 @@ def test_verify_then_list_keeps_original_deferred_action_during_identity_collect
     assert len(final.appointments.listed_appointments) == 2
 
 
-def test_verify_without_deferred_action_auto_lists_appointments():
+def test_verify_without_prior_action_lists_appointments():
     workflow = build_test_workflow()
 
     workflow.run("graph-auto-list", "Ana Silva")

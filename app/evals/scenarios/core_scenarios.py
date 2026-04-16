@@ -122,18 +122,19 @@ CORE_SCENARIOS = [
         category="verification",
     ),
     EvaluationScenario(
-        scenario_id="deferred-action-resumes",
-        title="Deferred protected action resumes after successful verification",
+        scenario_id="verify-then-list-after-protected-request",
+        title="Protected request still leads to verification-gated listing",
         input_turns=[
             "cancel the first appointment",
             "Ana Silva",
             "11999998888",
             "1990-05-10",
         ],
-        expected_outcomes={"verified": True},
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
         judge_rubric=(
-            "The user requests a cancel before being verified. "
-            "After verification succeeds the assistant should resume the deferred cancel action."
+            "The user requests a protected action before verification. "
+            "The assistant should complete verification first and then return the patient to the appointment list "
+            "instead of executing a stored deferred action automatically."
         ),
         category="verification",
     ),

@@ -6,13 +6,11 @@ from app.graph.state import ConversationGraphState, TurnState as TurnStateModel,
 def verification_required(state: ConversationGraphState) -> bool:
     operation = turn_state(state)["requested_operation"]
     verification = verification_state(state)
-    deferred_operation = turn_state(state)["deferred_operation"]
     return bool(
         not verification["verified"]
         and (
             operation.requires_verification
             or operation.triggers_verification_flow
-            or deferred_operation
         )
     )
 

@@ -35,7 +35,6 @@ class OpenAIProvider:
             "state": {
                 "verified": verification.get("verified", False),
                 "requested_operation": turn.get("requested_operation"),
-                "deferred_operation": turn.get("deferred_operation"),
                 "missing_verification_fields": state.get("missing_verification_fields", []),
                 "messages": state.get("messages", []),
             },
