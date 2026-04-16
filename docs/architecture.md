@@ -152,10 +152,11 @@ sequenceDiagram
 
 - loads `Settings`
 - builds the logger and optional Langfuse tracer
+- builds a SQLite-backed LangGraph checkpointer with `SqliteSaver`
 - creates the in-memory repositories
 - creates `VerificationService`, `AppointmentService`, and `SessionService`
 - creates the configured `OpenAIProvider`
-- compiles the LangGraph workflow with `InMemorySaver`
+- compiles the LangGraph workflow with the SQLite checkpointer
 - exposes the resulting runtime through `RuntimeContext`
 
 This is the only composition root in the project.
@@ -163,7 +164,7 @@ This is the only composition root in the project.
 ## 5. Session and Workflow State
 
 - Session records are stored in `InMemorySessionStore`
-- LangGraph thread state is stored through `InMemorySaver`
+- LangGraph thread state is persisted through the SQLite `SqliteSaver` checkpointer
 - Verification, deferred actions, and appointment-list context live in `ConversationState`
 - Cross-session remembered identity remains intentionally out of scope
 
