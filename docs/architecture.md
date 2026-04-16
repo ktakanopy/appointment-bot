@@ -34,7 +34,7 @@ flowchart LR
     end
 
     subgraph workflowLayer [Workflow]
-        graph[LangGraph workflow]
+        lgraph[LangGraph workflow]
         parsing[Parsing helpers]
     end
 
@@ -47,11 +47,11 @@ flowchart LR
     api --> responses
     runtime --> repos
     runtime --> services
-    runtime --> graph
+    runtime --> lgraph
     runtime --> provider
-    graph --> services
-    graph --> parsing
-    graph --> models
+    lgraph --> services
+    lgraph --> parsing
+    lgraph --> models
     responses --> models
 ```
 
