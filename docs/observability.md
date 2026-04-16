@@ -2,7 +2,7 @@
 
 ## 1. Structured Logging
 
-The application uses the logger `appointment_bot`, obtained via `get_logger()` in `app/observability.py`.
+The application uses the `appointment_bot` logger from `get_logger()` in `app/observability.py`.
 
 Log lines are JSON objects written to stdout. The formatter is message-only; the logger does not add a timestamp prefix.
 
@@ -60,7 +60,7 @@ See `docs/security.md` for the full security context.
 
 ## 5. Failure Isolation
 
-Tracing failures do not affect the request path.
+Tracing failures should not interrupt the request path.
 
 `record_trace_event` wraps `tracer.create_event` in try/except. On failure, a line is logged with `{"event": ..., "trace_status": "unavailable"}`.
 

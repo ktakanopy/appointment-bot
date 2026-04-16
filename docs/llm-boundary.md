@@ -1,6 +1,6 @@
 # LLM boundary
 
-This document describes how language models participate in the appointment bot. The runtime is designed so that correctness, authorization, and state changes do not depend on nondeterministic model output.
+This guide explains how language models participate in the appointment bot. The runtime is designed so correctness, authorization, and state changes do not depend on nondeterministic model output.
 
 ## 1. Design principle
 
@@ -8,7 +8,7 @@ The LLM is non-authoritative. It performs exactly one product role:
 
 1. **Intent extraction** — parse the user message into a structured operation label and entity fields.
 
-The model does not grant or deny access, does not mutate appointments or identity state, and does not decide graph routing. Final patient-facing response wording is produced deterministically by `app/responses.py` and is not rewritten by the model. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
+The model cannot grant or deny access, mutate appointments or identity state, or decide graph routing. Final patient-facing response wording is produced deterministically by `app/responses.py` and is not rewritten by the model. Security-sensitive and policy outcomes are computed from explicit rules and repository operations, not from free-form LLM text.
 
 ## 2. Provider surface
 

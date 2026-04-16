@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes the simplified architecture of the conversational appointment service after the flattening refactor.
+This guide walks through the simplified architecture of the conversational appointment service after the flattening refactor.
 
 ## 1. System Overview
 
-The system now keeps a small number of explicit modules:
+The system is organized into a small set of explicit modules:
 
 - `app/main.py` handles the FastAPI routes
 - `app/runtime.py` wires the runtime
@@ -109,7 +109,7 @@ The delivery layer is now mostly two files:
 - `app/main.py` for HTTP endpoints
 - `app/runtime.py` for dependency wiring
 
-There is no separate application, presenter, or runtime-assembly layer anymore.
+There is no separate application, presenter, or runtime-assembly layer now.
 
 ## 3. Request Lifecycle
 

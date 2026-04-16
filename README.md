@@ -1,8 +1,8 @@
 # Appointment Bot
 
-Conversational appointment management service for a clinic workflow.
+A conversational appointment assistant for a clinic workflow.
 
-The main endpoint accepts natural language messages and lets a patient:
+The main endpoint understands natural language and helps a patient:
 
 - verify their identity with full name, phone number, and date of birth
 - list their appointments
@@ -16,7 +16,7 @@ Demo asset: [chat flow GIF](docs/demo-chat-flow.gif)
 
 I started from the exercise statement provided for the hiring process.
 
-The first step was turning that prompt into a clearer working specification
+I first turned that prompt into a clearer working specification
 through a discussion with `gpt-5.4`, using the PDF as the source of truth for
 requirements, scope, flows, and constraints.
 
@@ -37,7 +37,7 @@ The main artifacts from that process live in:
 - `specs/001-appointment-management/`
 - `specs/002-frontend-llm-memory/`
 
-After the spec implementation, I started iteration with Cursor and Github Copilot agents. 
+After implementing the specs, I iterated with Cursor and GitHub Copilot agents.
 
 ## Architecture
 
