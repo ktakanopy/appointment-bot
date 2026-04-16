@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import app.runtime as runtime_module
-import app.graph.nodes as graph_nodes
 from fastapi.testclient import TestClient
 
 from app.main import app, reset_runtime
@@ -35,6 +34,8 @@ def test_api_uses_fallback_when_provider_fails(monkeypatch):
 
 
 def test_api_returns_503_when_provider_and_fallback_fail(monkeypatch):
+    import app.graph.nodes as graph_nodes
+
     monkeypatch.setattr(runtime_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
 
     def fail_requested_operation(message, state):
