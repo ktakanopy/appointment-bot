@@ -14,15 +14,13 @@ Demo asset: [chat flow GIF](docs/demo-chat-flow.gif)
 
 ## How This Project Was Built
 
-I started from the exercise statement provided for the hiring process.
-
-The first step was turning that prompt into a clearer working specification
-through a discussion with `gpt-5.4`, using the PDF as the source of truth for
-requirements, scope, flows, and constraints.
+I started from the hiring-process exercise prompt and turned it into a working
+specification, using the PDF as the source of truth for requirements, scope,
+flows, and constraints.
 
 After that, I used GitHub's [`spec-kit`](https://github.com/github/spec-kit) to
-structure the work as a spec-driven workflow. That process produced and guided
-the following artifacts:
+structure implementation as a spec-driven workflow. That process produced and
+guided the following artifacts:
 
 - project constitution
 - feature specification
@@ -37,7 +35,8 @@ The main artifacts from that process live in:
 - `specs/001-appointment-management/`
 - `specs/002-frontend-llm-memory/`
 
-After the spec implementation, I started iteration with Cursor and Github Copilot agents. 
+After the initial spec implementation, I iterated with Cursor and GitHub
+Copilot agents.
 
 ## Architecture
 
@@ -57,7 +56,8 @@ Key design decisions:
 - a single `POST /chat` endpoint
 - a `POST /sessions/new` session-creation endpoint
 - explicit workflow orchestration with `LangGraph StateGraph`
-- in-memory conversation state keyed by `thread_id`
+- SQLite-backed LangGraph checkpoint persistence via `SqliteSaver`
+- in-memory session records in `InMemorySessionStore`
 - deterministic safety gates for verification and protected actions
 - a lightweight Streamlit frontend for patient chat
 - in-memory repositories for patients and appointments
@@ -310,7 +310,7 @@ uv run python -m app.evals.runner
 through the deployed app or UI. The judge still uses the configured LLM
 provider, so you need a valid provider setup such as `OPENAI_API_KEY`.
 
-## Docs Folder
+## Documentation and Design Artifacts
 
 The `docs/` folder collects the main architecture and delivery notes for the
 project. These files are the best place to understand the design choices,
@@ -327,21 +327,7 @@ code first.
 - [`docs/graph.md`](docs/graph.md) - workflow graph and routing notes
 - [`docs/test-scenarios.md`](docs/test-scenarios.md) - manual test checklist and scenario coverage
 
-## Design Artifacts
-
-Architecture documentation:
-
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/llm-boundary.md`](docs/llm-boundary.md)
-- [`docs/security.md`](docs/security.md)
-- [`docs/data-model.md`](docs/data-model.md)
-- [`docs/observability.md`](docs/observability.md)
-- [`docs/evaluation.md`](docs/evaluation.md)
-- [`docs/decisions.md`](docs/decisions.md)
-- [`docs/graph.md`](docs/graph.md)
-- [`docs/test-scenarios.md`](docs/test-scenarios.md)
-
-Specification artifacts:
+Spec-driven implementation artifacts:
 
 - `specs/001-appointment-management/spec.md`
 - `specs/001-appointment-management/plan.md`
@@ -355,7 +341,8 @@ Specification artifacts:
 - The project is intentionally scoped to the exercise and uses simplified
   identity verification.
 - There is no real EHR/EMR integration.
-- Appointment, session, and conversation data remain in memory.
+- Session records and seeded patient/appointment repositories remain in memory.
+- LangGraph workflow checkpoints persist through SQLite via `SqliteSaver`.
 - Cross-session remembered identity was intentionally left out of the delivered
   product to keep the implementation aligned with the original exercise scope.
 
@@ -364,7 +351,8 @@ Specification artifacts:
 If this application needed to move beyond demo scope, the next improvements would be:
 
 - stream token output from the backend to the frontend instead of waiting for full responses
-- replace in-memory state with an external database or cache so sessions survive restarts
+- move session storage and business repositories to external persistence and
+  upgrade local SQLite checkpointing to production-grade managed storage
 - move patient and appointment data to a real persistence layer instead of seeded demo data
 - add background workers and queueing for slower downstream operations or audits
 - add stronger auth, rate limiting, and production-grade observability around protected flows
@@ -383,4 +371,3 @@ In a production version, likely next steps would be:
 - thread-safe shared state or externalized persistence instead of in-memory mutable stores
 - stronger evaluation and regression coverage for natural language understanding
 - more production-grade error handling and operational resilience
-

@@ -69,7 +69,7 @@ The flow for a typical turn:
 **Why it exists:** the system needs to understand what the user wants before it can do anything. This is the one step where the LLM is involved.
 **User-facing behavior:** correctly classifies messages like "show me my appointments", "confirm the first one", "Ana Silva", or "1990-05-10" into structured operations and identity fields.
 
-The LLM is used here for intent classification and entity extraction. After this node, control returns entirely to the graph and all remaining routing is deterministic. If the provider is unavailable, the node falls back to deterministic pattern matching before surfacing an error.
+The LLM is used here for intent classification and entity extraction. After this node, control returns entirely to the graph and all remaining routing is deterministic. If the provider call fails, the node logs `interpret_provider_failed`, raises `DependencyUnavailableError`, and the `/chat` route returns HTTP 503 with a stable temporary-unavailable message.
 
 ---
 
@@ -220,4 +220,3 @@ If the user fails identity verification three times, the session is locked (`ver
 ---
 
 All routing decisions, state transitions, and policy checks shown in these examples are encoded in the graph nodes and conditional edges — not inside LLM output.
-
