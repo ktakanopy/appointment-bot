@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The project includes a lightweight in-repo evaluation framework instead of adopting an external eval tool. It runs multi-turn conversation scenarios through the runtime and workflow boundary and uses the configured LLM provider as the judge.
+The project includes a lightweight in-repo evaluation framework instead of an external eval tool. It runs multi-turn conversation scenarios through the runtime/workflow boundary and uses the configured LLM provider as judge.
 
 ## 2. Framework Components
 
@@ -81,7 +81,7 @@ Each eval run creates its own `RuntimeContext` with fresh in-memory adapters. Ea
 
 ### Purpose
 
-The multi-turn judge scenarios validate full conversational behavior end-to-end. A complementary **intent/entity regression** layer validates the *structured output* of the interpretation step in isolation: given a user utterance and conversation state, does the interpret + normalize pipeline return the expected `requested_operation`, `full_name`, `phone`, `dob`, and `appointment_reference`?
+The multi-turn judge scenarios validate full conversational behavior end to end. A complementary **intent/entity regression** layer validates the *structured output* of the interpretation step in isolation: given a user utterance and conversation state, does the interpret + normalize pipeline return the expected `requested_operation`, `full_name`, `phone`, `dob`, and `appointment_reference`?
 
 This protects against drift after prompt, parser, provider, or model changes without requiring a full conversation replay.
 

@@ -1,6 +1,6 @@
 # Security patterns
 
-This document describes security-related behavior in the healthcare appointment bot.
+This guide explains the security behavior in the healthcare appointment bot.
 
 ## 1. Verification gating
 
@@ -62,7 +62,7 @@ If ownership does not hold, the workflow returns `issue=appointment_not_owned`.
 
 ## 6. Scope limitations
 
-This project is a demo or exercise. The following are intentionally out of scope:
+This project is a demo/exercise, so the following are intentionally out of scope:
 
 - Real authentication (OAuth, JWT, API keys)
 - Encryption at rest for persisted session or identity data

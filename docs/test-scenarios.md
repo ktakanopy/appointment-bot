@@ -1,5 +1,7 @@
 # Manual Test Scenarios
 
+Use this checklist to manually validate the most important patient flows and failure paths.
+
 1. Ask to list appointments before verification and confirm the service collects
    full name, phone, and date of birth before returning results.
 2. Verify successfully, then confirm the first appointment from the current

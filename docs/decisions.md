@@ -4,11 +4,11 @@
 
 **Status:** Accepted
 
-**Context:** The exercise requires a Python backend with an endpoint for conversational AI. FastAPI provides async support, automatic OpenAPI documentation, Pydantic integration for request/response validation, and dependency injection.
+**Context:** The exercise needs a Python backend with a conversational AI endpoint. FastAPI gives async support, automatic OpenAPI docs, Pydantic validation, and dependency injection.
 
 **Decision:** Use FastAPI with Pydantic models and `Depends` for runtime injection.
 
-**Consequences:** Swagger UI is available out of the box. Pydantic `extra="forbid"` catches unexpected fields early. The lifespan context manager handles startup and shutdown cleanly.
+**Consequences:** Swagger UI works out of the box. Pydantic `extra="forbid"` catches unexpected fields early. The lifespan context manager keeps startup and shutdown clean.
 
 ## ADR-002: LangGraph StateGraph for Workflow
 

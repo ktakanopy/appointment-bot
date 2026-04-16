@@ -1,6 +1,6 @@
 # Workflow Graph
 
-This document explains how the conversation workflow is structured, why it was designed this way, and how each part of it connects to the business logic. It is meant to be read alongside the code, but it should make sense on its own.
+This guide explains how the conversation workflow is structured, why it was designed this way, and how each part connects to the business logic. You can read it alongside the code, but it should also stand on its own.
 
 ---
 
@@ -10,7 +10,7 @@ Appointment management in a clinical context is mostly a stateful policy problem
 
 The user must verify their identity before accessing their appointments. The system collects identity fields one at a time, validates each one, matches them against a patient record, and gates all protected operations behind that match. If the user asks for an appointment action before being verified, the system stores that intent and resumes it automatically after verification succeeds.
 
-None of that requires creative reasoning or open-ended tool selection. It requires explicit state, clear routing, and predictable behavior.
+This does not require creative reasoning or open-ended tool selection. It needs explicit state, clear routing, and predictable behavior.
 
 A LangGraph `StateGraph` fits this problem directly because:
 

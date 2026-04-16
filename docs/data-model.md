@@ -26,7 +26,7 @@ erDiagram
     }
 ```
 
-`ConversationOperationResult` is an application/workflow contract used to describe the outcome of a completed operation; it is not persisted.
+`ConversationOperationResult` is an application/workflow contract that describes the outcome of a completed operation; it is not persisted.
 
 ## 2. AppointmentStatus State Machine
 
@@ -73,6 +73,6 @@ Confirming a `scheduled` appointment transitions to `confirmed`. Re-confirming a
 | Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
 | Session registry | In-memory via `InMemorySessionStore` | Process lifetime, TTL-based cleanup |
 
-In-memory storage is intentional for demo scope. A production system would back conversation state, patient data, and appointment data with external persistence.
+In-memory storage is intentional for demo scope. In production, conversation state, patient data, and appointment data should use external persistence.
 
 Cross-session remembered identity is a possible future improvement, but it is intentionally not part of the delivered data model for this exercise.

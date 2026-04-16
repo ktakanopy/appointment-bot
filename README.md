@@ -1,8 +1,8 @@
 # Appointment Bot
 
-Conversational appointment management service for a clinic workflow.
+A conversational appointment assistant for a clinic workflow.
 
-The main endpoint accepts natural language messages and lets a patient:
+The main endpoint understands natural language and helps a patient:
 
 - verify their identity with full name, phone number, and date of birth
 - list their appointments
