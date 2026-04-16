@@ -9,7 +9,9 @@ writing a chatbot that sounds clever. It is making sure verification,
 appointment ownership, lockout behavior, and idempotent mutations stay
 predictable.
 
-Demo asset: [chat flow GIF](docs/demo-chat-flow.gif)
+Demo:
+
+![Chat flow demo](docs/demo-chat-flow.gif)
 
 ## What it does
 
