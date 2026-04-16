@@ -55,19 +55,19 @@ The flow for a typical turn:
 
 ### ingest
 
-**Input:** current graph state
-**Changes:** clears per-turn output fields (`response_key`, `issue`, `operation_result`, `subject_appointment`)
-**Why it exists:** LangGraph persists state across turns via its checkpointer. Without a reset step, the response key or issue from the previous turn would still be set when the next turn starts. `ingest` ensures every turn starts from a clean output surface.
-**User-facing behavior:** invisible to the user, but prevents stale data from carrying into the current response.
+- **Input:** current graph state
+- **Changes:** clears per-turn output fields (`response_key`, `issue`, `operation_result`, `subject_appointment`)
+- **Why it exists:** LangGraph persists state across turns via its checkpointer. Without a reset step, the response key or issue from the previous turn would still be set when the next turn starts. `ingest` ensures every turn starts from a clean output surface.
+- **User-facing behavior:** invisible to the user, but prevents stale data from carrying into the current response.
 
 ---
 
 ### interpret
 
-**Input:** the latest user message and the last few turns of conversation history
-**Changes:** sets `requested_operation`, fills any identity fields the user provided, decides whether to route to `verify` or `execute_action`
-**Why it exists:** the system needs to understand what the user wants before it can do anything. This is the one step where the LLM is involved.
-**User-facing behavior:** correctly classifies messages like "show me my appointments", "confirm the first one", "Ana Silva", or "1990-05-10" into structured operations and identity fields.
+- **Input:** the latest user message and the last few turns of conversation history
+- **Changes:** sets `requested_operation`, fills any identity fields the user provided, decides whether to route to `verify` or `execute_action`
+- **Why it exists:** the system needs to understand what the user wants before it can do anything. This is the one step where the LLM is involved.
+- **User-facing behavior:** correctly classifies messages like "show me my appointments", "confirm the first one", "Ana Silva", or "1990-05-10" into structured operations and identity fields.
 
 The LLM is used here for intent classification and entity extraction. After this node, control returns entirely to the graph and all remaining routing is deterministic. If the provider call fails, the node logs `interpret_provider_failed`, raises `DependencyUnavailableError`, and the `/chat` route returns HTTP 503 with a stable temporary-unavailable message.
 
@@ -75,21 +75,23 @@ The LLM is used here for intent classification and entity extraction. After this
 
 ### verify
 
-**Input:** current verification state, the extracted operation, any identity fields found in this turn
-**Changes:** updates verification state — adds a field, flags an invalid input, records a failure, marks verified, or locks the session
-**Why it exists:** listing, confirming, and canceling appointments are protected operations. They must not run unless the patient has been matched by full name, phone, and date of birth.
-**User-facing behavior:** prompts for missing fields one at a time, rejects invalid formats with a specific message, retries on identity mismatch, and locks the session after repeated failures.
+- **Input:** current verification state, the extracted operation, any identity fields found in this turn
+- **Changes:** updates verification state — adds a field, flags an invalid input, records a failure, marks verified, or locks the session
+- **Why it exists:** listing, confirming, and canceling appointments are protected operations. They must not run unless the patient has been matched by full name, phone, and date of birth.
+- **User-facing behavior:** prompts for missing fields one at a time, rejects invalid formats with a specific message, retries on identity mismatch, and locks the session after repeated failures.
 
 This node also manages deferred operations. If the user originally asked for a protected action before being verified, that intent is stored in `deferred_operation`. Once verification succeeds, the graph continues to `execute_action` automatically to run it.
+
+The node also enforces a failure limit. Each failed identity match increments a failure counter. When the counter reaches the configured maximum, `verify` sets `verification_status = locked` and returns a lock response immediately — the graph ends without routing to `execute_action` or accepting any further identity input.
 
 ---
 
 ### execute_action
 
-**Input:** the verified patient ID, the requested or deferred operation, and any stored appointment context
-**Changes:** updates appointment state — stores the listed appointments, records the action result
-**Why it exists:** this is where the actual business logic runs — fetching appointments, confirming, canceling, or returning help context.
-**User-facing behavior:** produces the appointment list, confirmation result, cancellation result, or a help message.
+- **Input:** the verified patient ID, the requested or deferred operation, and any stored appointment context
+- **Changes:** updates appointment state — stores the listed appointments, records the action result
+- **Why it exists:** this is where the actual business logic runs — fetching appointments, confirming, canceling, or returning help context.
+- **User-facing behavior:** produces the appointment list, confirmation result, cancellation result, or a help message.
 
 `execute_action` only runs when verification already passed or was not required. It is skipped entirely if `verify` already set a turn output for the current turn.
 
@@ -141,6 +143,13 @@ From the user's perspective, the bot is just "remembering" their original reques
 ## 6. State model in practice
 
 The graph maintains three kinds of state, with different lifespans:
+
+Related to this runtime state, the code also defines two top-level state shapes in `app/graph/state.py`: `ConversationGraphState` and `ConversationState`.
+
+- `ConversationGraphState` (`app/graph/state.py`) is the workflow-internal state used by LangGraph nodes and routing. It extends `MessagesState` and keeps graph-native structures while the workflow is running.
+- `ConversationState` (`app/graph/state.py`) is the post-workflow, Pydantic representation built by `build_conversation_state(...)`. It is the more human-readable state used after graph execution.
+
+In practice, `ConversationState` exposes the same core conversation surface in a cleaner shape: `thread_id`, `messages`, `verification`, `turn`, and `appointments`. `app/responses.py` consumes this state to assemble the final response text and response payload returned by the API.
 
 **Turn output** (`state.turn`)
 Ephemeral — reset at the start of every turn by `ingest`. Holds the result of the current turn: which response key to send, whether there was an issue, the operation result, the matched appointment. This is what `app/responses.py` reads to assemble the response message after the graph ends.
@@ -215,7 +224,7 @@ Persists across turns. Stores the last listed set of appointments and any appoin
 - `verify`: all three fields are present → attempts identity match → match fails. Sets `response_key = verification_failed`, increments failure counter. Turn output is set → graph ends.
 - *(bot says the identity could not be confirmed and invites a retry)*
 
-If the user fails identity verification three times, the session is locked (`verification_status = locked`) and the bot returns `response_key = verification_locked` without accepting further identity input.
+If the user reaches the configured maximum of failed identity matches, the session is locked (`verification_status = locked`) and the bot returns `response_key = verification_locked` without accepting further identity input.
 
 ---
 
