@@ -55,19 +55,19 @@ The flow for a typical turn:
 
 ### ingest
 
-**Input:** current graph state
-**Changes:** clears per-turn output fields (`response_key`, `issue`, `operation_result`, `subject_appointment`)
-**Why it exists:** LangGraph persists state across turns via its checkpointer. Without a reset step, the response key or issue from the previous turn would still be set when the next turn starts. `ingest` ensures every turn starts from a clean output surface.
-**User-facing behavior:** invisible to the user, but prevents stale data from carrying into the current response.
+- **Input:** current graph state
+- **Changes:** clears per-turn output fields (`response_key`, `issue`, `operation_result`, `subject_appointment`)
+- **Why it exists:** LangGraph persists state across turns via its checkpointer. Without a reset step, the response key or issue from the previous turn would still be set when the next turn starts. `ingest` ensures every turn starts from a clean output surface.
+- **User-facing behavior:** invisible to the user, but prevents stale data from carrying into the current response.
 
 ---
 
 ### interpret
 
-**Input:** the latest user message and the last few turns of conversation history
-**Changes:** sets `requested_operation`, fills any identity fields the user provided, decides whether to route to `verify` or `execute_action`
-**Why it exists:** the system needs to understand what the user wants before it can do anything. This is the one step where the LLM is involved.
-**User-facing behavior:** correctly classifies messages like "show me my appointments", "confirm the first one", "Ana Silva", or "1990-05-10" into structured operations and identity fields.
+- **Input:** the latest user message and the last few turns of conversation history
+- **Changes:** sets `requested_operation`, fills any identity fields the user provided, decides whether to route to `verify` or `execute_action`
+- **Why it exists:** the system needs to understand what the user wants before it can do anything. This is the one step where the LLM is involved.
+- **User-facing behavior:** correctly classifies messages like "show me my appointments", "confirm the first one", "Ana Silva", or "1990-05-10" into structured operations and identity fields.
 
 The LLM is used here for intent classification and entity extraction. After this node, control returns entirely to the graph and all remaining routing is deterministic. If the provider call fails, the node logs `interpret_provider_failed`, raises `DependencyUnavailableError`, and the `/chat` route returns HTTP 503 with a stable temporary-unavailable message.
 
@@ -75,10 +75,10 @@ The LLM is used here for intent classification and entity extraction. After this
 
 ### verify
 
-**Input:** current verification state, the extracted operation, any identity fields found in this turn
-**Changes:** updates verification state — adds a field, flags an invalid input, records a failure, marks verified, or locks the session
-**Why it exists:** listing, confirming, and canceling appointments are protected operations. They must not run unless the patient has been matched by full name, phone, and date of birth.
-**User-facing behavior:** prompts for missing fields one at a time, rejects invalid formats with a specific message, retries on identity mismatch, and locks the session after repeated failures.
+- **Input:** current verification state, the extracted operation, any identity fields found in this turn
+- **Changes:** updates verification state — adds a field, flags an invalid input, records a failure, marks verified, or locks the session
+- **Why it exists:** listing, confirming, and canceling appointments are protected operations. They must not run unless the patient has been matched by full name, phone, and date of birth.
+- **User-facing behavior:** prompts for missing fields one at a time, rejects invalid formats with a specific message, retries on identity mismatch, and locks the session after repeated failures.
 
 This node also manages deferred operations. If the user originally asked for a protected action before being verified, that intent is stored in `deferred_operation`. Once verification succeeds, the graph continues to `execute_action` automatically to run it.
 
@@ -88,10 +88,10 @@ The node also enforces a failure limit. Each failed identity match increments a 
 
 ### execute_action
 
-**Input:** the verified patient ID, the requested or deferred operation, and any stored appointment context
-**Changes:** updates appointment state — stores the listed appointments, records the action result
-**Why it exists:** this is where the actual business logic runs — fetching appointments, confirming, canceling, or returning help context.
-**User-facing behavior:** produces the appointment list, confirmation result, cancellation result, or a help message.
+- **Input:** the verified patient ID, the requested or deferred operation, and any stored appointment context
+- **Changes:** updates appointment state — stores the listed appointments, records the action result
+- **Why it exists:** this is where the actual business logic runs — fetching appointments, confirming, canceling, or returning help context.
+- **User-facing behavior:** produces the appointment list, confirmation result, cancellation result, or a help message.
 
 `execute_action` only runs when verification already passed or was not required. It is skipped entirely if `verify` already set a turn output for the current turn.
 
