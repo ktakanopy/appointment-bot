@@ -1,29 +1,26 @@
-# Workflow Graph
+# Workflow graph
 
-This guide explains how the conversation workflow is structured, why it was designed this way, and how each part connects to the business logic. You can read it alongside the code, but it should also stand on its own.
+This is the core of the project.
 
----
+If someone asks me what the interesting part of the take-home is, I would point
+here first. The graph is where the system keeps its promises: verify first,
+protect patient data, and keep the flow predictable across turns.
 
-## 1. Why this graph exists
+## Why use a graph at all?
 
-Appointment management in a clinical context is mostly a stateful policy problem, not an open-ended reasoning problem.
+This problem looks conversational, but it is mostly a policy flow.
 
-The user must verify their identity before accessing their appointments. The system collects identity fields one at a time, validates each one, matches them against a patient record, and gates all protected operations behind that match. If the user asks for an appointment action before being verified, the system stores that intent and resumes it automatically after verification succeeds.
+The system has to answer questions like:
 
-This does not require creative reasoning or open-ended tool selection. It needs explicit state, clear routing, and predictable behavior.
+- is the patient verified yet?
+- which identity field is still missing?
+- should this turn prompt for more identity data or run a business action?
+- can this appointment be confirmed or canceled?
 
-A LangGraph `StateGraph` fits this problem directly because:
+Those are workflow questions, not creative-writing questions. A LangGraph
+`StateGraph` fits that pretty naturally.
 
-- routing decisions are encoded as conditional edges, visible in the graph itself
-- verification state persists across turns without relying on the LLM to remember anything
-- every execution path is inspectable and testable
-- a bad LLM output can affect intent classification, but it cannot override policy routing
-
-The alternative — a ReAct-style agent — would give the model authority over when to verify, when to list, and when to stop. That is more flexibility than this problem needs, and it comes at the cost of auditability and predictability. For a healthcare-adjacent workflow, the trade-off clearly favors explicit control flow.
-
----
-
-## 2. Graph overview
+## Graph shape
 
 ```mermaid
 flowchart TD
@@ -32,200 +29,133 @@ flowchart TD
     interpret --> need_verify{verification_required?}
     need_verify -->|yes| verify[verify]
     need_verify -->|no| execute[execute_action]
-    verify --> readyForAction{turn output present?}
-    readyForAction -->|yes| finish([End])
-    readyForAction -->|no| execute
+    verify --> ready{turn output present?}
+    ready -->|yes| finish([End])
+    ready -->|no| execute
     execute --> finish
 ```
 
-Each user message triggers one full pass through this graph. The graph reads the current conversation state, runs the appropriate steps, and ends with a populated turn result. Response wording and HTTP shaping happen after the graph exits, in `app/responses.py` and `app/main.py`.
+Each user message makes one pass through this graph.
 
-The flow for a typical turn:
+## Nodes
 
-1. `ingest` resets per-turn output so nothing from the previous turn leaks in.
-2. `interpret` reads the message, extracts intent and identity fields, and decides whether verification is required. This is the only step that calls the LLM.
-3. If verification is needed, `verify` runs next. It collects missing fields, validates them, runs the identity match, or locks the session.
-4. If `verify` produced a response for this turn (e.g., "please provide your phone number"), the graph ends there.
-5. If `verify` completed the identity match and there is a deferred action, the graph continues to `execute_action`.
-6. If verification was not required at all, `execute_action` runs directly.
+### `ingest`
 
----
+Resets turn-level output fields so one turn does not leak into the next.
 
-## 3. Node-by-node walkthrough
+Without this step, old `response_key`, `issue`, or `operation_result` values
+could stick around and produce stale responses.
 
-### ingest
+### `interpret`
 
-- **Input:** current graph state
-- **Changes:** clears per-turn output fields (`response_key`, `issue`, `operation_result`, `subject_appointment`)
-- **Why it exists:** LangGraph persists state across turns via its checkpointer. Without a reset step, the response key or issue from the previous turn would still be set when the next turn starts. `ingest` ensures every turn starts from a clean output surface.
-- **User-facing behavior:** invisible to the user, but prevents stale data from carrying into the current response.
+The only node that calls the LLM.
 
----
+It extracts:
 
-### interpret
+- `requested_operation`
+- `full_name`
+- `phone`
+- `dob`
+- `appointment_reference`
 
-- **Input:** the latest user message and the last few turns of conversation history
-- **Changes:** sets `requested_operation`, fills any identity fields the user provided, decides whether to route to `verify` or `execute_action`
-- **Why it exists:** the system needs to understand what the user wants before it can do anything. This is the one step where the LLM is involved.
-- **User-facing behavior:** correctly classifies messages like "show me my appointments", "confirm the first one", "Ana Silva", or "1990-05-10" into structured operations and identity fields.
+After that, the workflow is deterministic again.
 
-The LLM is used here for intent classification and entity extraction. After this node, control returns entirely to the graph and all remaining routing is deterministic. If the provider call fails, the node logs `interpret_provider_failed`, raises `DependencyUnavailableError`, and the `/chat` route returns HTTP 503 with a stable temporary-unavailable message.
+If the provider fails here, the node raises `DependencyUnavailableError` and the
+API returns HTTP 503.
 
----
+### `verify`
 
-### verify
+This node owns the identity flow.
 
-- **Input:** current verification state, the extracted operation, any identity fields found in this turn
-- **Changes:** updates verification state — adds a field, flags an invalid input, records a failure, marks verified, or locks the session
-- **Why it exists:** listing, confirming, and canceling appointments are protected operations. They must not run unless the patient has been matched by full name, phone, and date of birth.
-- **User-facing behavior:** prompts for missing fields one at a time, rejects invalid formats with a specific message, retries on identity mismatch, and locks the session after repeated failures.
+It:
 
-This node also manages deferred operations. If the user originally asked for a protected action before being verified, that intent is stored in `deferred_operation`. Once verification succeeds, the graph continues to `execute_action` automatically to run it.
+- asks for missing fields one at a time
+- validates field formats
+- attempts the identity match when all three fields are present
+- increments the failure counter on identity mismatch
+- locks the session after the configured maximum number of failures
 
-The node also enforces a failure limit. Each failed identity match increments a failure counter. When the counter reaches the configured maximum, `verify` sets `verification_status = locked` and returns a lock response immediately — the graph ends without routing to `execute_action` or accepting any further identity input.
+Once verification succeeds, the workflow sets the next operation to
+`list_appointments` and continues.
 
----
+### `execute_action`
 
-### execute_action
+Runs the business action once verification is no longer blocking the turn.
 
-- **Input:** the verified patient ID, the requested or deferred operation, and any stored appointment context
-- **Changes:** updates appointment state — stores the listed appointments, records the action result
-- **Why it exists:** this is where the actual business logic runs — fetching appointments, confirming, canceling, or returning help context.
-- **User-facing behavior:** produces the appointment list, confirmation result, cancellation result, or a help message.
+Depending on state, that may lead to:
 
-`execute_action` only runs when verification already passed or was not required. It is skipped entirely if `verify` already set a turn output for the current turn.
+- list appointments
+- confirm an appointment
+- cancel an appointment
+- return help text
 
----
+## Routing rules
 
-## 4. Routing logic
+After `interpret`, the graph asks one simple question: does this turn require
+verification and is the patient still unverified?
 
-After `interpret`, the graph asks: **is verification required for this operation, and is the user not yet verified?**
+- If yes, go to `verify`
+- If no, go to `execute_action`
 
-- If **yes** → route to `verify`
-- If **no** → route to `execute_action`
+Protected operations are:
 
-Operations that require verification: `list_appointments`, `confirm_appointment`, `cancel_appointment`.
+- `list_appointments`
+- `confirm_appointment`
+- `cancel_appointment`
 
-Operations that also route through `verify` even when the user hasn't explicitly asked to verify: `help`, `unknown`, `verify_identity`. These still pass through `verify` because the user may be in the middle of providing identity fields mid-flow.
+The workflow also routes `help`, `unknown`, and `verify_identity` through
+`verify` when the user is still in the middle of identity collection. That
+sounds a little odd at first, but it works well in practice because users often
+mix natural conversation with identity answers.
 
-After `verify`, the graph asks: **did `verify` produce any turn output?**
+After `verify`, the graph checks whether the node already produced a turn
+result.
 
-- If **yes** → the turn is complete. Graph ends.
-- If **no** → `verify` completed silently (either verification succeeded, or it was not needed this sub-step). Graph continues to `execute_action`.
+- If yes, stop the turn there
+- If no, continue to `execute_action`
 
-This means `execute_action` is skipped whenever `verify` already has the answer — for example, when prompting for a missing field, rejecting a bad format, or reporting a failed match. This avoids running appointment logic in the same turn as a verification prompt.
+That is why the system can ask for a missing phone number without also trying to
+list appointments in the same turn.
 
----
+## What changed from the earlier design
 
-## 5. Deferred operation
+An earlier version tracked a deferred protected action explicitly. I removed
+that.
 
-When a user asks for a protected action before they have been verified, the system stores that intent and picks it back up automatically after verification succeeds.
+It worked, but it spread extra state and branching across the graph for a small
+UX gain. The current version is easier to explain: verify first, then land on
+the appointment list.
 
-**The user story:**
+For this take-home, I think that is the better trade.
 
-1. User: "I want to see my appointments"
-2. Bot: "Please provide your full name"
-3. User: "Ana Silva"
-4. Bot: "Please provide your phone number"
-5. User: "11999998888"
-6. Bot: "Please provide your date of birth"
-7. User: "1990-05-10"
-8. Bot: *(verification succeeds, lists appointments automatically)*
+## Example flow
 
-The user never had to say "list appointments" a second time. The bot remembered what they were trying to do.
+### Listing before verification
 
-**How it works:** when `interpret` sees a protected operation from an unverified user, it saves that operation in `deferred_operation`. This field persists in the graph state across turns. Once `verify` completes the identity match, it finds `deferred_operation` still set, and the graph continues to `execute_action` to run it.
-
-From the user's perspective, the bot is just "remembering" their original request. Technically, it is a state field that survives across turns until it gets consumed.
-
----
-
-## 6. State model in practice
-
-The graph maintains three kinds of state, with different lifespans:
-
-Related to this runtime state, the code also defines two top-level state shapes in `app/graph/state.py`: `ConversationGraphState` and `ConversationState`.
-
-- `ConversationGraphState` (`app/graph/state.py`) is the workflow-internal state used by LangGraph nodes and routing. It extends `MessagesState` and keeps graph-native structures while the workflow is running.
-- `ConversationState` (`app/graph/state.py`) is the post-workflow, Pydantic representation built by `build_conversation_state(...)`. It is the more human-readable state used after graph execution.
-
-In practice, `ConversationState` exposes the same core conversation surface in a cleaner shape: `thread_id`, `messages`, `verification`, `turn`, and `appointments`. `app/responses.py` consumes this state to assemble the final response text and response payload returned by the API.
-
-**Turn output** (`state.turn`)
-Ephemeral — reset at the start of every turn by `ingest`. Holds the result of the current turn: which response key to send, whether there was an issue, the operation result, the matched appointment. This is what `app/responses.py` reads to assemble the response message after the graph ends.
-
-**Verification state** (`state.verification`)
-Persists across turns. Stores whether the user is verified, how many failures they have had, their patient ID, and the individual identity fields they have provided so far. This accumulates across turns as the user provides their name, phone, and date of birth one message at a time.
-
-**Appointment state** (`state.appointments`)
-Persists across turns. Stores the last listed set of appointments and any appointment reference the user mentioned (e.g., "the first one"). This allows later turns to resolve references like "confirm the first one" without needing to re-list.
-
-**Example across five turns:**
-
-- Turn 1: user asks "show my appointments" → verification state is empty → `verify` prompts for name
-- Turn 2: user says "Ana Silva" → `verify` stores `full_name`, prompts for phone
-- Turn 3: user says "11999998888" → `verify` stores `phone`, prompts for DOB
-- Turn 4: user says "1990-05-10" → `verify` matches identity, marks `verified`, `execute_action` runs the deferred list, stores returned appointments
-- Turn 5: user says "confirm the first one" → verification state still shows verified, `execute_action` resolves "first one" from the stored appointment list
-
----
-
-## 7. What the graph does not do
-
-**It does not render final HTTP responses.** The graph ends with a populated `ConversationState`. Response messages are assembled from that state by `app/responses.py`, and HTTP shaping (status codes, JSON structure) is handled in `app/main.py`.
-
-**It does not own the final wording of responses.** All response text is template-based and lives in `app/responses.py`. The graph only sets which `response_key` applies for the current turn.
-
-**It does not let the LLM decide business policy.** The LLM classifies intent and extracts fields. It does not decide whether verification is required, which appointments the user owns, or whether a confirm or cancel is allowed. Those are all deterministic checks inside the graph nodes.
-
-**It does not implement real authentication.** The identity match is a demo-level check against seeded in-memory patient data. It is not a production auth system.
-
-**It does not replace domain services.** Appointment lookup, confirm, and cancel logic live in `app/services.py`. The graph calls those services from `execute_action`; it does not embed business logic directly in the node.
-
----
-
-## 8. Example conversation mapped to graph transitions
-
-### Example 1: First-time listing with full verification
-
-**User:** "I want to see my appointments"
-
-- `ingest`: clears turn output
-- `interpret`: classifies `list_appointments`. User is not verified → stores `deferred_operation = list_appointments`. Routes to `verify`.
-- `verify`: status is `unverified`. `full_name` is missing. Sets `response_key = collect_full_name`. Turn output is set → graph ends.
-- *(bot asks for full name)*
-
-**User:** "Ana Silva"
-
-- `ingest`: clears turn output
-- `interpret`: sees identity-shaped input, extracts `full_name = "Ana Silva"`. Routes to `verify`.
-- `verify`: saves `full_name`. `phone` is still missing. Sets `response_key = collect_phone`. Graph ends.
-- *(bot asks for phone number)*
-
-**User:** "11999998888"
-
-- `verify`: saves `phone`. `dob` is still missing. Sets `response_key = collect_dob`. Graph ends.
-- *(bot asks for date of birth)*
-
-**User:** "1990-05-10"
-
-- `verify`: saves `dob`. All fields present → attempts identity match → match succeeds. Sets `verified = true`, stores `patient_id`. No turn output set. Graph continues to `execute_action`.
-- `execute_action`: sees `deferred_operation = list_appointments`. Fetches appointments for the patient. Stores them in `state.appointments`. Sets `operation_result`. Graph ends.
-- *(bot shows the appointment list)*
-
----
-
-### Example 2: Invalid identity retry
-
-**User:** "Maria Silva" *(wrong name for the phone and DOB combination)*
-
-(Assuming phone and DOB were already provided in earlier turns)
-
-- `verify`: all three fields are present → attempts identity match → match fails. Sets `response_key = verification_failed`, increments failure counter. Turn output is set → graph ends.
-- *(bot says the identity could not be confirmed and invites a retry)*
-
-If the user reaches the configured maximum of failed identity matches, the session is locked (`verification_status = locked`) and the bot returns `response_key = verification_locked` without accepting further identity input.
-
----
-
-All routing decisions, state transitions, and policy checks shown in these examples are encoded in the graph nodes and conditional edges — not inside LLM output.
+1. User: `show my appointments`
+2. `interpret` classifies `list_appointments`
+3. `verify` asks for `full_name`
+4. User provides name
+5. `verify` asks for `phone`
+6. User provides phone
+7. `verify` asks for `dob`
+8. User provides DOB
+9. verification succeeds
+10. `execute_action` lists appointments
+
+### Confirm after listing
+
+1. User: `confirm the first one`
+2. `interpret` extracts `confirm_appointment` and `appointment_reference=1`
+3. user is already verified, so the graph skips `verify`
+4. `execute_action` resolves `1` against the stored appointment list
+5. appointment is confirmed or returns an idempotent outcome if it was already confirmed
+
+## What the graph does not do
+
+- it does not build final HTTP responses
+- it does not let the LLM decide policy
+- it does not implement real authentication
+- it does not replace the service layer
+
+That boundary is deliberate. The graph owns workflow. The rest stays outside it.

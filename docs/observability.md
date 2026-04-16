@@ -1,77 +1,89 @@
-# Observability and Tracing
+# Observability and tracing
 
-## 1. Structured Logging
+The app logs structured workflow events and can optionally send traces to
+Langfuse.
 
-The application uses the `appointment_bot` logger from `get_logger()` in `app/observability.py`.
+Nothing fancy here. Just enough to understand what happened in a conversation
+without drowning in noise.
 
-Log lines are JSON objects written to stdout. The formatter is message-only; the logger does not add a timestamp prefix.
+## Structured logs
 
-The default log level is INFO.
+The main app logger is `appointment_bot` from `get_logger()` in
+`app/observability.py`.
 
-`log_event(logger, node, state, **extra)` emits one JSON object per graph node execution. Standard fields are: `thread_id`, `node`, `requested_operation`, `verified`, `verification_status`, `issue`, plus any node-specific extras (for example `appointment_count`, `outcome`, and `appointment_id`).
+Default behavior:
 
-## 2. Trace Event Catalog
+- logs are JSON
+- they go to stdout
+- level is `INFO`
 
-Events emitted through `record_trace_event` and `record_provider_event`:
+`log_event(logger, node, state, **extra)` emits one structured record per graph
+node execution.
 
-| Event | Emitter | Payload |
-|-------|---------|---------|
-| workflow.start | `LangGraphWorkflow.run()` | thread_id, full workflow payload (redacted) |
-| workflow.end | `LangGraphWorkflow.run()` | thread_id, full workflow result (redacted) |
-| provider.interpret | OpenAIProvider.interpret | provider name, status |
-| provider.judge | OpenAIProvider.judge | provider name, status |
+Common fields:
 
-Per-node log events (via `log_event`, not `record_trace_event`):
+- `thread_id`
+- `node`
+- `requested_operation`
+- `verified`
+- `verification_status`
+- `issue`
 
-- ingest_user_message
-- parse_intent_and_entities (plus `appointment_reference`)
-- collect_missing_verification_fields
-- verify_identity (plus `outcome`: verified, failed, or locked)
-- execute_action (plus `outcome=skipped` when verification already produced the turn response)
-- list_appointments (plus `appointment_count`)
-- confirm_appointment (plus `outcome`, `appointment_id`)
-- cancel_appointment (plus `outcome`, `appointment_id`)
-- resolve_appointment_reference (plus `outcome`: ambiguous or missing_list_context)
-- handle_help_or_unknown
+Some nodes also add fields such as `outcome`, `appointment_reference`,
+`appointment_count`, or `appointment_id`.
 
-## 3. Langfuse Integration
+## Workflow trace events
 
-The tracer is built with `build_tracer(settings)` in `app/observability.py`.
+`record_trace_event` and `record_provider_event` emit higher-level events such
+as:
 
-Tracing requires `TRACING_ENABLED=true` and valid `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
+- `workflow.start`
+- `workflow.end`
+- `provider.interpret`
+- `provider.judge`
 
-The integration uses the Langfuse client with `create_event(name=..., body=...)` for each trace event.
+There is also a separate eval logger, `appointment_bot.eval`, that formats logs
+in a more human-readable way for scenario runs.
 
-Import and constructor failures are caught; the builder returns `None` so tracing is optional.
+## Redaction
 
-## 4. PII Redaction Pipeline
+All trace payloads go through `redact_trace_payload()` before they are logged or
+sent to Langfuse.
 
-All trace payloads pass through `redact_trace_payload` before they reach the logger or Langfuse.
+Redaction rules:
 
-| Field pattern | Redacted to |
-|---------------|-------------|
-| provided_full_name, display_name | [redacted-name] |
-| provided_phone, phone | [redacted-phone-XXXX] (last 4 digits preserved) |
-| provided_dob, dob | [redacted-dob] |
-| messages[].content | Regex replaces YYYY-MM-DD, DD/MM/YYYY dates and 10+ digit numbers |
-| Nested dicts | Recursively redacted |
+- names become `[redacted-name]`
+- phones become `[redacted-phone-XXXX]`
+- DOB fields become `[redacted-dob]`
+- message bodies have dates and long digit strings masked with regexes
 
-See `docs/security.md` for the full security context.
+Nested dictionaries are redacted recursively.
 
-## 5. Failure Isolation
+## Langfuse integration
 
-Tracing failures should not interrupt the request path.
+Tracing is optional.
 
-`record_trace_event` wraps `tracer.create_event` in try/except. On failure, a line is logged with `{"event": ..., "trace_status": "unavailable"}`.
+It is enabled only when:
 
-Tests cover this: `test_chat_flow_succeeds_when_tracing_backend_fails` uses a BrokenTracer that raises on every call.
+- `TRACING_ENABLED=true`
+- `LANGFUSE_PUBLIC_KEY` is present
+- `LANGFUSE_SECRET_KEY` is present
 
-## 6. Configuration
+If the client import or constructor fails, the tracer is disabled and the app
+keeps running.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| TRACING_ENABLED | auto (true if keys present) | Enable Langfuse tracing |
-| LANGFUSE_PUBLIC_KEY | (none) | Langfuse public key |
-| LANGFUSE_SECRET_KEY | (none) | Langfuse secret key |
-| LANGFUSE_HOST | https://cloud.langfuse.com | Langfuse host URL |
-| LOG_LEVEL | INFO | Application log level |
+## Failure isolation
+
+Tracing failures should never break the request path.
+
+If `tracer.create_event(...)` raises, the app logs a trace-unavailable event and
+continues. That behavior is covered by tests.
+
+## Useful env vars
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `TRACING_ENABLED` | Toggle Langfuse tracing | auto if keys are present |
+| `LANGFUSE_PUBLIC_KEY` | Langfuse public key | none |
+| `LANGFUSE_SECRET_KEY` | Langfuse secret key | none |
+| `LANGFUSE_HOST` | Langfuse host | none |

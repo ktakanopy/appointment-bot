@@ -38,19 +38,19 @@ def get_logger() -> logging.Logger:
 
 
 def get_eval_logger() -> logging.Logger:
+    get_logger()
     logger = logging.getLogger("appointment_bot.eval")
-    if logger.handlers:
+    if getattr(logger, "_appointment_bot_eval_configured", False):
         return logger
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(handler)
+    logger.handlers.clear()
     logger.setLevel(logging.INFO)
-    logger.propagate = False
+    logger.propagate = True
     setattr(logger, "human_readable_logs", True)
-    setattr(logger, "suppress_logs", True)
+    setattr(logger, "suppress_logs", False)
     setattr(logger, "eval_scenario_id", None)
     setattr(logger, "eval_scenario_title", None)
+    setattr(logger, "_appointment_bot_eval_configured", True)
     return logger
 
 

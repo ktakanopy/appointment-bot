@@ -1,73 +1,80 @@
 # Security patterns
 
-This guide explains the security behavior in the healthcare appointment bot.
+This is still a demo project, but the workflow does enforce a few real safety
+rules.
 
-## 1. Verification gating
+## Verification gating
 
-**Protected operations** (`ConversationOperation.requires_verification` in `app/models.py`): `list_appointments`, `confirm_appointment`, `cancel_appointment`.
+Protected operations are:
 
-**Verification-first operations** (`ConversationOperation.triggers_verification_flow` in `app/models.py`): `help`, `unknown`, `verify_identity`.
+- `list_appointments`
+- `confirm_appointment`
+- `cancel_appointment`
 
-**Verification gate** (`verification_required` in `app/graph/routing.py`): after interpretation, the workflow routes into `verify` whenever the interpreted operation is protected, is verification-first, or already has a `deferred_operation`.
+If the patient is not verified, the workflow routes into `verify` before any of
+those actions can run.
 
-**Deferred operation**: when a protected operation is requested while the user is unverified, `deferred_operation` is stored. After successful verification, `requested_operation` is restored from `deferred_operation` so the patient does not need to repeat the original request.
+The verification flow collects fields in order:
 
-**Verification order**: fields are collected in sequence: full name, then phone, then date of birth.
+1. full name
+2. phone
+3. date of birth
 
-**Matching**: verification uses normalized comparison: case-insensitive name, digits-only phone, ISO date.
+Field-format problems do not consume a verification attempt. Identity mismatches
+do.
 
-**Failure handling**: when a field format is invalid, the workflow returns a typed `issue` and a deterministic response key for that field without consuming a verification attempt. When all three fields are syntactically valid but do not match a patient record, the flow clears the collected identity fields, increments the verification failure counter, and restarts from full name.
+## Session validation
 
-## 2. Session validation
+The app does not accept arbitrary `session_id` values.
 
-`/sessions/new` creates a `SessionRecord` in `InMemorySessionStore`.
+- `/sessions/new` creates a `SessionRecord`
+- `/chat` requires that session to exist
+- unknown sessions return HTTP 404
 
-`/chat` uses `SessionService.require_session`, which returns HTTP 404 if `session_id` is not in the registry.
+Sessions also expire after a TTL. Expired sessions are cleaned up during request
+handling.
 
-Sessions use a TTL (`SESSION_TTL_MINUTES`, default 60 minutes). Expired sessions are removed during request handling.
+## Verification lockout
 
-`last_seen_at` is updated on each chat request so active sessions remain valid while in use.
+Each failed identity match increments a counter.
 
-## 3. Verification lockout
+When the counter reaches `MAX_VERIFICATION_ATTEMPTS` (default `3`), the session
+is locked and the workflow returns `issue=verification_locked`.
 
-`ConversationState` carries a `verification_failures` counter, incremented on each failed identity match.
+At that point the patient has to start a new session.
 
-`max_verification_attempts` defaults to 3 and is configurable via `MAX_VERIFICATION_ATTEMPTS`.
+## Appointment ownership
 
-When failures reach the limit, `verification_status` becomes `locked` and remains locked for that session.
+Confirm and cancel operations check appointment ownership before mutation.
 
-Locked sessions respond with a patient-facing lock message and `issue=verification_locked`.
+That happens through `Appointment.is_owned_by()` and service-level checks in
+`AppointmentService`.
 
-The patient must obtain a new session via `/sessions/new` to attempt verification again.
+If the appointment does not belong to the verified patient, the workflow returns
+an ownership-related issue instead of mutating data.
 
-## 4. PII redaction
+## PII redaction
 
-From `app/observability.py`, `redact_trace_payload` runs on workflow event payloads before logging or sending traces to Langfuse.
+Logs and trace payloads are redacted before they leave the workflow layer.
 
-Structured fields are redacted as follows: `provided_full_name` and `display_name` become `[redacted-name]`; `provided_phone` and `phone` become `[redacted-phone-XXXX]`; `provided_dob` and `dob` become `[redacted-dob]`.
+- names are masked
+- phones are masked except for the last four digits
+- DOB values are masked
+- message contents have dates and long digit sequences scrubbed
 
-For `messages`, each message body is processed with `_redact_message`, which masks dates and sequences of ten or more digits.
+## What this project does not try to be
 
-Nested dictionaries are redacted recursively.
+This is not a full security implementation.
 
-The same redaction applies to structured log output and Langfuse trace events.
+Out of scope:
 
-## 5. Appointment ownership
+- real auth such as OAuth or JWT
+- encryption at rest
+- TLS termination
+- RBAC or multi-tenant isolation
+- full audit trails
+- cross-session remembered identity
 
-`Appointment.is_owned_by()` in `app/models.py` requires `appointment.patient_id == patient_id`.
-
-`AppointmentService` in `app/services.py` and the appointment node handlers in `app/graph/nodes.py` enforce this before confirm or cancel operations.
-
-If ownership does not hold, the workflow returns `issue=appointment_not_owned`.
-
-## 6. Scope limitations
-
-This project is a demo/exercise, so the following are intentionally out of scope:
-
-- Real authentication (OAuth, JWT, API keys)
-- Encryption at rest for persisted session or identity data
-- HTTPS/TLS termination at the application
-- Role-based access control or multi-tenant isolation
-- Audit logging beyond structured events
-- Input sanitization beyond Pydantic models with `extra="forbid"`
-- Cross-session remembered identity restore; this was intentionally deferred to keep the delivered scope closer to the original exercise
+That said, the app does enforce the security properties that matter most for the
+exercise itself: verification before access, bounded retry attempts, ownership
+checks, and redaction in logs and traces.

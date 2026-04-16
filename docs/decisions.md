@@ -1,128 +1,126 @@
-# Architecture Decision Records
+# Architecture decisions
 
-## ADR-001: FastAPI as HTTP Framework
+This file is a short record of the decisions that shaped the current version of
+the project. I kept it tighter than a full ADR log because this is still a
+take-home, not a long-lived platform.
 
-**Status:** Accepted
-
-**Context:** The exercise needs a Python backend with a conversational AI endpoint. FastAPI gives async support, automatic OpenAPI docs, Pydantic validation, and dependency injection.
-
-**Decision:** Use FastAPI with Pydantic models and `Depends` for runtime injection.
-
-**Consequences:** Swagger UI works out of the box. Pydantic `extra="forbid"` catches unexpected fields early. The lifespan context manager keeps startup and shutdown clean.
-
-## ADR-002: LangGraph StateGraph for Workflow
+## 1. FastAPI for the API layer
 
 **Status:** Accepted
 
-**Context:** The conversation requires multi-step flows (verification then action) with conditional routing. A ReAct-style agent would give the model more authority than this workflow needs and would mix LLM control with business logic. LangGraph's StateGraph provides explicit, inspectable, deterministic routing.
+**Why:** The task needs a Python HTTP service with validation and a clean review
+surface. FastAPI gives request validation, OpenAPI docs, and straightforward
+dependency wiring without much overhead.
 
-**Decision:** Use LangGraph StateGraph with typed ConversationState and pure-function routing.
+**Result:** The API surface stays small: `POST /sessions/new`, `POST /chat`, and
+`GET /health`.
 
-**Consequences:** Routing logic is testable without an LLM. The graph can be visualized as a diagram. State mutations are explicit and auditable, and the graph is compiled once and reused across requests. The design is easier to reason about than a ReAct loop for verification-gated healthcare workflows.
-
-## ADR-003: InMemorySaver for Conversation State
-
-**Status:** Accepted
-
-**Context:** The project is intentionally scoped as a demo. Persisting conversation state across restarts adds extra code and operational concerns that are not necessary to demonstrate the verification and appointment flows.
-
-**Decision:** Use LangGraph `InMemorySaver` for thread-scoped state.
-
-**Consequences:** The runtime is simpler and easier to explain. Conversation state is lost when the process restarts, which is acceptable for the current scope.
-
-## ADR-004: In-Memory Domain Repositories
+## 2. LangGraph for workflow control
 
 **Status:** Accepted
 
-**Context:** The exercise uses demo patient and appointment data. A full database would add complexity without demonstrating the core conversational AI patterns.
+**Why:** The hard part of this project is multi-turn workflow, not open-ended
+agent behavior. The app needs explicit transitions for identity collection,
+verification, protected actions, retries, and lockout.
 
-**Decision:** Keep patient and appointment repositories as in-memory implementations with hardcoded seed data in `app/repositories.py`.
+**Result:** The graph is inspectable, deterministic after interpretation, and
+easy to test.
 
-**Consequences:** Patient and appointment data resets on restart. The current code stays smaller and easier to review for the exercise. Production persistence can still be introduced later behind the same service calls if the scope expands.
-
-## ADR-005: LLM as Non-Authoritative Boundary
-
-**Status:** Accepted
-
-**Context:** In a healthcare context, the LLM must not control access to patient data or appointment mutations. Prompt injection and hallucination are real risks.
-
-**Decision:** Limit the LLM to intent extraction at the workflow boundary. All authorization, routing, state mutation, and final response wording are deterministic Python. A configured provider is required for runtime startup.
-
-**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors on the interpret step. Final responses are produced deterministically by `app/responses.py` and are never affected by provider failures.
-
-## ADR-006: Remembered Identity Deferred From Delivered Scope
-
-**Status:** Superseded
-
-**Context:** A remembered-identity layer was explored during implementation, but it expanded the delivery beyond the core hiring exercise. The main value of the submission is the verification-gated appointment flow inside a single session.
-
-**Decision:** Remove remembered identity from the active product and keep it only as a possible future improvement.
-
-**Consequences:** The delivered codebase is smaller and easier to explain. Session creation stays simple, there is no restore/revoke API surface, and cross-session convenience is intentionally out of scope for now.
-
-## ADR-007: Streamlit Frontend
+## 3. Keep the LLM non-authoritative
 
 **Status:** Accepted
 
-**Context:** The exercise asks for a backend service, but a chat UI demonstrates the conversational experience. A full React or Vue frontend would be disproportionate to the exercise scope.
+**Why:** In a protected appointment flow, the model should not be making access
+or mutation decisions.
 
-**Decision:** Use Streamlit for a lightweight chat interface that calls the backend over HTTP.
+**Decision:** Use the LLM only for intent and entity extraction in the live chat
+path. Keep routing, authorization, state changes, and final response wording in
+deterministic Python.
 
-**Consequences:** The frontend is a single file. It supports session management and the full protected appointment flow. It is not production-grade but demonstrates the end-to-end flow.
+**Result:** Prompt injection cannot bypass the verification gate just by talking
+the model into it.
 
-## ADR-008: Custom Eval Runner
-
-**Status:** Accepted
-
-**Context:** The project needs to verify multi-turn conversation correctness. External eval frameworks (for example DeepEval or Ragas) add heavy dependencies and opinions. The eval requirements are narrow: replay turns and check outcomes.
-
-**Decision:** Build a minimal eval runner with deterministic and LLM-as-judge modes.
-
-**Consequences:** Evals run in pytest with no external dependencies. New scenarios are added as Python objects. The judge mode is configurable based on whether a provider is available.
-
-## ADR-009: Session Registry with TTL
+## 4. Deterministic final responses
 
 **Status:** Accepted
 
-**Context:** Without session validation, any arbitrary string could be used as a session_id, creating orphaned state and potential security issues.
+**Why:** An earlier design considered an extra LLM step for polished response
+wording. It added latency and failure surface without helping safety or
+correctness.
 
-**Decision:** Require session creation via `/sessions/new` and validate session_id on every `/chat` request. Apply a TTL to expire idle sessions.
+**Decision:** Final patient-facing responses come from `app/responses.py`.
 
-**Consequences:** Unknown session_ids return 404. Session cleanup happens lazily on each request. The registry is in-memory, so sessions are lost on restart, which is acceptable for demo scope. A background or scheduled cleanup path remains a future scaling improvement rather than part of the current exercise-sized implementation.
+**Result:** The live request path uses one provider call per turn, not two.
 
-## ADR-010: Verification Lockout
-
-**Status:** Accepted
-
-**Context:** Without attempt limits, an attacker could brute-force identity verification by trying different name, phone, and date-of-birth combinations. In a healthcare context this is a real risk.
-
-**Decision:** Cap verification attempts per session (default 3). After the limit, lock the session permanently. The patient must start a new session.
-
-**Consequences:** Brute-force attempts are bounded per session. The lockout is stored in ConversationState so it persists across the session. Legitimate patients who mistype can retry up to the limit or start a new session.
-
-## ADR-011: Deterministic Final Responses
+## 5. SQLite checkpoints plus in-memory business data
 
 **Status:** Accepted
 
-**Context:** The initial design used the LLM to rewrite deterministic fallback text into "polished" patient-facing wording (`generate_response`). The deterministic response builder already produces complete, correct responses for every workflow outcome, making the rewrite step redundant for this use case. Adding an LLM call at the presentation layer introduces nondeterminism, extra latency, extra cost, an additional failure surface, and test complexity without a meaningful quality benefit in a tightly scoped exercise.
+**Why:** The workflow benefits from real persisted conversation state across
+turns, but the exercise does not need a full database for appointments and
+patients.
 
-**Decision:** Remove `generate_response` from the provider surface and keep the LLM focused on intent and entity extraction. Final wording is generated deterministically by `build_response_text()` in `app/responses.py`.
+**Decision:** Use SQLite-backed `SqliteSaver` for LangGraph state. Keep patient,
+appointment, and session repositories simple.
 
-**Consequences:**
-- **Lower complexity:** the delivery layer no longer depends on an LLM for final wording.
-- **Lower latency:** Every chat turn saves one full LLM round-trip.
-- **Lower cost:** One fewer provider call per turn.
-- **Easier testing:** Response tests assert against exact, deterministic strings without mocking a provider.
-- **Less failure surface:** Provider errors can no longer occur during response rendering; the only provider call remaining is `interpret`.
-- **Sufficient quality:** deterministic response strings are concise, patient-facing, and correct for every workflow outcome. LLM rewriting added stylistic variation without improving accuracy or safety.
-- **LLM boundary preserved:** The model still handles the intent and entity extraction task where nondeterminism is unavoidable and valuable. The workflow and all policy outcomes remain fully deterministic Python.
+**Result:** The conversation flow stays stateful without turning the project into
+an infrastructure exercise.
 
-## ADR-012: Keep One Action Per Turn for This Delivery
+## 6. In-memory patient and appointment repositories
 
 **Status:** Accepted
 
-**Context:** During review of the conversational UX, two improvements emerged as high-value and low-risk for the exercise: automatically listing appointments right after successful verification, and fixing stale appointment-reference reuse between turns. A third idea also emerged: supporting compound messages such as `confirm the first and cancel the second`. Although desirable, that behavior would expand the current design from one primary action per turn to multiple ordered actions in a single turn. The current workflow, turn state, and response contract are intentionally modeled around one interpreted operation and one main action result per message.
+**Why:** Seeded demo data is enough to demonstrate the product behavior.
 
-**Decision:** For this hiring-process delivery, keep the system scoped to one primary appointment action per user turn. Prioritize the post-verification auto-list improvement and the appointment-reference bug fix. Treat support for multiple appointment mutations in one message as a future enhancement rather than part of the current refactor.
+**Decision:** Keep domain repositories in memory with a small fixed dataset.
 
-**Consequences:** The delivered flow stays simpler, more testable, and easier to explain in review. It remains aligned with the exercise's core goals: verification-gated access, natural rerouting between turns, and deterministic protected operations. Compound commands are a known limitation for now because supporting them correctly would require widening the intent schema, turn-level workflow state, mutation execution flow, and possibly the public response contract.
+**Result:** The reviewer can understand the whole app quickly, and the core
+workflow stays the focus.
+
+## 7. Session registry with TTL
+
+**Status:** Accepted
+
+**Why:** Letting any arbitrary string become a session would make the workflow
+messy and insecure.
+
+**Decision:** Require session creation via `/sessions/new`, validate `session_id`
+on every chat request, and expire idle sessions with TTL-based cleanup.
+
+**Result:** Unknown sessions return 404 instead of silently creating state.
+
+## 8. Verification lockout after repeated failures
+
+**Status:** Accepted
+
+**Why:** Unlimited identity attempts would make brute-force guessing too easy.
+
+**Decision:** Lock the session after the configured number of failed identity
+matches.
+
+**Result:** Verification failures are bounded per session.
+
+## 9. One main appointment action per user turn
+
+**Status:** Accepted
+
+**Why:** Supporting compound commands like `confirm the first and cancel the
+second` would widen the workflow a lot for limited value in this task.
+
+**Decision:** Keep one primary appointment action per turn for this delivery.
+
+**Result:** The system stays easier to reason about, easier to test, and easier
+to defend in review.
+
+## 10. No deferred protected action state
+
+**Status:** Accepted
+
+**Why:** An earlier version tracked deferred protected actions across
+verification. It worked, but it added branching and state across several files.
+
+**Decision:** After successful verification, move the patient to
+`list_appointments` instead of resuming a stored protected action automatically.
+
+**Result:** The current flow is simpler and easier to understand, which I think
+is the better trade for a take-home.

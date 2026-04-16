@@ -1,6 +1,13 @@
 # Data model
 
-## 1. Entity Relationships
+The domain model is small. That helps.
+
+There are really two kinds of state in this project:
+
+- domain data: patients and appointments
+- workflow data: verification progress, current turn output, and appointment-list context
+
+## Entities
 
 ```mermaid
 erDiagram
@@ -26,53 +33,82 @@ erDiagram
     }
 ```
 
-`ConversationOperationResult` is an application/workflow contract that describes the outcome of a completed operation; it is not persisted.
+`ConversationOperationResult` is not persisted domain data. It is a workflow
+result object that describes what happened in the current turn.
 
-## 2. AppointmentStatus State Machine
+## Appointment status transitions
 
 ```mermaid
 stateDiagram-v2
     [*] --> scheduled
     scheduled --> confirmed : confirm_appointment
     scheduled --> canceled : cancel_appointment
-    confirmed --> confirmed : confirm_appointment\n(idempotent: already_confirmed)
+    confirmed --> confirmed : confirm_appointment\n(already_confirmed)
     confirmed --> canceled : cancel_appointment
-    canceled --> canceled : cancel_appointment\n(idempotent: already_canceled)
+    canceled --> canceled : cancel_appointment\n(already_canceled)
 ```
 
-Confirming a `scheduled` appointment transitions to `confirmed`. Re-confirming an already `confirmed` appointment returns outcome `already_confirmed` without error. Canceling transitions `scheduled` or `confirmed` to `canceled`. Re-canceling an already `canceled` appointment returns outcome `already_canceled` without error. A `canceled` appointment cannot be confirmed.
+Two things matter here:
 
-## 3. ConversationState Reference
+- confirm and cancel are state transitions
+- repeated confirm and cancel are idempotent when the appointment is already in the target state
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| thread_id | str | Unique conversation thread identifier, same as session_id |
-| incoming_message | str | Current user message being processed |
-| messages | list[dict] | Full conversation history (role + content pairs) |
-| verified | bool | Whether identity verification has succeeded |
-| verification_failures | int | Count of failed verification attempts in this session |
-| verification_status | `VerificationStatus` | Current phase: unverified, collecting, failed, verified, or locked |
-| patient_id | str or None | Matched patient ID after successful verification |
-| provided_full_name | str or None | Name provided by the patient during verification |
-| provided_phone | str or None | Phone provided by the patient during verification |
-| provided_dob | str or None | Date of birth provided by the patient during verification |
-| requested_operation | `ConversationOperation` | Current operation being processed |
-| deferred_operation | `ConversationOperation` or None | Protected operation deferred until verification completes |
-| listed_appointments | list[Appointment] | Appointments returned by the last list action |
-| appointment_reference | str or None | User's reference to a specific appointment (ordinal, date, id) |
-| operation_result | `ConversationOperationResult` or None | Outcome of the last completed operation |
-| response_key | `ResponseKey` or None | Deterministic presenter key for the patient-facing response |
-| issue | `TurnIssue` or None | Machine-readable issue classification for the current turn |
+That second point is easy to miss in a chat workflow, but it matters. Users
+repeat themselves. They retry. They double-tap. The system should stay calm.
 
-## 4. Persistence Strategy
+## Workflow state
+
+The graph keeps three state groups.
+
+### Verification state
+
+Tracks whether the patient is verified and how far they got in the identity
+flow.
+
+| Field | Purpose |
+|---|---|
+| `verified` | Whether verification succeeded |
+| `verification_failures` | Failed identity-match attempts in this session |
+| `verification_status` | `unverified`, `collecting`, `failed`, `verified`, or `locked` |
+| `patient_id` | Matched patient after successful verification |
+| `provided_full_name` | Collected full name |
+| `provided_phone` | Collected phone |
+| `provided_dob` | Collected date of birth |
+
+### Turn state
+
+Holds the output for the current turn.
+
+| Field | Purpose |
+|---|---|
+| `requested_operation` | Operation currently being handled |
+| `operation_result` | Result of a completed action, if any |
+| `response_key` | Deterministic response selector |
+| `issue` | Machine-readable issue for the turn |
+| `subject_appointment` | Appointment touched by the turn, if any |
+
+This state is reset at the start of each turn.
+
+### Appointment state
+
+Stores context that helps later turns make sense.
+
+| Field | Purpose |
+|---|---|
+| `listed_appointments` | Last appointment list shown to the patient |
+| `appointment_reference` | User reference such as `1`, a date, or an appointment id |
+
+That is what makes messages like `confirm the first one` work after a prior
+list.
+
+## Persistence strategy
 
 | Data | Storage | Lifetime |
-|------|---------|----------|
-| Patient records | In-memory (InMemoryPatientRepository) | Process lifetime |
-| Appointment records | In-memory (InMemoryAppointmentRepository) | Process lifetime |
-| Conversation state (per-thread) | In-memory via LangGraph InMemorySaver | Process lifetime |
-| Session registry | In-memory via `InMemorySessionStore` | Process lifetime, TTL-based cleanup |
+|---|---|---|
+| Patients | In-memory repository | Process lifetime |
+| Appointments | In-memory repository | Process lifetime |
+| Session registry | `InMemorySessionStore` | Process lifetime, TTL cleanup |
+| Conversation workflow state | SQLite-backed LangGraph checkpointer | Survives process-level workflow access while the db file exists |
 
-In-memory storage is intentional for demo scope. In production, conversation state, patient data, and appointment data should use external persistence.
-
-Cross-session remembered identity is a possible future improvement, but it is intentionally not part of the delivered data model for this exercise.
+This is not a production data model. It is a delivery model for the exercise.
+That trade-off is intentional.
