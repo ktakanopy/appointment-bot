@@ -37,6 +37,35 @@ def get_logger() -> logging.Logger:
     return logger
 
 
+def get_eval_logger() -> logging.Logger:
+    logger = logging.getLogger("appointment_bot.eval")
+    if logger.handlers:
+        return logger
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    setattr(logger, "human_readable_logs", True)
+    setattr(logger, "suppress_logs", True)
+    setattr(logger, "eval_scenario_id", None)
+    setattr(logger, "eval_scenario_title", None)
+    return logger
+
+
+def set_eval_scenario(logger: logging.Logger, scenario_id: str | None, scenario_title: str | None) -> None:
+    setattr(logger, "eval_scenario_id", scenario_id)
+    setattr(logger, "eval_scenario_title", scenario_title)
+
+
+def log_eval_event(logger: logging.Logger, message: str) -> None:
+    if getattr(logger, "human_readable_logs", False):
+        logger.info(_format_eval_message(logger, message))
+        return
+    logger.info(message)
+
+
 def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) -> None:
     verification = _as_mapping(_state_value(state, "verification"))
     turn = _as_mapping(_state_value(state, "turn"))
@@ -49,7 +78,7 @@ def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) ->
         "issue": turn.get("issue"),
     }
     payload.update(extra)
-    logger.info(json.dumps(payload, ensure_ascii=True, default=str))
+    _emit_log(logger, payload)
 
 
 def redact_trace_payload(payload: dict) -> dict:
@@ -76,13 +105,13 @@ def redact_trace_payload(payload: dict) -> dict:
 
 def record_trace_event(logger: logging.Logger, tracer, event_name: str, payload: dict) -> None:
     safe_payload = redact_trace_payload(payload)
-    logger.info(json.dumps({"event": event_name, **safe_payload}, ensure_ascii=True, default=str))
+    _emit_log(logger, {"event": event_name, **safe_payload})
     if tracer is None:
         return
     try:
         tracer.create_event(name=event_name, body=safe_payload)
     except Exception:
-        logger.info(json.dumps({"event": event_name, "trace_status": "unavailable"}, ensure_ascii=True))
+        _emit_log(logger, {"event": event_name, "trace_status": "unavailable"})
 
 
 def record_provider_event(logger: logging.Logger, tracer, event_name: str, payload: dict) -> None:
@@ -119,3 +148,76 @@ def _as_mapping(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
         return value.model_dump()
     return {}
+
+
+def _emit_log(logger: logging.Logger, payload: dict[str, Any]) -> None:
+    if getattr(logger, "suppress_logs", False):
+        return
+    if getattr(logger, "human_readable_logs", False):
+        logger.info(_format_human_readable_log(payload))
+        return
+    logger.info(json.dumps(payload, ensure_ascii=True, default=str))
+
+
+def _format_human_readable_log(payload: dict[str, Any]) -> str:
+    event = payload.get("event")
+    if event == "workflow.start":
+        thread_id = payload.get("thread_id", "-")
+        messages = payload.get("payload", {}).get("messages", [])
+        last_message = messages[-1]["content"] if messages else ""
+        return f"workflow.start thread={thread_id} user={last_message!r}"
+
+    if event == "workflow.end":
+        result = payload.get("result", {})
+        verification = result.get("verification", {})
+        turn = result.get("turn", {})
+        appointments = result.get("appointments", {})
+        appointment_count = len(appointments.get("listed_appointments", []))
+        return (
+            "workflow.end "
+            f"thread={payload.get('thread_id', '-')} "
+            f"op={turn.get('requested_operation', '-')} "
+            f"verified={verification.get('verified', False)} "
+            f"status={verification.get('verification_status', '-')} "
+            f"response={turn.get('response_key', '-')} "
+            f"issue={turn.get('issue', '-')} "
+            f"appointments={appointment_count}"
+        )
+
+    if isinstance(event, str) and event.startswith("provider."):
+        if payload.get("status") == "ok":
+            return ""
+        provider = payload.get("provider", "-")
+        status = payload.get("status", "-")
+        error_type = payload.get("error_type")
+        suffix = f" error={error_type}" if error_type else ""
+        return f"{event} provider={provider} status={status}{suffix}"
+
+    node = payload.get("node")
+    if node:
+        extra_parts = []
+        if payload.get("outcome") is not None:
+            extra_parts.append(f"outcome={payload['outcome']}")
+        if payload.get("appointment_reference") is not None:
+            extra_parts.append(f"reference={payload['appointment_reference']}")
+        if payload.get("appointment_count") is not None:
+            extra_parts.append(f"appointments={payload['appointment_count']}")
+        extra = f" {' '.join(extra_parts)}" if extra_parts else ""
+        return (
+            f"node={node} "
+            f"op={payload.get('requested_operation', '-')} "
+            f"verified={payload.get('verified', False)} "
+            f"status={payload.get('verification_status', '-')} "
+            f"issue={payload.get('issue', '-')}{extra}"
+        )
+
+    return json.dumps(payload, ensure_ascii=True, default=str)
+
+
+def _format_eval_message(logger: logging.Logger, message: str) -> str:
+    scenario_id = getattr(logger, "eval_scenario_id", None)
+    scenario_title = getattr(logger, "eval_scenario_title", None)
+    if not scenario_id:
+        return message
+    title_suffix = f" ({scenario_title})" if scenario_title else ""
+    return f"[{scenario_id}{title_suffix}] {message}"

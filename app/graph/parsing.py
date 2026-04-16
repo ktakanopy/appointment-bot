@@ -20,24 +20,16 @@ def is_help_request(message: str) -> bool:
 
 def extract_phone(message: str) -> str | None:
     digits = "".join(character for character in message if character.isdigit())
-    if len(digits) < 10:
-        return None
-    return Phone(digits).digits
+    return Phone.try_parse(digits)
 
 
 def extract_dob(message: str) -> str | None:
     direct_match = re.search(r"\b\d{4}-\d{2}-\d{2}\b", message)
     if direct_match:
-        try:
-            return DateOfBirth(direct_match.group(0)).value
-        except ValueError:
-            return None
+        return DateOfBirth.try_parse(direct_match.group(0))
     slash_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", message)
     if slash_match:
-        try:
-            return DateOfBirth(slash_match.group(0)).value
-        except ValueError:
-            return None
+        return DateOfBirth.try_parse(slash_match.group(0))
     return None
 
 
@@ -47,7 +39,7 @@ def extract_full_name(message: str) -> str | None:
         pattern = rf"{marker}\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)+)"
         match = re.search(pattern, lowered)
         if match:
-            return FullName(match.group(1)).value
+            return FullName.try_parse(match.group(1))
 
     cleaned = re.sub(r"[^A-Za-zÀ-ÿ\s]", " ", message)
     candidate = " ".join(part for part in cleaned.strip().split())
@@ -56,7 +48,7 @@ def extract_full_name(message: str) -> str | None:
     blocked_words = {"phone", "number", "birth", "date", "appointment", "appointments", "confirm", "cancel", "show", "list"}
     if any(word in blocked_words for word in {part.lower() for part in candidate.split()}):
         return None
-    return FullName(candidate).value
+    return FullName.try_parse(candidate)
 
 
 def extract_requested_operation(message: str, state: dict) -> ConversationOperation:
@@ -121,30 +113,3 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
             return appointments[0]
 
     return None
-
-
-def normalize_full_name(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return FullName(value).value
-    except ValueError:
-        return None
-
-
-def normalize_phone(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return extract_phone(value)
-    except ValueError:
-        return None
-
-
-def normalize_dob(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        return DateOfBirth(value).value
-    except ValueError:
-        return None

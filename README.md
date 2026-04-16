@@ -345,28 +345,24 @@ Spec-driven implementation artifacts:
 - Cross-session remembered identity was intentionally left out of the delivered
   product to keep the implementation aligned with the original exercise scope.
 
-## Scaling Ideas
+## What I'd Improve Next
 
-If this application needed to move beyond demo scope, the next improvements would be:
+For this take-home exercise, I kept the system intentionally small and easy to
+reason about. That meant favoring clear control flow over broader production
+features.
 
-- stream token output from the backend to the frontend instead of waiting for full responses
-- move session storage and business repositories to external persistence and
-  upgrade local SQLite checkpointing to production-grade managed storage
-- move patient and appointment data to a real persistence layer instead of seeded demo data
-- add background workers and queueing for slower downstream operations or audits
-- add stronger auth, rate limiting, and production-grade observability around protected flows
+One example is provider failure handling: if the LLM provider fails, the `/chat`
+endpoint returns a controlled HTTP 503 with a stable temporary-unavailable
+message instead of trying to guess the user's intent with a fallback path. That
+keeps the behavior predictable for the exercise, but it would not be the final
+version of the system.
 
-## Future Improvements
+If I were taking this beyond demo scope, the next improvements would be:
 
-Provider failures in the live `/chat` path are now surfaced as controlled HTTP 503 responses rather than unhandled exceptions. No deterministic intent-extraction fallback is implemented; if the provider fails, the request is aborted cleanly with a stable temporary-unavailable message. This keeps the error path simple and easy to reason about for an exercise-scope submission.
-
-In a production version, likely next steps would be:
-
-- cross-session remembered identity as an explicit scope expansion once the core flow no longer needs to stay exercise-sized
-- deterministic fallback for intent and entity extraction in well-covered cases
-- background or scheduled session cleanup instead of request-path lazy cleanup
-- agent response streaming to deliver partial updates in real time and improve chat usability
-- stronger persistence for sessions and appointments
-- thread-safe shared state or externalized persistence instead of in-memory mutable stores
-- stronger evaluation and regression coverage for natural language understanding
-- more production-grade error handling and operational resilience
+- stream responses to the frontend so the chat feels faster and more natural
+- move sessions, checkpoints, patients, and appointments to real persistence instead of local or in-memory storage
+- add stronger auth, rate limiting, and audit-friendly controls around protected healthcare flows
+- add a deterministic fallback for a few well-covered intent and entity extraction cases when the provider is unavailable
+- replace request-path cleanup and in-memory mutable state with safer background jobs and shared persistence
+- expand evaluation coverage for natural-language variation and failure cases
+- add cross-session remembered identity only if the product scope clearly calls for it

@@ -16,8 +16,11 @@ class EvaluationScenario(BaseModel):
 
 class EvaluationResult(BaseModel):
     scenario_id: str
+    scenario_title: str
     status: Literal["pass", "fail", "error"]
     judge_summary: str
     score: float | None = None
     observed_outcomes: dict[str, Any]
+    input_turns: list[str] = []
+    assistant_outputs: list[str] = []
     trace_id: str | None = None

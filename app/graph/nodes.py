@@ -7,12 +7,10 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.graph.parsing import (
+    extract_appointment_reference,
     extract_dob,
     extract_full_name,
     extract_phone,
-    normalize_dob,
-    normalize_full_name,
-    normalize_phone,
     resolve_appointment_reference,
 )
 from app.graph.routing import should_skip_action_execution, verification_required
@@ -43,6 +41,9 @@ from app.models import (
     ConversationOperation,
     ConversationOperationResult,
     DependencyUnavailableError,
+    DateOfBirth,
+    FullName,
+    Phone,
     ResponseKey,
     TurnIssue,
     VerificationStatus,
@@ -129,16 +130,22 @@ def make_interpret_node(logger, provider):
             )
             raise DependencyUnavailableError("provider interpret failed") from exc
         log_event(logger, "interpret_provider_ok", state)
+        full_name = FullName.try_parse(result.full_name) or extract_full_name(message)
+        phone = Phone.try_parse(result.phone) or extract_phone(message)
+        dob = DateOfBirth.try_parse(result.dob) or extract_dob(message)
+        appointment_reference = (
+            result.appointment_reference or extract_appointment_reference(message)
+        )
         requested_operation = result.requested_operation
         updated_verification = _fill_missing_fields(
             verification,
-            full_name=normalize_full_name(result.full_name),
-            phone=normalize_phone(result.phone),
-            dob=normalize_dob(result.dob),
+            full_name=full_name,
+            phone=phone,
+            dob=dob,
         )
         updated_turn = {**turn, "requested_operation": requested_operation}
         updated_appointments = _update_appointment_reference(
-            appointments, requested_operation, result.appointment_reference
+            appointments, requested_operation, appointment_reference
         )
         updates = {
             "verification": updated_verification,

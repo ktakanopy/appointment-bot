@@ -17,6 +17,20 @@ Pydantic model with fields:
 - `judge_rubric`: natural language description for the LLM judge
 - `category`: grouping label (`verification`, `ambiguity`, `idempotency`, `context`)
 
+`expected_outcomes` is intended to mirror the small subset of outcome fields the
+eval runner extracts from `ChatTurnResponse`, not the full response model. In
+practice that means scenario authors usually express expectations using the same
+shape as `observed_outcomes`, such as:
+
+- `verified`
+- `current_operation`
+- `issue`
+- `last_outcome`
+
+Those fields come from `ChatTurnResponse.verified`,
+`ChatTurnResponse.current_operation`, `ChatTurnResponse.issue`, and
+`ChatTurnResponse.last_action_result.outcome` respectively.
+
 ### EvaluationResult (`app/evals/models.py`)
 
 Pydantic model with fields:
@@ -25,9 +39,9 @@ Pydantic model with fields:
 
 ### Runner (`app/evals/runner.py`)
 
-- Creates a fresh `RuntimeContext` via `create_runtime()` for isolation
+- Creates a fresh `RuntimeContext` for isolation
 - For each scenario: creates a fresh session through `SessionService.create_session()`, replays each turn through `LangGraphWorkflow.run()`, then builds the final response via `app/responses.py`
-- `observed_outcomes` extracted: `verified`, `current_operation`, `issue`, `last_outcome`
+- `observed_outcomes` extracted from `ChatTurnResponse`: `verified`, `current_operation`, `issue`, `last_outcome`
 - Passes scenario + transcript + `observed_outcomes` to the judge
 - Exceptions during replay set `status="error"` with the exception message
 
@@ -76,57 +90,3 @@ The test `test_eval_runner_returns_results_for_default_scenarios` verifies that 
 ## 6. State Isolation
 
 Each eval run creates its own `RuntimeContext` with fresh in-memory adapters. Each scenario gets a new session and thread id so conversations never cross-contaminate. The runtime is closed after all scenarios complete.
-
-## 7. Intent/Entity Regression
-
-### Purpose
-
-The multi-turn judge scenarios validate full conversational behavior end to end. A complementary **intent/entity regression** layer validates the *structured output* of the interpretation step in isolation: given a user utterance and conversation state, does the interpret + normalize pipeline return the expected `requested_operation`, `full_name`, `phone`, `dob`, and `appointment_reference`?
-
-This protects against drift after prompt, parser, provider, or model changes without requiring a full conversation replay.
-
-### How it differs from the LLM-as-judge flow
-
-| | Intent/entity regression | Multi-turn judge scenarios |
-|---|---|---|
-| Scope | Single interpret call | Full conversation (multiple turns) |
-| Assertion style | Deterministic field comparison | LLM judge rubric evaluation |
-| Speed | Fast, no conversation state | Slower, full workflow per scenario |
-| What it catches | Parsing/extraction/normalization drift | Policy, flow, recovery, and clarification issues |
-
-### Dataset
-
-A small curated dataset lives at `app/evals/datasets/intent_entity_cases.jsonl`. Each line is a JSON object:
-
-```json
-{
-  "id": "list-happy",
-  "utterance": "show my appointments",
-  "state": {},
-  "expected": {
-    "requested_operation": "list_appointments",
-    "full_name": null,
-    "phone": null,
-    "dob": null,
-    "appointment_reference": null
-  }
-}
-```
-
-- `utterance` — the user message to interpret.
-- `state` — optional conversation state passed to the provider (defaults to `{}`).
-- `expected` — a dict of fields to assert. Only listed keys are checked, so partial expected dicts are fine.
-
-The dataset is intentionally small (~25-30 cases) and covers a practical spread of operations, entity variants, formatting, synonyms, ordinals, and edge cases. It should grow incrementally as new patterns or regressions are discovered.
-
-### Normalization reuse
-
-The regression test applies the same normalization functions used in production (`app/graph/parsing.py`). This ensures the test validates real normalized behaviour, not a duplicated approximation.
-
-### Running
-
-```bash
-pytest tests/evals/test_intent_entity_regression.py -v
-```
-
-The test is parametrized: one test case per dataset row, with the case `id` as the pytest ID.

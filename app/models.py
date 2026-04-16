@@ -130,6 +130,15 @@ class FullName(BaseModel):
 
     value: str
 
+    @classmethod
+    def try_parse(cls, raw: str | None) -> str | None:
+        if not raw:
+            return None
+        try:
+            return cls(raw).value
+        except ValueError:
+            return None
+
     def __init__(self, raw: str):
         super().__init__(value=raw)
 
@@ -150,6 +159,15 @@ class Phone(BaseModel):
 
     digits: str
 
+    @classmethod
+    def try_parse(cls, raw: str | None) -> str | None:
+        if not raw:
+            return None
+        try:
+            return cls(raw).digits
+        except ValueError:
+            return None
+
     def __init__(self, raw: str):
         super().__init__(digits=raw)
 
@@ -169,6 +187,15 @@ class DateOfBirth(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     value: str
+
+    @classmethod
+    def try_parse(cls, raw: str | None) -> str | None:
+        if not raw:
+            return None
+        try:
+            return cls(raw).value
+        except ValueError:
+            return None
 
     def __init__(self, raw: str):
         super().__init__(value=raw)
