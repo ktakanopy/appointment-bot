@@ -142,6 +142,13 @@ From the user's perspective, the bot is just "remembering" their original reques
 
 The graph maintains three kinds of state, with different lifespans:
 
+Related to this runtime state, the code also defines two top-level state shapes in `app/graph/state.py`: `ConversationGraphState` and `ConversationState`.
+
+- `ConversationGraphState` (`app/graph/state.py`) is the workflow-internal state used by LangGraph nodes and routing. It extends `MessagesState` and keeps graph-native structures while the workflow is running.
+- `ConversationState` (`app/graph/state.py`) is the post-workflow, Pydantic representation built by `build_conversation_state(...)`. It is the more human-readable state used after graph execution.
+
+In practice, `ConversationState` exposes the same core conversation surface in a cleaner shape: `thread_id`, `messages`, `verification`, `turn`, and `appointments`. `app/responses.py` consumes this state to assemble the final response text and response payload returned by the API.
+
 **Turn output** (`state.turn`)
 Ephemeral — reset at the start of every turn by `ingest`. Holds the result of the current turn: which response key to send, whether there was an issue, the operation result, the matched appointment. This is what `app/responses.py` reads to assemble the response message after the graph ends.
 
