@@ -96,16 +96,27 @@ High-level workflow graph:
 
 ```mermaid
 flowchart TD
-    start([Start]) --> ingest[ingest_user_message]
-    ingest --> interpret[parse_intent_and_entities]
+    start([Start]) --> ingest[ingest]
+    ingest --> interpret[interpret]
     interpret --> need_verify{verification_required?}
     need_verify -->|yes| verify[verify]
     need_verify -->|no| execute[execute_action]
-    verify --> readyForAction{response_key set?}
+    verify --> readyForAction{turn output present?}
     readyForAction -->|yes| finish([End])
     readyForAction -->|no| execute
     execute --> finish
 ```
+
+**How the graph works**
+
+Each user message runs through four steps:
+
+- **ingest** — resets per-turn output fields so the current turn starts clean. Persisted state (verification status, appointment history) is left untouched.
+- **interpret** — the only step that calls the LLM. It classifies the user's intent and extracts any identity fields they provided. After this, all routing is deterministic.
+- **verify** — the safety gate for protected operations. It collects missing identity fields one at a time, validates each one, and attempts the identity match when all three are present. If the user originally asked for an appointment action before being verified, that intent is stored as `deferred_operation` and resumed automatically once verification succeeds — the user never has to repeat themselves.
+- **execute_action** — runs the actual business logic: listing appointments, confirming, or canceling. Only runs when verification already passed or was not required.
+
+The graph is what makes the conversational flow predictable. Verification gating, deferred action resume, and routing decisions are all encoded in the graph, not inside LLM output. See [docs/graph.md](docs/graph.md) for a full walkthrough.
 
 Why deterministic workflow over a ReAct agent:
 
