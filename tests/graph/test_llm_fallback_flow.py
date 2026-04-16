@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.models import DependencyUnavailableError
 from tests.support import build_test_workflow
 
@@ -17,8 +19,5 @@ class BrokenProvider:
 def test_graph_raises_controlled_error_when_provider_fails():
     workflow = build_test_workflow(provider=BrokenProvider())
 
-    try:
+    with pytest.raises(DependencyUnavailableError):
         workflow.run("graph-llm-fallback", "show my appointments")
-        assert False, "expected DependencyUnavailableError"
-    except DependencyUnavailableError:
-        pass
