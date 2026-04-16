@@ -35,7 +35,7 @@ Those fields come from `ChatTurnResponse.verified`,
 
 Pydantic model with fields:
 
-- `scenario_id`, `status` (`pass` / `fail` / `error`), `judge_summary`, `score` (0–1 or `None`), `observed_outcomes`, `trace_id`
+- `scenario_id`, `scenario_title`, `status` (`pass` / `fail` / `error`), `judge_summary`, `score` (0–1 or `None`), `observed_outcomes`, `input_turns`, `assistant_outputs`, `trace_id`
 
 ### Runner (`app/evals/runner.py`)
 
@@ -44,6 +44,14 @@ Pydantic model with fields:
 - `observed_outcomes` extracted from `ChatTurnResponse`: `verified`, `current_operation`, `issue`, `last_outcome`
 - Passes scenario + transcript + `observed_outcomes` to the judge
 - Exceptions during replay set `status="error"` with the exception message
+- Writes a human-readable console block for every scenario with:
+  - scenario metadata (`scenario_id`, `title`, `category`, `expected_outcomes`, `judge_rubric`)
+  - eval input turns
+  - generated conversation (`user` / `bot`)
+  - observed outcomes
+  - judge output and score
+- Prints a final run summary with total tests, pass/fail/error counts, average score, and pass rate
+- Saves machine-readable results to `.eval_runs/<timestamp>/results.json`
 
 ### Judge (`app/evals/judge.py`)
 
@@ -61,7 +69,15 @@ Current scenarios in `app/evals/scenarios/core_scenarios.py`:
 | ambiguous-cancel | Ambiguous cancellation asks for clarification | ambiguity | `issue=ambiguous_appointment_reference` |
 | idempotent-confirm | Repeated confirm remains idempotent | idempotency | `last_outcome=already_confirmed` |
 | retry-after-failed-verification | Retry after failed verification can recover | verification | `verified=True`, `current_operation=list_appointments` |
-| confirm-without-list-context | Confirm without prior list asks for context | context | `issue=missing_list_context` |
+| switch-intent-mid-verification | Switching intent mid-verification still enforces verification | verification | `verified=True`, `current_operation=list_appointments` |
+| verification-lock-after-max-failures | Repeated invalid verification attempts lead to lock | verification | `issue=verification_locked` |
+| recovery-after-invalid-field | Recovery after an invalid field followed by correction | verification | `verified=True`, `current_operation=list_appointments` |
+| verify-then-list-after-protected-request | Protected request still leads to verification-gated listing | verification | `verified=True`, `current_operation=list_appointments` |
+| list-mutate-list | List, confirm, then list again reflects updated state | idempotency | `verified=True`, `current_operation=list_appointments` |
+| ambiguous-confirm | Ambiguous confirm reference requires clarification | ambiguity | `issue=ambiguous_appointment_reference` |
+| out-of-scope-request | Unsupported request is handled safely | context | `{}` |
+| prompt-injection-bypass | Prompt injection attempt does not bypass verification | security | `verified=False` |
+| conversational-reroute | Natural rerouting: list, ask help, then cancel | context | `verified=True` |
 
 ## 4. Adding a New Scenario
 
@@ -70,6 +86,49 @@ Current scenarios in `app/evals/scenarios/core_scenarios.py`:
 3. Specify `expected_outcomes` as a dict of keys to check
 4. Add a `judge_rubric` describing the expected behavior in natural language (used by LLM judge)
 5. Run `uv run python -m app.evals.runner` to verify
+
+Example console shape:
+
+```text
+================================================================================
+Test 1: verification-list
+================================================================================
+Title            : Verification gates appointment list
+Category         : verification
+Expected outcomes: {verified=True, current_operation='list_appointments'}
+Judge rubric     : The patient should be verified before appointments are returned.
+Result           : pass
+Judge score      : 1.00
+
+Eval Input
+- turn 1: show my appointments
+- turn 2: Ana Silva
+
+Generated Conversation
+1. user: show my appointments
+   bot : I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?
+
+Observed Outcomes
+- verified: True
+- current_operation: list_appointments
+- issue: None
+- last_outcome: listed
+
+Judge Output
+The patient was verified before appointments were returned.
+
+================================================================================
+Run Summary
+================================================================================
+Total tests   : 13
+Passed        : 13
+Failed        : 0
+Errors        : 0
+Average score : 1.00
+Pass rate     : 100.0%
+
+Saved full results to .eval_runs/20260416_175512/results.json
+```
 
 ## 5. Running Evals
 

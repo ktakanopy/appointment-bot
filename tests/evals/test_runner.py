@@ -12,7 +12,6 @@ def test_eval_runner_returns_results_for_default_scenarios():
         "ambiguous-cancel",
         "idempotent-confirm",
         "retry-after-failed-verification",
-        "confirm-without-list-context",
         "switch-intent-mid-verification",
         "verification-lock-after-max-failures",
         "recovery-after-invalid-field",

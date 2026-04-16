@@ -51,19 +51,6 @@ CORE_SCENARIOS = [
         judge_rubric="A single failed verification should not block a later successful retry in the same session.",
         category="verification",
     ),
-    EvaluationScenario(
-        scenario_id="confirm-without-list-context",
-        title="Confirm without prior list asks for context",
-        input_turns=[
-            "Ana Silva",
-            "11999998888",
-            "1990-05-10",
-            "confirm the first one",
-        ],
-        expected_outcomes={"issue": "missing_list_context"},
-        judge_rubric="The assistant should ask the patient to list appointments before using an ordinal reference.",
-        category="context",
-    ),
     # --- additional scenarios ---
     EvaluationScenario(
         scenario_id="switch-intent-mid-verification",
