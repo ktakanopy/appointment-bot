@@ -20,10 +20,17 @@ Events emitted through `record_trace_event` and `record_provider_event`:
 | workflow.end | `LangGraphWorkflow.run()` | thread_id, full workflow result (redacted) |
 | provider.interpret | OpenAIProvider.interpret | provider name, status |
 | provider.judge | OpenAIProvider.judge | provider name, status |
+| interpret.provider.success | graph interpret node | thread_id, provider, interpreted operation |
+| interpret.provider.failure | graph interpret node | thread_id, provider, error type |
+| interpret.fallback.activated | graph interpret node | thread_id, provider |
+| interpret.fallback.success | graph interpret node | thread_id, provider, interpreted operation |
+| interpret.fallback.failure | graph interpret node | thread_id, provider, error type |
 
 Per-node log events (via `log_event`, not `record_trace_event`):
 
 - ingest_user_message
+- interpret_provider (plus `provider`, `outcome`, and optional `error_type`)
+- interpret_fallback (plus `provider`, `outcome`, and optional `error_type`)
 - parse_intent_and_entities (plus `appointment_reference`)
 - collect_missing_verification_fields
 - verify_identity (plus `outcome`: verified, failed, or locked)

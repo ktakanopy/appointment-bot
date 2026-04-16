@@ -22,6 +22,7 @@ def build_graph(
     *,
     logger: logging.Logger,
     provider,
+    tracer: object | None = None,
     verification_service,
     appointment_service,
     max_verification_attempts: int,
@@ -34,7 +35,7 @@ def build_graph(
 
     builder = StateGraph(ConversationGraphState, input_schema=ConversationGraphInput)
     builder.add_node("ingest", make_ingest_node(logger))
-    builder.add_node("interpret", make_interpret_node(logger, provider=provider))
+    builder.add_node("interpret", make_interpret_node(logger, provider=provider, tracer=tracer))
     builder.add_node(
         "verify",
         make_verification_node(

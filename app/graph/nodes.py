@@ -7,9 +7,11 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.graph.parsing import (
+    extract_appointment_reference,
     extract_dob,
     extract_full_name,
     extract_phone,
+    extract_requested_operation,
     normalize_dob,
     normalize_full_name,
     normalize_phone,
@@ -29,6 +31,7 @@ from app.graph.state import (
     turn_state,
     verification_state,
 )
+from app.llm.schemas import IntentPrediction
 from app.models import (
     ActionOutcome,
     Appointment,
@@ -38,11 +41,12 @@ from app.models import (
     AppointmentNotOwnedError,
     ConversationOperation,
     ConversationOperationResult,
+    DependencyUnavailableError,
     ResponseKey,
     TurnIssue,
     VerificationStatus,
 )
-from app.observability import log_event
+from app.observability import log_event, record_trace_event
 
 APPOINTMENT_ACTIONS = {
     ConversationOperation.CONFIRM_APPOINTMENT,
@@ -83,7 +87,7 @@ def make_ingest_node(logger):
     return ingest
 
 
-def make_interpret_node(logger, provider):
+def make_interpret_node(logger, provider, tracer=None):
     """
     Build the node that maps the latest user message into structured intent.
 
@@ -108,7 +112,14 @@ def make_interpret_node(logger, provider):
             "missing_verification_fields": VerificationStateModel.model_validate(verification).missing_fields(),
             "messages": serialize_messages(state.get("messages", []), MESSAGE_HISTORY_LIMIT),
         }
-        result = provider.interpret(message, provider_state)
+        result = _interpret_with_fallback(
+            logger,
+            tracer,
+            provider,
+            message=message,
+            provider_state=provider_state,
+            state=state,
+        )
         requested_operation = result.requested_operation
         updated_verification = _fill_missing_fields(
             verification,
@@ -135,6 +146,87 @@ def make_interpret_node(logger, provider):
         return Command(update=updates, goto=goto)
 
     return interpret
+
+
+def _interpret_with_fallback(
+    logger,
+    tracer,
+    provider,
+    *,
+    message: str,
+    provider_state: dict[str, object],
+    state: ConversationGraphState,
+) -> IntentPrediction:
+    provider_name = getattr(provider, "name", provider.__class__.__name__)
+    thread_id = state.get("thread_id")
+    try:
+        result = provider.interpret(message, provider_state)
+    except Exception as provider_error:
+        error_type = type(provider_error).__name__
+        log_event(logger, "interpret_provider", state, provider=provider_name, outcome="failure", error_type=error_type)
+        record_trace_event(
+            logger,
+            tracer,
+            "interpret.provider.failure",
+            {"thread_id": thread_id, "provider": provider_name, "error_type": error_type},
+        )
+        log_event(logger, "interpret_fallback", state, provider=provider_name, outcome="activated")
+        record_trace_event(
+            logger,
+            tracer,
+            "interpret.fallback.activated",
+            {"thread_id": thread_id, "provider": provider_name},
+        )
+        try:
+            fallback_result = _fallback_intent_prediction(message, provider_state)
+        except Exception as fallback_error:
+            fallback_error_type = type(fallback_error).__name__
+            log_event(
+                logger,
+                "interpret_fallback",
+                state,
+                provider=provider_name,
+                outcome="failure",
+                error_type=fallback_error_type,
+            )
+            record_trace_event(
+                logger,
+                tracer,
+                "interpret.fallback.failure",
+                {"thread_id": thread_id, "provider": provider_name, "error_type": fallback_error_type},
+            )
+            raise DependencyUnavailableError("Intent interpretation is temporarily unavailable.") from fallback_error
+        log_event(logger, "interpret_fallback", state, provider=provider_name, outcome="success")
+        record_trace_event(
+            logger,
+            tracer,
+            "interpret.fallback.success",
+            {
+                "thread_id": thread_id,
+                "provider": provider_name,
+                "requested_operation": fallback_result.requested_operation.value,
+            },
+        )
+        return fallback_result
+
+    log_event(logger, "interpret_provider", state, provider=provider_name, outcome="success")
+    record_trace_event(
+        logger,
+        tracer,
+        "interpret.provider.success",
+        {"thread_id": thread_id, "provider": provider_name, "requested_operation": result.requested_operation.value},
+    )
+    return result
+
+
+def _fallback_intent_prediction(message: str, provider_state: dict[str, object]) -> IntentPrediction:
+    return IntentPrediction(
+        requested_operation=extract_requested_operation(message, provider_state),
+        full_name=normalize_full_name(extract_full_name(message)),
+        phone=normalize_phone(extract_phone(message)),
+        dob=normalize_dob(extract_dob(message)),
+        appointment_reference=extract_appointment_reference(message),
+    )
 
 
 def make_verification_node(verification_service, logger, max_verification_attempts: int):

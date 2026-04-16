@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from tests.support import build_test_workflow
 
 
@@ -15,8 +13,10 @@ class BrokenProvider:
         raise RuntimeError("judge failed")
 
 
-def test_graph_raises_when_provider_fails():
+def test_graph_uses_deterministic_fallback_when_provider_fails():
     workflow = build_test_workflow(provider=BrokenProvider())
+    state = workflow.run("graph-llm-fallback", "show my appointments")
 
-    with pytest.raises(RuntimeError, match="interpret failed"):
-        workflow.run("graph-llm-fallback", "show my appointments")
+    assert state.turn.requested_operation.value == "list_appointments"
+    assert state.turn.response_key.value == "collect_full_name"
+    assert state.verification.verified is False

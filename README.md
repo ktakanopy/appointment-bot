@@ -360,19 +360,17 @@ If this application needed to move beyond demo scope, the next improvements woul
 
 ## Future Improvements
 
-A deliberate trade-off in this exercise was to not implement deterministic
-fallback for LLM failures. Today, provider failures propagate instead of
-degrading gracefully. This was kept intentionally to avoid adding more
-branching and fallback complexity beyond the scope of the exercise.
+The live chat path now uses a deterministic fallback when provider
+interpretation fails, so common supported requests continue without crashing.
+The LLM remains non-authoritative and only participates in intent extraction;
+response rendering remains deterministic in `app/responses.py`.
 
 In a production version, likely next steps would be:
 
 - cross-session remembered identity as an explicit scope expansion once the core flow no longer needs to stay exercise-sized
-- deterministic fallback for intent and entity extraction in well-covered cases
 - background or scheduled session cleanup instead of request-path lazy cleanup
 - agent response streaming to deliver partial updates in real time and improve chat usability
 - stronger persistence for sessions and appointments
 - thread-safe shared state or externalized persistence instead of in-memory mutable stores
 - stronger evaluation and regression coverage for natural language understanding
 - more production-grade error handling and operational resilience
-

@@ -60,6 +60,7 @@ def create_runtime(settings: Settings | None = None) -> RuntimeContext:
     graph = build_graph(
         logger=logger,
         provider=provider,
+        tracer=tracer,
         verification_service=verification_service,
         appointment_service=appointment_service,
         max_verification_attempts=settings.max_verification_attempts,

@@ -48,7 +48,7 @@
 
 **Decision:** Limit the LLM to intent extraction at the workflow boundary. All authorization, routing, state mutation, and final response wording are deterministic Python. A configured provider is required for runtime startup.
 
-**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures surface as runtime errors on the interpret step. Final responses are produced deterministically by `app/responses.py` and are never affected by provider failures.
+**Consequences:** The system cannot be prompt-injected into skipping verification. Startup now fails fast when provider configuration is missing or invalid. Provider call failures in `interpret` activate a deterministic parsing fallback for covered utterances, and only a dual failure (provider + fallback) returns a controlled HTTP 503 path. Final responses are produced deterministically by `app/responses.py` and are never affected by provider failures.
 
 ## ADR-006: Remembered Identity Deferred From Delivered Scope
 

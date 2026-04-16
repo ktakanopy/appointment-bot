@@ -27,7 +27,7 @@ The model does not grant or deny access, does not mutate appointments or identit
 
 ## 4. Runtime behavior
 
-- **`interpret`** delegates action and entity extraction to the configured provider.
+- **`interpret`** first delegates action and entity extraction to the configured provider, then falls back to deterministic parsing helpers if provider interpretation fails.
 - **`build_response_text()`** returns deterministic patient-facing text directly. No provider call is made for response rendering.
 - Verification, appointment ownership, idempotency, issue classification, and workflow routing stay in deterministic Python code outside the provider.
 
@@ -73,7 +73,7 @@ flowchart LR
 
 | Stage | LLM | Deterministic |
 |------|-----|---------------|
-| `interpret` | Yes | No |
+| `interpret` | Yes | Yes (fallback on provider failure) |
 | `verify` | No | Yes |
 | `execute_action` | No | Yes |
 | `build_response_text()` | No | Yes |
@@ -84,4 +84,6 @@ For this use case, a ReAct agent would give the model too much control over a wo
 
 ## 8. Error isolation and retries
 
-Tracing failures do not abort the request path, but provider failures do. `OpenAIProvider.interpret()` is the only provider call in the live chat path, so provider exceptions surface as runtime errors on the interpret step only after a short retry window. Response rendering cannot produce provider errors because it is fully deterministic.
+Tracing failures do not abort the request path. `OpenAIProvider.interpret()` is still the only provider call in the live chat path, but provider exceptions now trigger a deterministic fallback interpretation path based on `app/graph/parsing.py` helpers (`extract_requested_operation`, `extract_full_name`, `extract_phone`, `extract_dob`, and `extract_appointment_reference`).
+
+If both provider interpretation and deterministic fallback fail unexpectedly, the graph raises a controlled application-level unavailability error and `/chat` returns HTTP 503 instead of leaking a raw provider exception. Response rendering cannot produce provider errors because it is fully deterministic.
