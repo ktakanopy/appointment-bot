@@ -9,7 +9,7 @@ writing a chatbot that sounds clever. It is making sure verification,
 appointment ownership, lockout behavior, and idempotent mutations stay
 predictable.
 
-Demo asset: [chat flow video](docs/demo.mov)
+Demo asset: [chat flow GIF](docs/demo-chat-flow.gif)
 
 ## What it does
 
@@ -19,6 +19,19 @@ Demo asset: [chat flow video](docs/demo.mov)
 - cancels appointments
 - lets the user move between those actions in one conversation
 - exposes the flow through a FastAPI backend and a small Streamlit frontend
+
+## Implemented features
+
+- session-based chat flow
+- identity verification with full name, phone, and date of birth
+- protected appointment access after verification
+- appointment listing
+- appointment confirmation
+- appointment cancellation
+- multi-turn conversation flow with rerouting between actions
+- Streamlit demo frontend
+- automated tests for core workflow and failure paths
+- eval scenarios for multi-turn behavior
 
 ## Quickstart
 
@@ -66,17 +79,21 @@ That starts:
 
 Local Langfuse login defaults:
 
-- email: `admin@appointment-bot.local`
-- password: `appointment-bot-dev`
+- email: `admin@admin.com`
+- password: `admin1234`
 
-To see traces from the API in the local Docker stack, make sure the API runs
-with tracing enabled and local Langfuse keys/host. In Docker Compose that is
-already wired by default. If you run the API outside Docker, set:
+Tracing is already enabled by default in Docker Compose. If you run the API
+outside Docker, set:
 
 - `TRACING_ENABLED=true`
 - `LANGFUSE_PUBLIC_KEY=lf_pk_local_dev_key`
 - `LANGFUSE_SECRET_KEY=lf_sk_local_dev_key`
 - `LANGFUSE_HOST=http://localhost:3000`
+
+Inside Docker Compose, the API talks to Langfuse through the internal service
+hostname `http://langfuse-web:3000`. Do not set `LANGFUSE_HOST=http://localhost:3000`
+for the API container, because inside the container `localhost` points back to
+the API container itself, not to Langfuse.
 
 ## Try it quickly
 
