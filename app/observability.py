@@ -109,7 +109,9 @@ def record_trace_event(logger: logging.Logger, tracer, event_name: str, payload:
     if tracer is None:
         return
     try:
-        tracer.create_event(name=event_name, body=safe_payload)
+        trace_id = str(safe_payload.get("thread_id") or event_name)
+        trace = tracer.trace(id=trace_id, name="appointment_bot", session_id=trace_id)
+        trace.event(name=event_name, input=safe_payload)
     except Exception:
         _emit_log(logger, {"event": event_name, "trace_status": "unavailable"})
 

@@ -69,6 +69,15 @@ Local Langfuse login defaults:
 - email: `admin@appointment-bot.local`
 - password: `appointment-bot-dev`
 
+To see traces from the API in the local Docker stack, make sure the API runs
+with tracing enabled and local Langfuse keys/host. In Docker Compose that is
+already wired by default. If you run the API outside Docker, set:
+
+- `TRACING_ENABLED=true`
+- `LANGFUSE_PUBLIC_KEY=lf_pk_local_dev_key`
+- `LANGFUSE_SECRET_KEY=lf_sk_local_dev_key`
+- `LANGFUSE_HOST=http://localhost:3000`
+
 ## Try it quickly
 
 The project ships with seeded demo patients in `app/repositories.py`. These are
@@ -146,11 +155,11 @@ The live chat path uses the LLM for intent and entity extraction only.
 
 It can suggest:
 
-- `requested_operation`
+- `requested_operation`: the main action the user seems to want, such as `verify_identity`, `list_appointments`, `confirm_appointment`, `cancel_appointment`, `help`, or `unknown`
 - `full_name`
 - `phone`
 - `dob`
-- `appointment_reference`
+- `appointment_reference`: the way the user points to a specific appointment, usually something like `1` in `confirm the first one`, but it can also be a date or explicit appointment id
 
 It does not decide authorization, mutate appointments, or generate the final
 patient-facing response. Final wording comes from deterministic response
@@ -169,7 +178,7 @@ added state and branching that did not earn its keep in a take-home exercise.
 
 - patient and appointment data are seeded in memory
 - session records live in `InMemorySessionStore`
-- LangGraph checkpoints use `InMemorySaver`
+- LangGraph checkpoints persist in local SQLite via `SqliteSaver`
 
 This gives the project enough statefulness to show the workflow clearly without
 dragging in a production persistence layer.
