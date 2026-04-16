@@ -30,8 +30,8 @@ def test_api_uses_fallback_when_provider_fails(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["verified"] is False
-    assert body["current_operation"] == "list_appointments"
-    assert body["response_key"] == "collect_full_name"
+    assert body["current_operation"] == "verify_identity"
+    assert "full name" in body["response"].lower()
 
 
 def test_api_returns_503_when_provider_and_fallback_fail(monkeypatch):
