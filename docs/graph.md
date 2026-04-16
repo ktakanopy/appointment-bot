@@ -82,6 +82,8 @@ The LLM is used here for intent classification and entity extraction. After this
 
 This node also manages deferred operations. If the user originally asked for a protected action before being verified, that intent is stored in `deferred_operation`. Once verification succeeds, the graph continues to `execute_action` automatically to run it.
 
+The node also enforces a failure limit. Each failed identity match increments a failure counter. When the counter reaches the configured maximum, `verify` sets `verification_status = locked` and returns a lock response immediately — the graph ends without routing to `execute_action` or accepting any further identity input.
+
 ---
 
 ### execute_action
@@ -222,7 +224,7 @@ Persists across turns. Stores the last listed set of appointments and any appoin
 - `verify`: all three fields are present → attempts identity match → match fails. Sets `response_key = verification_failed`, increments failure counter. Turn output is set → graph ends.
 - *(bot says the identity could not be confirmed and invites a retry)*
 
-If the user fails identity verification three times, the session is locked (`verification_status = locked`) and the bot returns `response_key = verification_locked` without accepting further identity input.
+If the user reaches the configured maximum of failed identity matches, the session is locked (`verification_status = locked`) and the bot returns `response_key = verification_locked` without accepting further identity input.
 
 ---
 
