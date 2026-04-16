@@ -20,10 +20,20 @@ class BrokenProvider:
         raise RuntimeError("judge failed")
 
 
-def test_api_raises_when_provider_fails(monkeypatch):
+@pytest.fixture()
+def broken_provider_session(monkeypatch):
     monkeypatch.setattr(runtime_module, "build_provider", lambda settings, logger, tracer=None: BrokenProvider())
     reset_runtime(app)
-    session = client.post("/sessions/new").json()
+    return client.post("/sessions/new").json()
 
-    with pytest.raises(RuntimeError, match="interpret failed"):
-        client.post("/chat", json={"session_id": session["session_id"], "message": "show my appointments"})
+
+def test_api_returns_503_when_provider_fails(broken_provider_session):
+    response = client.post("/chat", json={"session_id": broken_provider_session["session_id"], "message": "show my appointments"})
+
+    assert response.status_code == 503
+
+
+def test_provider_failure_response_body_is_stable(broken_provider_session):
+    response = client.post("/chat", json={"session_id": broken_provider_session["session_id"], "message": "show my appointments"})
+
+    assert response.json() == {"detail": "The appointment service is temporarily unavailable."}
