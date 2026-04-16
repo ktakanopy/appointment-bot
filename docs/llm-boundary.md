@@ -84,4 +84,10 @@ For this use case, a ReAct agent would give the model too much control over a wo
 
 ## 8. Error isolation and retries
 
-Tracing failures do not abort the request path, but provider failures do. `OpenAIProvider.interpret()` is the only provider call in the live chat path, so provider exceptions surface as runtime errors on the interpret step only after a short retry window. Response rendering cannot produce provider errors because it is fully deterministic.
+Tracing failures do not abort the request path. Provider failures are now handled as controlled application-level errors.
+
+`OpenAIProvider.interpret()` is the only provider call in the live chat path. If `interpret()` raises after exhausting its internal retries, the interpret node catches the exception, logs it as `interpret_provider_failed`, and raises `DependencyUnavailableError`. That error propagates out of the LangGraph workflow and is mapped to HTTP 503 by the `/chat` route handler with the message *"The appointment service is temporarily unavailable."*
+
+No deterministic fallback interpretation is implemented. The turn is not continued using heuristic parsing — the request is aborted cleanly and the caller receives a stable temporary-unavailable response.
+
+Response rendering cannot produce provider errors because it is fully deterministic.

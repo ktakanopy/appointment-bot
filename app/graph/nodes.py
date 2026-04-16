@@ -38,6 +38,7 @@ from app.models import (
     AppointmentNotOwnedError,
     ConversationOperation,
     ConversationOperationResult,
+    DependencyUnavailableError,
     ResponseKey,
     TurnIssue,
     VerificationStatus,
@@ -108,7 +109,12 @@ def make_interpret_node(logger, provider):
             "missing_verification_fields": VerificationStateModel.model_validate(verification).missing_fields(),
             "messages": serialize_messages(state.get("messages", []), MESSAGE_HISTORY_LIMIT),
         }
-        result = provider.interpret(message, provider_state)
+        try:
+            result = provider.interpret(message, provider_state)
+        except Exception as exc:
+            log_event(logger, "interpret_provider_failed", state, error_type=type(exc).__name__)
+            raise DependencyUnavailableError("provider interpret failed") from exc
+        log_event(logger, "interpret_provider_ok", state)
         requested_operation = result.requested_operation
         updated_verification = _fill_missing_fields(
             verification,

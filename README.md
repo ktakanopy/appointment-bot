@@ -360,10 +360,7 @@ If this application needed to move beyond demo scope, the next improvements woul
 
 ## Future Improvements
 
-A deliberate trade-off in this exercise was to not implement deterministic
-fallback for LLM failures. Today, provider failures propagate instead of
-degrading gracefully. This was kept intentionally to avoid adding more
-branching and fallback complexity beyond the scope of the exercise.
+Provider failures in the live `/chat` path are now surfaced as controlled HTTP 503 responses rather than unhandled exceptions. No deterministic intent-extraction fallback is implemented; if the provider fails, the request is aborted cleanly with a stable temporary-unavailable message. This keeps the error path simple and easy to reason about for an exercise-scope submission.
 
 In a production version, likely next steps would be:
 
