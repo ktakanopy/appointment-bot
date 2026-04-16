@@ -117,17 +117,6 @@ result.
 That is why the system can ask for a missing phone number without also trying to
 list appointments in the same turn.
 
-## What changed from the earlier design
-
-An earlier version tracked a deferred protected action explicitly. I removed
-that.
-
-It worked, but it spread extra state and branching across the graph for a small
-UX gain. The current version is easier to explain: verify first, then land on
-the appointment list.
-
-For this take-home, I think that is the better trade.
-
 ## Example flow
 
 ### Listing before verification

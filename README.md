@@ -170,15 +170,11 @@ templates in `app/responses.py`.
 After successful verification, the workflow moves the patient to
 `list_appointments`.
 
-I intentionally kept that simple. A more clever version could try to remember a
-pending protected action and resume it automatically. I cut that back because it
-added state and branching that did not earn its keep in a take-home exercise.
-
 ### Storage is intentionally small
 
 - patient and appointment data are seeded in memory
 - session records live in `InMemorySessionStore`
-- LangGraph checkpoints persist in local SQLite via `SqliteSaver`
+- LangGraph checkpoints use `InMemorySaver`
 
 This gives the project enough statefulness to show the workflow clearly without
 dragging in a production persistence layer.
@@ -204,30 +200,46 @@ If you want more detail, start with:
 - [`docs/security.md`](docs/security.md)
 - [`docs/evaluation.md`](docs/evaluation.md)
 
-## Scope and trade-offs
+## Scope, trade-offs, and next steps
 
-This project is intentionally exercise-sized.
+This project is intentionally exercise-sized. I focused on the core workflow the
+task is really about: a patient starts a chat session, verifies identity, sees
+appointments, and can then confirm or cancel one of them. The goal was to make
+that path clear, deterministic, and testable rather than to make the project
+look like a full production healthcare system.
 
-What is in scope:
+In scope for this submission:
 
-- session-based chat flow
-- verification-gated access to appointments
-- listing, confirming, and canceling appointments
-- rerouting between those actions in one session
-- test coverage around the main workflow and failure paths
+- session-based chat flow, so the assistant can handle a multi-turn conversation instead of treating every message as an isolated request
+- verification-gated access to appointments, so protected actions only run after the patient provides full name, phone number, and date of birth
+- listing, confirming, and canceling appointments, because those are the core business actions in the exercise
+- rerouting between those actions in one session, so a user can naturally move from listing to confirming or canceling without starting over
+- test coverage around the main workflow and failure paths, including verification failures, lockout behavior, and protected-action rules
 
-What is intentionally out of scope:
+Intentionally out of scope:
 
-- real EHR or EMR integration
-- real authentication beyond demo identity verification
-- cross-session remembered identity
-- multiple appointment mutations in one user message
-- production-grade persistence for patients, appointments, and sessions
+- real EHR or EMR integration: EHR means Electronic Health Record and EMR means Electronic Medical Record. In practice, this would mean connecting to a real clinic or hospital system instead of using seeded demo data
+- real authentication beyond demo identity verification: there is no production auth flow here such as OAuth, JWT, staff roles, or patient login accounts
+- cross-session remembered identity: if a user starts a new session, they need to verify again instead of being remembered automatically
+- multiple appointment mutations in one user message: the system handles one main appointment action per turn, not commands like `confirm the first one and cancel the second`
+- production-grade persistence for patients, appointments, and sessions: the project uses simple local storage and in-memory repositories because the goal is to show workflow behavior, not build a full persistence stack
 
-Another deliberate choice: if the LLM provider fails, the `/chat` endpoint
-returns a controlled HTTP 503 instead of trying to guess the user's intent with
-a fallback parser. For this exercise, I preferred a clean failure over a noisy,
-half-reliable recovery path.
+One more deliberate trade-off is provider failure handling. If the LLM provider
+fails, the `/chat` endpoint returns a controlled HTTP 503 instead of trying to
+guess the user's intent with a fallback parser. I think that is the better
+trade for a take-home. A clean failure is easier to understand and safer than a
+half-reliable recovery path that only works sometimes.
+
+If I were taking the project beyond demo scope, the next changes would be pretty
+practical:
+
+- stream responses to the frontend so the chat feels faster
+- move sessions, workflow state, patients, and appointments to real persistence
+- add a proper authentication system
+- add a small deterministic fallback for a few well-covered extraction cases when the provider is unavailable
+- replace request-path cleanup and in-memory mutable state with safer background cleanup and shared storage
+- expand evaluation coverage for more natural-language variation and edge cases
+- add cross-session remembered identity only if the product actually needs it
 
 ## Documentation
 
@@ -248,16 +260,3 @@ artifacts in:
 
 I would not expect a reviewer to read those first. They are there if you want
 to see the design trail.
-
-## What I'd improve next
-
-If I were taking this beyond demo scope, the next changes would be pretty
-practical:
-
-- stream responses to the frontend so the chat feels faster
-- move sessions, workflow state, patients, and appointments to real persistence
-- add stronger auth, rate limiting, and more audit-friendly controls around protected flows
-- add a small deterministic fallback for a few well-covered extraction cases when the provider is unavailable
-- replace request-path cleanup and in-memory mutable state with safer background cleanup and shared storage
-- expand evaluation coverage for more natural-language variation and edge cases
-- add cross-session remembered identity only if the product actually needs it
