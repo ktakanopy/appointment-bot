@@ -129,7 +129,7 @@ Why deterministic workflow over a ReAct agent:
 - listing, confirming, and canceling appointments only work after verification
 - verification requires full name, phone number, and date of birth
 - deferred protected actions resume automatically after successful verification
-- confirmation and cancellation are idempotent
+- confirmation and cancellation are idempotent — meaning that performing the same action more than once produces the same result as performing it once. Confirming an already-confirmed appointment, or canceling an already-canceled one, leaves the system in exactly the same state and returns a consistent response instead of raising an error. This is useful because it makes retries safe: if a user sends the same request twice (by accident, or because they weren't sure the first one went through), the outcome is predictable and no duplicate side-effects occur
 - the system avoids exposing another patient's data
 
 ## UX Scope Notes
