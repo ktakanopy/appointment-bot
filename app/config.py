@@ -42,7 +42,6 @@ class Settings(BaseModel):
 
     session_ttl_minutes: int
     max_verification_attempts: int
-    checkpoint_db_path: str
     frontend_api_base_url: str
     provider: ProviderSettings
     tracing: TracingSettings
@@ -62,7 +61,6 @@ def load_settings() -> Settings:
     settings = Settings(
         session_ttl_minutes=_env_int("SESSION_TTL_MINUTES", 60),
         max_verification_attempts=_env_int("MAX_VERIFICATION_ATTEMPTS", 3),
-        checkpoint_db_path=os.getenv("CHECKPOINT_DB_PATH", ".langgraph/checkpoints.sqlite"),
         frontend_api_base_url=os.getenv("FRONTEND_API_BASE_URL", "http://localhost:8000"),
         provider=provider,
         tracing=TracingSettings(

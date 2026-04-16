@@ -70,7 +70,7 @@ This is the composition root. It wires together:
 
 - settings
 - logger and optional tracer
-- SQLite-backed LangGraph checkpointer
+- in-memory LangGraph checkpointer
 - in-memory repositories
 - services
 - OpenAI provider
@@ -168,12 +168,145 @@ sequenceDiagram
 ## State and persistence
 
 - session registry is in `InMemorySessionStore`
-- conversation workflow state is persisted through SQLite via `SqliteSaver`
+- conversation workflow state uses LangGraph `InMemorySaver`
 - patient and appointment data are seeded in memory
 
 That mix is a little unusual, but it fits the exercise well. The workflow needs
-real conversation state across turns, while the domain data only needs to be
-good enough to demonstrate the flows.
+real conversation state across turns inside a running process, while the domain
+data only needs to be good enough to demonstrate the flows.
+
+## Data model
+
+The domain model is intentionally small.
+
+There are two kinds of state in the project:
+
+- domain data: patients and appointments
+- workflow data: verification progress, turn output, and appointment-list context
+
+### Entities
+
+```mermaid
+erDiagram
+    Patient ||--o{ Appointment : has
+    Patient {
+        string id PK
+        string full_name
+        string phone
+        date date_of_birth
+    }
+    Appointment {
+        string id PK
+        string patient_id FK
+        date date
+        string time
+        string doctor
+        string status
+    }
+    ConversationOperationResult {
+        string operation
+        string outcome
+        string appointment_id
+    }
+```
+
+`ConversationOperationResult` is workflow output, not persisted domain data.
+
+### Appointment status transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> scheduled
+    scheduled --> confirmed : confirm_appointment
+    scheduled --> canceled : cancel_appointment
+    confirmed --> confirmed : confirm_appointment\n(already_confirmed)
+    confirmed --> canceled : cancel_appointment
+    canceled --> canceled : cancel_appointment\n(already_canceled)
+```
+
+Repeated confirm and cancel are idempotent. That matters in chat because users
+retry and repeat themselves.
+
+## LLM boundary
+
+The model is intentionally boxed in.
+
+The live chat path uses the model for one thing:
+
+- intent and entity extraction
+
+The provider returns a structured prediction with:
+
+- `requested_operation`
+- `full_name`
+- `phone`
+- `dob`
+- `appointment_reference`
+
+The model does not:
+
+- decide whether the patient is verified
+- decide whether an appointment belongs to the patient
+- confirm or cancel appointments directly
+- choose final patient-facing wording
+- control the workflow once interpretation is done
+
+Those decisions stay in deterministic Python. The eval system also uses the
+provider as a judge, but only in eval mode.
+
+If `interpret()` fails after retries, the workflow raises
+`DependencyUnavailableError` and the API returns HTTP 503. I intentionally left
+out a heuristic fallback parser for this exercise.
+
+## Observability
+
+The app logs structured workflow events and can optionally send traces to
+Langfuse.
+
+Default app logging:
+
+- logger: `appointment_bot`
+- JSON logs to stdout
+- `INFO` level
+
+`log_event(logger, node, state, **extra)` emits graph-node events with common
+fields such as:
+
+- `thread_id`
+- `node`
+- `requested_operation`
+- `verified`
+- `verification_status`
+- `issue`
+
+Higher-level trace events include:
+
+- `workflow.start`
+- `workflow.end`
+- `provider.interpret`
+- `provider.judge`
+
+Eval runs use a separate human-readable logger path.
+
+All trace payloads are redacted before logging or tracing:
+
+- names become `[redacted-name]`
+- phones become `[redacted-phone-XXXX]`
+- DOB values become `[redacted-dob]`
+
+Tracing is optional and failures are isolated from the request path.
+
+## Key decisions
+
+The main architecture decisions for this project are:
+
+- FastAPI for a small, reviewable API surface
+- LangGraph for deterministic multi-turn workflow control
+- LLM used only for interpretation, never for authorization or mutation
+- deterministic final responses from `app/responses.py`
+- in-memory workflow checkpoints and in-memory business repositories
+- one main appointment action per user turn
+- no deferred protected action state after verification
 
 ## Why this shape works for the task
 

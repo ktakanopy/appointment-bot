@@ -9,7 +9,7 @@ writing a chatbot that sounds clever. It is making sure verification,
 appointment ownership, lockout behavior, and idempotent mutations stay
 predictable.
 
-Demo asset: [chat flow GIF](docs/demo-chat-flow.gif)
+Demo asset: [chat flow video](docs/demo.mov)
 
 ## What it does
 
@@ -63,6 +63,11 @@ That starts:
 - API: `http://localhost:8000`
 - Streamlit: `http://localhost:8501`
 - Langfuse: `http://localhost:3000`
+
+Local Langfuse login defaults:
+
+- email: `admin@appointment-bot.local`
+- password: `appointment-bot-dev`
 
 ## Try it quickly
 
@@ -164,7 +169,7 @@ added state and branching that did not earn its keep in a take-home exercise.
 
 - patient and appointment data are seeded in memory
 - session records live in `InMemorySessionStore`
-- LangGraph checkpoints persist in local SQLite via `SqliteSaver`
+- LangGraph checkpoints use `InMemorySaver`
 
 This gives the project enough statefulness to show the workflow clearly without
 dragging in a production persistence layer.
@@ -187,7 +192,8 @@ If you want more detail, start with:
 
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/graph.md`](docs/graph.md)
-- [`docs/llm-boundary.md`](docs/llm-boundary.md)
+- [`docs/security.md`](docs/security.md)
+- [`docs/evaluation.md`](docs/evaluation.md)
 
 ## Scope and trade-offs
 
@@ -220,13 +226,8 @@ The `docs/` folder has the main technical notes:
 
 - [`docs/architecture.md`](docs/architecture.md): system layout and request flow
 - [`docs/graph.md`](docs/graph.md): workflow behavior and routing
-- [`docs/llm-boundary.md`](docs/llm-boundary.md): what the model can and cannot do
 - [`docs/security.md`](docs/security.md): verification, lockout, ownership, and redaction
-- [`docs/data-model.md`](docs/data-model.md): entities, workflow state, and persistence
-- [`docs/observability.md`](docs/observability.md): logs, tracing, and redaction
 - [`docs/evaluation.md`](docs/evaluation.md): eval runner and scenarios
-- [`docs/decisions.md`](docs/decisions.md): architecture decisions
-- [`docs/test-scenarios.md`](docs/test-scenarios.md): manual test checklist
 
 ## Process notes
 
@@ -245,7 +246,7 @@ If I were taking this beyond demo scope, the next changes would be pretty
 practical:
 
 - stream responses to the frontend so the chat feels faster
-- move sessions, checkpoints, patients, and appointments to real persistence
+- move sessions, workflow state, patients, and appointments to real persistence
 - add stronger auth, rate limiting, and more audit-friendly controls around protected flows
 - add a small deterministic fallback for a few well-covered extraction cases when the provider is unavailable
 - replace request-path cleanup and in-memory mutable state with safer background cleanup and shared storage
