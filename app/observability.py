@@ -183,7 +183,10 @@ def get_or_create_trace(tracer, thread_id: str | None):
     if tracer is None:
         return None
     trace_id = str(thread_id or "appointment-bot")
-    return tracer.trace(id=trace_id, name="appointment_bot", session_id=trace_id)
+    try:
+        return tracer.trace(id=trace_id, name="appointment_bot", session_id=trace_id)
+    except Exception:
+        return None
 
 
 @contextmanager

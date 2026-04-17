@@ -47,8 +47,21 @@ def extract_full_name(message: str) -> str | None:
     candidate = " ".join(part for part in cleaned.strip().split())
     if len(candidate.split()) < 2:
         return None
-    blocked_words = {"phone", "number", "birth", "date", "appointment", "appointments", "confirm", "cancel", "show", "list"}
-    if any(word in blocked_words for word in {part.lower() for part in candidate.split()}):
+    blocked_words = {
+        "phone",
+        "number",
+        "birth",
+        "date",
+        "appointment",
+        "appointments",
+        "confirm",
+        "cancel",
+        "show",
+        "list",
+    }
+    if any(
+        word in blocked_words for word in {part.lower() for part in candidate.split()}
+    ):
         return None
     return FullName.try_parse(candidate)
 
@@ -59,11 +72,17 @@ def extract_requested_operation(message: str, state: dict) -> ConversationOperat
         return ConversationOperation.CANCEL_APPOINTMENT
     if "confirm" in lowered:
         return ConversationOperation.CONFIRM_APPOINTMENT
-    if any(keyword in lowered for keyword in ["appointment", "appointments", "show", "see", "list"]):
+    if any(
+        keyword in lowered
+        for keyword in ["appointment", "appointments", "show", "see", "list"]
+    ):
         return ConversationOperation.LIST_APPOINTMENTS
     if is_help_request(lowered):
         return ConversationOperation.HELP
     return ConversationOperation.UNKNOWN
+
+
+
 
 
 def extract_appointment_reference(message: str) -> str | None:
@@ -85,7 +104,9 @@ def extract_appointment_reference(message: str) -> str | None:
     return None
 
 
-def resolve_appointment_reference(reference: str | None, appointments: list[Appointment]) -> Appointment | None:
+def resolve_appointment_reference(
+    reference: str | None, appointments: list[Appointment]
+) -> Appointment | None:
     """Map a loose user reference string to a single appointment from the given list.
 
     Resolution order: match by appointment id; else if the string equals a date
@@ -101,12 +122,16 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
 
     # Exact ids are the strongest reference because they do not depend on list
     # ordering and they remain stable across turns.
-    exact_matches = [appointment for appointment in appointments if appointment.id == reference]
+    exact_matches = [
+        appointment for appointment in appointments if appointment.id == reference
+    ]
     if exact_matches:
         return exact_matches[0]
 
     # A date is only usable when it identifies exactly one appointment.
-    date_matches = [appointment for appointment in appointments if appointment.date == reference]
+    date_matches = [
+        appointment for appointment in appointments if appointment.date == reference
+    ]
     if len(date_matches) == 1:
         return date_matches[0]
     if len(date_matches) > 1:

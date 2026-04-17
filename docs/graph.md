@@ -193,6 +193,14 @@ It extracts:
 - `dob`
 - `appointment_reference`
 
+The node uses the structured LLM output first. If the LLM call succeeds but
+leaves one of those fields empty, the node applies a few small deterministic
+parsers to fill only that missing value. That mainly helps with phone numbers,
+dates of birth, short full-name replies during verification, and appointment
+references such as `first`, `2`, or `2026-04-20`. If the provider call itself
+fails, the workflow does not fall back to a full deterministic parser; it raises
+`DependencyUnavailableError` and the API returns HTTP 503.
+
 After that, the workflow is deterministic again.
 
 If the provider fails here, the node raises `DependencyUnavailableError` and the

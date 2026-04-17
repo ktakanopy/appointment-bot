@@ -172,6 +172,10 @@ the graph instead of hidden inside model behavior.
 
 The live chat path uses the LLM for intent and entity extraction only.
 
+The workflow uses the LLM output first and only fills simple missing fields
+with deterministic parsing. If the provider call fails, the API returns HTTP
+503 instead of falling back to a full parser.
+
 It can suggest:
 
 - `requested_operation`: the main action the user seems to want, such as `verify_identity`, `list_appointments`, `confirm_appointment`, `cancel_appointment`, `help`, or `unknown`

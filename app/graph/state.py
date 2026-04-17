@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import MessagesState
@@ -16,33 +16,11 @@ from app.models import (
 )
 
 
-class GraphVerificationState(TypedDict):
-    # Raw LangGraph state stays dict-shaped because nodes update it incrementally.
-    verified: bool
-    verification_failures: int
-    verification_status: VerificationStatus
-    patient_id: str | None
-    provided_full_name: str | None
-    provided_phone: str | None
-    provided_dob: str | None
-
-
-class GraphTurnState(TypedDict):
-    requested_operation: ConversationOperation
-    operation_result: ConversationOperationResult | None
-    issue: TurnIssue | None
-
-
-class GraphAppointmentState(TypedDict):
-    listed_appointments: list[Appointment]
-    appointment_reference: str | None
-
-
 class ConversationGraphState(MessagesState):
     thread_id: str
-    verification: GraphVerificationState
-    turn: GraphTurnState
-    appointments: GraphAppointmentState
+    verification: dict[str, Any]
+    turn: dict[str, Any]
+    appointments: dict[str, Any]
 
 
 class ConversationGraphInput(MessagesState):
@@ -113,37 +91,22 @@ class ConversationState(BaseModel):
     appointments: AppointmentState = Field(default_factory=AppointmentState)
 
 
-def default_verification_state() -> GraphVerificationState:
-    return cast(GraphVerificationState, VerificationState().model_dump())
-
-
-def default_turn_state() -> GraphTurnState:
-    return cast(GraphTurnState, TurnState().model_dump())
-
-
-def default_appointment_state() -> GraphAppointmentState:
-    return cast(GraphAppointmentState, AppointmentState().model_dump())
-
-
-def verification_state(state: ConversationGraphState) -> GraphVerificationState:
+def verification_state(state: ConversationGraphState | dict[str, Any]) -> VerificationState:
     # LangGraph updates can be partial, so readers always merge against a full
     # typed default model before accessing nested keys.
-    verification = VerificationState().model_copy(
-        update=cast(dict[str, Any], state.get("verification", {}))
+    return VerificationState.model_validate(
+        cast(dict[str, Any], state.get("verification", {}))
     )
-    return cast(GraphVerificationState, verification.model_dump())
 
 
-def turn_state(state: ConversationGraphState) -> GraphTurnState:
-    turn = TurnState().model_copy(update=cast(dict[str, Any], state.get("turn", {})))
-    return cast(GraphTurnState, turn.model_dump())
+def turn_state(state: ConversationGraphState | dict[str, Any]) -> TurnState:
+    return TurnState.model_validate(cast(dict[str, Any], state.get("turn", {})))
 
 
-def appointment_state(state: ConversationGraphState) -> GraphAppointmentState:
-    appointments = AppointmentState().model_copy(
-        update=cast(dict[str, Any], state.get("appointments", {}))
+def appointment_state(state: ConversationGraphState | dict[str, Any]) -> AppointmentState:
+    return AppointmentState.model_validate(
+        cast(dict[str, Any], state.get("appointments", {}))
     )
-    return cast(GraphAppointmentState, appointments.model_dump())
 
 
 def latest_user_message(state: ConversationGraphState) -> str:
@@ -175,9 +138,9 @@ def build_conversation_state(state: ConversationGraphState | dict[str, Any]) -> 
     return ConversationState(
         thread_id=cast(str, state.get("thread_id", "")),
         messages=serialize_messages(cast(Sequence[AnyMessage], state.get("messages", []))),
-        verification=VerificationState.model_validate(verification),
-        turn=TurnState.model_validate(turn),
-        appointments=AppointmentState.model_validate(appointments),
+        verification=verification,
+        turn=turn,
+        appointments=appointments,
     )
 
 
