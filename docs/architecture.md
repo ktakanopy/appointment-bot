@@ -259,73 +259,12 @@ out a heuristic fallback parser for this exercise.
 
 ## Observability
 
-The app logs structured workflow events and can optionally send traces to
-Langfuse.
+The app logs structured JSON events to stdout and can optionally send traces to
+Langfuse. Tracing is optional and failures are isolated from the request path.
 
-Default app logging:
-
-- logger: `appointment_bot`
-- JSON logs to stdout
-- `INFO` level
-
-`log_event(logger, node, state, **extra)` emits graph-node events with common
-fields such as:
-
-- `thread_id`
-- `node`
-- `requested_operation`
-- `verified`
-- `verification_status`
-- `issue`
-
-Higher-level trace events include:
-
-- `workflow.start`
-- `workflow.end`
-- `provider.interpret`
-- `provider.judge`
-
-The local tracing model is intentionally more detailed than the plain logs.
-
-For each conversation thread, the app creates:
-
-- one Langfuse trace keyed by `thread_id`
-- one `workflow.run` span per user turn
-- one trace event per node transition with summarized input and output state
-- one routing decision event whenever the graph chooses a branch
-- one provider generation for each LLM call (`interpret` and `judge`)
-
-That gives a trace shape that is much easier to inspect in Langfuse:
-
-- what the user sent into the turn
-- how the graph state changed at each node
-- which branch the workflow chose and why
-- what went into the LLM call
-- what came back from the LLM call
-- whether retries or provider errors happened
-
-Node-level traces include redacted state snapshots before and after execution.
-Those snapshots are intentionally summarized rather than dumping the entire
-raw object so the trace stays readable.
-
-Provider traces include:
-
-- redacted input payload
-- target response model
-- configured model name
-- parsed structured output
-- retry attempts
-- error type when the call fails
-
-Eval runs use a separate human-readable logger path.
-
-All trace payloads are redacted before logging or tracing:
-
-- names become `[redacted-name]`
-- phones become `[redacted-phone-XXXX]`
-- DOB values become `[redacted-dob]`
-
-Tracing is optional and failures are isolated from the request path.
+Each turn produces one Langfuse trace (keyed by `thread_id`) with spans for
+node transitions, routing decisions, and LLM calls. All payloads redact PII
+before logging or tracing (names, phone numbers, and dates of birth).
 
 ## Key decisions
 
@@ -337,11 +276,3 @@ The main architecture decisions for this project are:
 - deterministic final responses from `app/responses.py`
 - in-memory workflow checkpoints and in-memory business repositories
 - one main appointment action per user turn
-
-## Why this shape works for the task
-
-I kept coming back to one question: what does the reviewer actually need to
-trust? Not that the bot sounds clever. They need to trust that protected actions
-stay gated, that the flow is inspectable, and that the behavior is testable.
-
-This structure supports that pretty well.
