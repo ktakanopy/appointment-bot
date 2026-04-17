@@ -33,7 +33,7 @@ Demo:
 - multi-turn conversation flow with rerouting between actions
 - Streamlit demo frontend
 - automated tests for core workflow and failure paths
-- eval scenarios for multi-turn behavior
+- eval scenarios for multi-turn behavior and quality assurance
 
 ## Quickstart
 

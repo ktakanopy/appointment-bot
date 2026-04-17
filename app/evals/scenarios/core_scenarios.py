@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.evals.models import EvaluationScenario
 
-
 CORE_SCENARIOS = [
     EvaluationScenario(
         scenario_id="verification-list",
@@ -15,7 +14,13 @@ CORE_SCENARIOS = [
     EvaluationScenario(
         scenario_id="ambiguous-cancel",
         title="Ambiguous cancellation asks for clarification",
-        input_turns=["show my appointments", "Ana Silva", "11999998888", "1990-05-10", "cancel my appointment"],
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "1990-05-10",
+            "cancel my appointment",
+        ],
         expected_outcomes={"issue": "ambiguous_appointment_reference"},
         judge_rubric="The assistant should ask the user to clarify which appointment to cancel.",
         category="ambiguity",
@@ -211,11 +216,11 @@ CORE_SCENARIOS = [
         input_turns=[
             "show my appointments",
             "Ana Silva",
-            "11000000000",   # wrong phone, correct name/dob
+            "11000000000",  # wrong phone, correct name/dob
             "1990-05-10",
             # verification fails → all fields reset
             "Ana Silva",
-            "11999998888",   # correct phone
+            "11999998888",  # correct phone
             "1990-05-10",
         ],
         expected_outcomes={"verified": True, "current_operation": "list_appointments"},
@@ -232,11 +237,11 @@ CORE_SCENARIOS = [
             "show my appointments",
             "Ana Silva",
             "11999998888",
-            "2000-01-01",    # wrong dob, correct name/phone
+            "2000-01-01",  # wrong dob, correct name/phone
             # verification fails → all fields reset
             "Ana Silva",
             "11999998888",
-            "1990-05-10",    # correct dob
+            "1990-05-10",  # correct dob
         ],
         expected_outcomes={"verified": True, "current_operation": "list_appointments"},
         judge_rubric=(
@@ -250,11 +255,11 @@ CORE_SCENARIOS = [
         title="Retry after wrong name (correct phone and DOB) recovers",
         input_turns=[
             "show my appointments",
-            "Wrong Name",    # wrong name, correct phone/dob
+            "Wrong Name",  # wrong name, correct phone/dob
             "11999998888",
             "1990-05-10",
             # verification fails → all fields reset
-            "Ana Silva",     # correct name
+            "Ana Silva",  # correct name
             "11999998888",
             "1990-05-10",
         ],
@@ -271,13 +276,13 @@ CORE_SCENARIOS = [
         title="Two consecutive failures still allow a third successful attempt",
         input_turns=[
             "show my appointments",
-            "Wrong Name",    # failure 1
+            "Wrong Name",  # failure 1
             "11000000000",
             "1999-01-01",
-            "Wrong Name",    # failure 2
+            "Wrong Name",  # failure 2
             "11000000000",
             "1999-01-01",
-            "Ana Silva",     # correct (attempt 3 of 3 — must NOT lock)
+            "Ana Silva",  # correct (attempt 3 of 3 — must NOT lock)
             "11999998888",
             "1990-05-10",
         ],
@@ -295,8 +300,8 @@ CORE_SCENARIOS = [
         input_turns=[
             "show my appointments",
             "Ana Silva",
-            "invalid",       # too short, fails Phone value-object validation
-            "11999998888",   # correct phone after re-prompt
+            "invalid",  # too short, fails Phone value-object validation
+            "11999998888",  # correct phone after re-prompt
             "1990-05-10",
         ],
         expected_outcomes={"verified": True, "current_operation": "list_appointments"},
@@ -313,8 +318,8 @@ CORE_SCENARIOS = [
             "show my appointments",
             "Ana Silva",
             "11999998888",
-            "not-a-date",    # fails DateOfBirth value-object validation
-            "1990-05-10",    # correct dob after re-prompt
+            "not-a-date",  # fails DateOfBirth value-object validation
+            "1990-05-10",  # correct dob after re-prompt
         ],
         expected_outcomes={"verified": True, "current_operation": "list_appointments"},
         judge_rubric=(
@@ -349,8 +354,8 @@ CORE_SCENARIOS = [
             "Ana Silva",
             "11999998888",
             "1990-05-10",
-            "cancel the first one",   # a1: SCHEDULED → CANCELED
-            "cancel the first one",   # a1: CANCELED → ALREADY_CANCELED
+            "cancel the first one",  # a1: SCHEDULED → CANCELED
+            "cancel the first one",  # a1: CANCELED → ALREADY_CANCELED
         ],
         expected_outcomes={"last_outcome": "already_canceled"},
         judge_rubric=(
@@ -368,7 +373,7 @@ CORE_SCENARIOS = [
             "Ana Silva",
             "11999998888",
             "1990-05-10",
-            "cancel the first one",   # a1: SCHEDULED → CANCELED
+            "cancel the first one",  # a1: SCHEDULED → CANCELED
             "confirm the first one",  # a1: CANCELED → AppointmentNotConfirmableError
         ],
         expected_outcomes={"issue": "appointment_not_confirmable"},
@@ -422,11 +427,11 @@ CORE_SCENARIOS = [
             "show my appointments",
             "Carlos Souza",
             "11911112222",
-            "1990-05-10",    # wrong dob (Ana's dob, not Carlos's)
+            "1990-05-10",  # wrong dob (Ana's dob, not Carlos's)
             # verification fails → reset
             "Carlos Souza",
             "11911112222",
-            "1985-09-22",    # correct dob
+            "1985-09-22",  # correct dob
         ],
         expected_outcomes={"verified": True, "current_operation": "list_appointments"},
         judge_rubric=(
