@@ -114,53 +114,36 @@ class ConversationState(BaseModel):
 
 
 def default_verification_state() -> GraphVerificationState:
-    return {
-        "verified": False,
-        "verification_failures": 0,
-        "verification_status": VerificationStatus.UNVERIFIED,
-        "patient_id": None,
-        "provided_full_name": None,
-        "provided_phone": None,
-        "provided_dob": None,
-    }
+    return cast(GraphVerificationState, VerificationState().model_dump())
 
 
 def default_turn_state() -> GraphTurnState:
-    return {
-        "requested_operation": ConversationOperation.UNKNOWN,
-        "operation_result": None,
-        "issue": None,
-    }
+    return cast(GraphTurnState, TurnState().model_dump())
 
 
 def default_appointment_state() -> GraphAppointmentState:
-    return {
-        "listed_appointments": [],
-        "appointment_reference": None,
-    }
+    return cast(GraphAppointmentState, AppointmentState().model_dump())
 
 
 def verification_state(state: ConversationGraphState) -> GraphVerificationState:
     # LangGraph updates can be partial, so readers always merge against a full
-    # default shape before accessing nested keys.
-    return {
-        **default_verification_state(),
-        **cast(dict[str, Any], state.get("verification", {})),
-    }
+    # typed default model before accessing nested keys.
+    verification = VerificationState().model_copy(
+        update=cast(dict[str, Any], state.get("verification", {}))
+    )
+    return cast(GraphVerificationState, verification.model_dump())
 
 
 def turn_state(state: ConversationGraphState) -> GraphTurnState:
-    return {
-        **default_turn_state(),
-        **cast(dict[str, Any], state.get("turn", {})),
-    }
+    turn = TurnState().model_copy(update=cast(dict[str, Any], state.get("turn", {})))
+    return cast(GraphTurnState, turn.model_dump())
 
 
 def appointment_state(state: ConversationGraphState) -> GraphAppointmentState:
-    return {
-        **default_appointment_state(),
-        **cast(dict[str, Any], state.get("appointments", {})),
-    }
+    appointments = AppointmentState().model_copy(
+        update=cast(dict[str, Any], state.get("appointments", {}))
+    )
+    return cast(GraphAppointmentState, appointments.model_dump())
 
 
 def latest_user_message(state: ConversationGraphState) -> str:

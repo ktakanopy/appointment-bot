@@ -75,11 +75,11 @@ def make_ingest_node(logger):
     def ingest(state: ConversationGraphState) -> dict[str, GraphTurnState]:
         turn = _reset_turn_output(turn_state(state))
         updated_state = {**state, "turn": turn}
-        log_event(logger, "ingest_user_message", updated_state)
+        log_event(logger, "ingest", updated_state)
         record_node_trace(
             logger,
             getattr(logger, "tracer", None),
-            node="ingest_user_message",
+            node="ingest",
             state_before=state,
             state_after=updated_state,
         )
@@ -126,12 +126,13 @@ def make_interpret_node(logger, provider):
         except Exception as exc:
             log_event(
                 logger,
-                "interpret_provider_failed",
+                "interpret",
                 state,
+                outcome="provider_failed",
                 error_type=type(exc).__name__,
             )
             raise DependencyUnavailableError("provider interpret failed") from exc
-        log_event(logger, "interpret_provider_ok", state)
+        log_event(logger, "interpret", state, outcome="provider_ok")
         full_name = FullName.try_parse(result.full_name) or extract_full_name(message)
         phone = Phone.try_parse(result.phone) or extract_phone(message)
         dob = DateOfBirth.try_parse(result.dob) or extract_dob(message)
@@ -157,7 +158,7 @@ def make_interpret_node(logger, provider):
         next_state = {**state, **updates}
         log_event(
             logger,
-            "parse_intent_and_entities",
+            "interpret",
             next_state,
             appointment_reference=updated_appointments["appointment_reference"],
         )
@@ -167,7 +168,7 @@ def make_interpret_node(logger, provider):
         record_node_trace(
             logger,
             getattr(logger, "tracer", None),
-            node="parse_intent_and_entities",
+            node="interpret",
             state_before=state,
             state_after=next_state,
             extra={
@@ -210,11 +211,11 @@ def make_verification_node(
         if verification["verification_status"] == VerificationStatus.LOCKED:
             updates = _set_locked_response(turn)
             next_state = {**state, **updates}
-            log_event(logger, "verify_identity", next_state, outcome="locked")
+            log_event(logger, "verify", next_state, outcome="locked")
             record_node_trace(
                 logger,
                 getattr(logger, "tracer", None),
-                node="verify_identity",
+                node="verify",
                 state_before=state,
                 state_after=next_state,
                 extra={"outcome": "locked"},
@@ -236,14 +237,14 @@ def make_verification_node(
                 state=state,
             )
             next_state = {**state, **updates}
-            log_event(logger, "collect_missing_verification_fields", next_state)
+            log_event(logger, "verify", next_state, outcome="collect_missing_field")
             record_node_trace(
                 logger,
                 getattr(logger, "tracer", None),
-                node="collect_missing_verification_fields",
+                node="verify",
                 state_before=state,
                 state_after=next_state,
-                extra={"missing_field": missing_field},
+                extra={"outcome": "collect_missing_field", "missing_field": missing_field},
             )
             return Command(update=updates, goto=END)
 
@@ -259,12 +260,12 @@ def make_verification_node(
                 max_verification_attempts=max_verification_attempts,
             )
             next_state = {**state, **updates}
-            log_event(logger, "verify_identity", next_state, outcome=outcome)
+            log_event(logger, "verify", next_state, outcome=outcome)
             goto = END if should_skip_action_execution(next_state) else "execute_action"
             record_node_trace(
                 logger,
                 getattr(logger, "tracer", None),
-                node="verify_identity",
+                node="verify",
                 state_before=state,
                 state_after=next_state,
                 extra={
@@ -286,12 +287,12 @@ def make_verification_node(
             verification, turn, patient_id=patient.id
         )
         next_state = {**state, **updates}
-        log_event(logger, "verify_identity", next_state, outcome="verified")
+        log_event(logger, "verify", next_state, outcome="verified")
         goto = END if should_skip_action_execution(next_state) else "execute_action"
         record_node_trace(
             logger,
             getattr(logger, "tracer", None),
-            node="verify_identity",
+            node="verify",
             state_before=state,
             state_after=next_state,
             extra={
@@ -437,11 +438,11 @@ def make_help_node(logger):
             "operation_result": None,
         }
         updates = {"turn": updated_turn}
-        log_event(logger, "handle_help_or_unknown", {**state, **updates})
+        log_event(logger, "help_or_unknown", {**state, **updates})
         record_node_trace(
             logger,
             getattr(logger, "tracer", None),
-            node="handle_help_or_unknown",
+            node="help_or_unknown",
             state_before=state,
             state_after={**state, **updates},
         )

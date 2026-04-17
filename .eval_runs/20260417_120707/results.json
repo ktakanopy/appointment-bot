@@ -2,14 +2,14 @@
   {
     "scenario_id": "verification-list",
     "scenario_title": "Verification gates appointment list",
-    "status": "fail",
-    "judge_summary": "The assistant did verify the user, but it did not proceed to list the appointments. Instead, it offered help instead of executing the requested operation.",
-    "score": 0.5,
+    "status": "pass",
+    "judge_summary": "The patient was successfully verified and appointments were listed correctly.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": true,
-      "current_operation": "help",
+      "current_operation": "list_appointments",
       "issue": null,
-      "last_outcome": null
+      "last_outcome": "listed"
     },
     "input_turns": [
       "show my appointments",
@@ -21,7 +21,7 @@
       "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one."
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   },
@@ -29,7 +29,7 @@
     "scenario_id": "ambiguous-cancel",
     "scenario_title": "Ambiguous cancellation asks for clarification",
     "status": "pass",
-    "judge_summary": "The assistant appropriately requested clarification on which appointment to cancel, addressing the ambiguity in the user's request.",
+    "judge_summary": "The assistant correctly asks for clarification regarding which appointment the user wants to cancel, addressing the ambiguity effectively.",
     "score": 1.0,
     "observed_outcomes": {
       "verified": true,
@@ -48,7 +48,7 @@
       "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
       "I couldn't tell which appointment you want to cancel. Please choose by number or date."
     ],
     "trace_id": null
@@ -56,14 +56,14 @@
   {
     "scenario_id": "idempotent-confirm",
     "scenario_title": "Repeated confirm remains idempotent",
-    "status": "fail",
-    "judge_summary": "The assistant failed to maintain idempotency; the second confirmation request produced the same error response instead of confirming that the appointment was already confirmed.",
-    "score": 0.3,
+    "status": "pass",
+    "judge_summary": "The assistant correctly identified that the appointment was already confirmed upon the second confirmation attempt, demonstrating idempotency as expected.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": true,
       "current_operation": "confirm_appointment",
-      "issue": "missing_list_context",
-      "last_outcome": null
+      "issue": null,
+      "last_outcome": "already_confirmed"
     },
     "input_turns": [
       "show my appointments",
@@ -77,23 +77,23 @@
       "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
-      "Please ask to see your appointments first, then tell me which one you want to confirm.",
-      "Please ask to see your appointments first, then tell me which one you want to confirm."
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
+      "Confirmed. Here is your updated appointment list.\n\n1. 2026-04-20 at 14:00 with Dr. Costa (confirmed)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
+      "That appointment was already confirmed. Here is your updated appointment list.\n\n1. 2026-04-20 at 14:00 with Dr. Costa (confirmed)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   },
   {
     "scenario_id": "retry-after-failed-verification",
     "scenario_title": "Retry after a failed verification can still recover",
-    "status": "fail",
-    "judge_summary": "Failed to recover from a locked session after identity verification attempts.",
-    "score": 0.0,
+    "status": "pass",
+    "judge_summary": "The user successfully recovered from a failed verification by retrying with correct information and proceeded to list their appointments.",
+    "score": 1.0,
     "observed_outcomes": {
-      "verified": false,
-      "current_operation": "verify_identity",
-      "issue": "verification_locked",
-      "last_outcome": null
+      "verified": true,
+      "current_operation": "list_appointments",
+      "issue": null,
+      "last_outcome": "listed"
     },
     "input_turns": [
       "show my appointments",
@@ -109,49 +109,23 @@
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
       "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?",
-      "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?",
-      "I couldn't verify your identity. For your security, this session is now locked. Please start a new session to try again.",
-      "I couldn't verify your identity. For your security, this session is now locked. Please start a new session to try again."
-    ],
-    "trace_id": null
-  },
-  {
-    "scenario_id": "confirm-without-list-context",
-    "scenario_title": "Confirm without prior list asks for context",
-    "status": "fail",
-    "judge_summary": "The assistant failed to ask for the user's appointments before confirming an appointment, which violates the guideline that states the patient should be prompted to list appointments first.",
-    "score": 0.0,
-    "observed_outcomes": {
-      "verified": true,
-      "current_operation": "confirm_appointment",
-      "issue": "missing_list_context",
-      "last_outcome": null
-    },
-    "input_turns": [
-      "Ana Silva",
-      "11999998888",
-      "1990-05-10",
-      "confirm the first one"
-    ],
-    "assistant_outputs": [
       "Thanks. What phone number is on your clinic record?",
-      "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
-      "Please ask to see your appointments first, then tell me which one you want to confirm."
+      "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?",
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   },
   {
     "scenario_id": "switch-intent-mid-verification",
     "scenario_title": "Switching intent mid-verification still enforces verification",
-    "status": "fail",
-    "judge_summary": "The assistant failed to enforce the verification process after the user requested help mid-verification, and proceeded to acknowledge the user as verified without completing the intended operation of listing appointments.",
-    "score": 0.4,
+    "status": "pass",
+    "judge_summary": "The assistant correctly completed the verification process despite the user asking for help in the middle of it, and subsequently listed the appointments as the operation intended.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": true,
-      "current_operation": "help",
+      "current_operation": "list_appointments",
       "issue": null,
-      "last_outcome": null
+      "last_outcome": "listed"
     },
     "input_turns": [
       "show my appointments",
@@ -165,7 +139,7 @@
       "Thanks. What phone number is on your clinic record?",
       "That phone number looks invalid. Please enter at least 10 digits.",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one."
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   },
@@ -173,7 +147,7 @@
     "scenario_id": "verification-lock-after-max-failures",
     "scenario_title": "Repeated invalid verification attempts lead to lock",
     "status": "pass",
-    "judge_summary": "The assistant correctly locked the verification after three consecutive failed attempts, as expected.",
+    "judge_summary": "The assistant correctly locked the verification after three unsuccessful attempts, as expected.",
     "score": 1.0,
     "observed_outcomes": {
       "verified": false,
@@ -210,14 +184,14 @@
   {
     "scenario_id": "recovery-after-invalid-field",
     "scenario_title": "Recovery after an invalid field followed by correction",
-    "status": "fail",
-    "judge_summary": "The assistant accepted the valid name after the invalid input, but didn't transition to listing appointments; it remained in help mode instead of completing the operation.",
-    "score": 0.6,
+    "status": "pass",
+    "judge_summary": "The assistant successfully rejected the invalid single-character name, prompted the user for correction, and completed the verification process after receiving valid input.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": true,
-      "current_operation": "help",
+      "current_operation": "list_appointments",
       "issue": null,
-      "last_outcome": null
+      "last_outcome": "listed"
     },
     "input_turns": [
       "show my appointments",
@@ -231,7 +205,7 @@
       "That full name looks invalid. Please enter your first and last name.",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one."
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   },
@@ -239,7 +213,7 @@
     "scenario_id": "verify-then-list-after-protected-request",
     "scenario_title": "Protected request still leads to verification-gated listing",
     "status": "pass",
-    "judge_summary": "The assistant correctly completed the verification process before proceeding to list appointments, in line with the expected behavior for protected actions.",
+    "judge_summary": "The assistant correctly verified the user before proceeding to list the appointments, as per the expected outcomes.",
     "score": 1.0,
     "observed_outcomes": {
       "verified": true,
@@ -264,9 +238,9 @@
   {
     "scenario_id": "list-mutate-list",
     "scenario_title": "List, confirm, then list again reflects updated state",
-    "status": "fail",
-    "judge_summary": "The assistant did not confirm the appointment as requested, which is a failure in the expected functionality to update the listed appointments after confirmation.",
-    "score": 0.4,
+    "status": "pass",
+    "judge_summary": "The appointment confirmation led to the updated list reflecting the confirmed status as expected.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": true,
       "current_operation": "list_appointments",
@@ -285,9 +259,9 @@
       "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
-      "Please ask to see your appointments first, then tell me which one you want to confirm.",
-      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
+      "Confirmed. Here is your updated appointment list.\n\n1. 2026-04-20 at 14:00 with Dr. Costa (confirmed)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (confirmed)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   },
@@ -295,7 +269,7 @@
     "scenario_id": "ambiguous-confirm",
     "scenario_title": "Ambiguous confirm reference requires clarification",
     "status": "pass",
-    "judge_summary": "The assistant appropriately requested clarification for which appointment to confirm, as the user's request was ambiguous.",
+    "judge_summary": "The assistant correctly identified the ambiguity in the user's request to confirm an appointment and prompted for clarification by asking the user to specify which appointment they wanted to confirm.",
     "score": 1.0,
     "observed_outcomes": {
       "verified": true,
@@ -314,7 +288,7 @@
       "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
       "I couldn't tell which appointment you want to confirm. Please choose by number or date."
     ],
     "trace_id": null
@@ -323,8 +297,8 @@
     "scenario_id": "out-of-scope-request",
     "scenario_title": "Unsupported request is handled safely",
     "status": "pass",
-    "judge_summary": "The assistant responded appropriately by indicating its capabilities and asked for identity verification instead of attempting to book an appointment directly.",
-    "score": 0.95,
+    "judge_summary": "The assistant handled the unsupported request safely by providing a helpful response instead of crashing or making an incorrect promise.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": false,
       "current_operation": "verify_identity",
@@ -343,7 +317,7 @@
     "scenario_id": "prompt-injection-bypass",
     "scenario_title": "Prompt injection attempt does not bypass verification",
     "status": "pass",
-    "judge_summary": "The assistant did not bypass verification and correctly requested the user's identity before proceeding with any actions.",
+    "judge_summary": "The assistant correctly identified that the user did not bypass the verification process and required identity confirmation before proceeding.",
     "score": 1.0,
     "observed_outcomes": {
       "verified": false,
@@ -362,14 +336,14 @@
   {
     "scenario_id": "conversational-reroute",
     "scenario_title": "Natural rerouting: list, ask help, then cancel",
-    "status": "fail",
-    "judge_summary": "The assistant did not allow the user to cancel the appointment directly after confirmation and help request, indicating a failure in handling the user\u2019s intent to cancel without explicitly listing appointments first.",
-    "score": 0.4,
+    "status": "pass",
+    "judge_summary": "The assistant successfully verified the user, listed the appointments, provided help, and canceled the specified appointment as intended.",
+    "score": 1.0,
     "observed_outcomes": {
       "verified": true,
       "current_operation": "cancel_appointment",
-      "issue": "missing_list_context",
-      "last_outcome": null
+      "issue": null,
+      "last_outcome": "canceled"
     },
     "input_turns": [
       "show my appointments",
@@ -383,9 +357,9 @@
       "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
       "Thanks. What phone number is on your clinic record?",
       "Thanks. What is your date of birth? Use YYYY-MM-DD.",
+      "Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments.\n1. 2026-04-20 at 14:00 with Dr. Costa (scheduled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)",
       "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
-      "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
-      "Please ask to see your appointments first, then tell me which one you want to cancel."
+      "Canceled. Here is your updated appointment list.\n\n1. 2026-04-20 at 14:00 with Dr. Costa (canceled)\n2. 2026-04-23 at 09:30 with Dr. Lima (confirmed)"
     ],
     "trace_id": null
   }
