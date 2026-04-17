@@ -204,4 +204,160 @@ CORE_SCENARIOS = [
         ),
         category="context",
     ),
+    # --- retry scenarios: single wrong field ---
+    EvaluationScenario(
+        scenario_id="retry-wrong-phone",
+        title="Retry after wrong phone recovers with correct phone",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11000000000",   # wrong phone, correct name/dob
+            "1990-05-10",
+            # verification fails → all fields reset
+            "Ana Silva",
+            "11999998888",   # correct phone
+            "1990-05-10",
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "The first attempt fails because the phone number does not match. "
+            "After the reset the user provides the correct phone and should be verified."
+        ),
+        category="verification",
+    ),
+    EvaluationScenario(
+        scenario_id="retry-wrong-dob",
+        title="Retry after wrong date of birth recovers with correct DOB",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "2000-01-01",    # wrong dob, correct name/phone
+            # verification fails → all fields reset
+            "Ana Silva",
+            "11999998888",
+            "1990-05-10",    # correct dob
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "The first attempt fails because the date of birth does not match. "
+            "After the reset the user provides the correct date of birth and should be verified."
+        ),
+        category="verification",
+    ),
+    EvaluationScenario(
+        scenario_id="retry-wrong-name-correct-others",
+        title="Retry after wrong name (correct phone and DOB) recovers",
+        input_turns=[
+            "show my appointments",
+            "Wrong Name",    # wrong name, correct phone/dob
+            "11999998888",
+            "1990-05-10",
+            # verification fails → all fields reset
+            "Ana Silva",     # correct name
+            "11999998888",
+            "1990-05-10",
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "The first attempt fails because the name does not match even though phone and DOB are correct. "
+            "After the reset the user provides the correct name and should be verified."
+        ),
+        category="verification",
+    ),
+    # --- retry scenarios: two failures then success ---
+    EvaluationScenario(
+        scenario_id="two-failures-then-success",
+        title="Two consecutive failures still allow a third successful attempt",
+        input_turns=[
+            "show my appointments",
+            "Wrong Name",    # failure 1
+            "11000000000",
+            "1999-01-01",
+            "Wrong Name",    # failure 2
+            "11000000000",
+            "1999-01-01",
+            "Ana Silva",     # correct (attempt 3 of 3 — must NOT lock)
+            "11999998888",
+            "1990-05-10",
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "With a maximum of three attempts, two consecutive failures should not lock the session. "
+            "The third attempt with correct credentials must succeed."
+        ),
+        category="verification",
+    ),
+    # --- retry scenarios: format-level field rejection (COLLECTING state) ---
+    EvaluationScenario(
+        scenario_id="retry-invalid-phone-format",
+        title="Invalid phone format is rejected and re-asked before verification",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "invalid",       # too short, fails Phone value-object validation
+            "11999998888",   # correct phone after re-prompt
+            "1990-05-10",
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "The assistant should reject the malformed phone number and prompt for it again. "
+            "After the user provides a valid phone the verification should complete successfully."
+        ),
+        category="verification",
+    ),
+    EvaluationScenario(
+        scenario_id="retry-invalid-dob-format",
+        title="Invalid DOB format is rejected and re-asked before verification",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "not-a-date",    # fails DateOfBirth value-object validation
+            "1990-05-10",    # correct dob after re-prompt
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "The assistant should reject the malformed date of birth and prompt for it again. "
+            "After the user provides a valid date the verification should complete successfully."
+        ),
+        category="verification",
+    ),
+    # --- second patient path ---
+    EvaluationScenario(
+        scenario_id="second-patient-verification",
+        title="Second patient (Carlos Souza) can verify and list appointments",
+        input_turns=[
+            "show my appointments",
+            "Carlos Souza",
+            "11911112222",
+            "1985-09-22",
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "Carlos Souza is a registered patient distinct from Ana Silva. "
+            "The assistant should verify him successfully and return his appointments."
+        ),
+        category="verification",
+    ),
+    EvaluationScenario(
+        scenario_id="second-patient-retry-wrong-dob",
+        title="Carlos Souza recovers after wrong DOB on first attempt",
+        input_turns=[
+            "show my appointments",
+            "Carlos Souza",
+            "11911112222",
+            "1990-05-10",    # wrong dob (Ana's dob, not Carlos's)
+            # verification fails → reset
+            "Carlos Souza",
+            "11911112222",
+            "1985-09-22",    # correct dob
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "Carlos provides Ana's date of birth by mistake and the first attempt fails. "
+            "After the reset he provides his own correct date of birth and should be verified."
+        ),
+        category="verification",
+    ),
 ]
