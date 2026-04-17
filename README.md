@@ -1,6 +1,10 @@
-# Appointment Bot
+# CAPY Appointment Bot
 
-Appointment Bot is a take-home implementation of a clinic appointment assistant.
+<p align="center">
+  <img src="capy.png" alt="CAPY" width="300" />
+</p>
+
+CAPY Appointment Bot is a take-home implementation of a clinic appointment assistant.
 It lets a patient verify identity, list appointments, confirm an appointment,
 and cancel an appointment in the same chat session.
 
@@ -11,7 +15,9 @@ predictable.
 
 Demo:
 
-![Chat flow demo](docs/demo-chat-flow.gif)
+<p align="center">
+  <img src="docs/demo-chat-flow.gif" alt="Chat flow demo" width="700" />
+</p>
 
 ## What it does
 
