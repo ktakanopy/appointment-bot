@@ -100,14 +100,25 @@ def make_interpret_node(logger, provider: LLMProvider):
         verification = verification_state(state)
         turn = turn_state(state)
         appointments = appointment_state(state)
+        # After at least one failed verification attempt, hide conversation
+        # history from the LLM. Without this guard the model re-extracts
+        # stale phone/DOB values from earlier turns (which belonged to the
+        # failed identity payload), silently filling all three fields at once
+        # and burning a retry attempt before the user has a chance to retype
+        # correct credentials.
+        in_retry_verification = (
+            verification.verification_failures > 0 and not verification.verified
+        )
         provider_state = {
             "verification": {"verified": verification.verified},
             "turn": {
                 "requested_operation": turn.requested_operation.value,
             },
             "missing_verification_fields": verification.missing_fields(),
-            "messages": serialize_messages(
-                state.get("messages", []), MESSAGE_HISTORY_LIMIT
+            "messages": (
+                []
+                if in_retry_verification
+                else serialize_messages(state.get("messages", []), MESSAGE_HISTORY_LIMIT)
             ),
         }
         # The provider gets a deliberately small context object: enough to infer
