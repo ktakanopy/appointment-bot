@@ -61,8 +61,8 @@ def replay_scenario(runtime, scenario: EvaluationScenario, transcript: list[dict
     session = runtime.session_service.create_session()
     observed_outcomes: dict[str, object] = {}
 
-    for index, turn in enumerate(scenario.input_turns, start=1):
-        observed_outcomes = replay_turn(runtime, session.thread_id, turn, transcript, turn_index=index)
+    for turn in scenario.input_turns:
+        observed_outcomes = replay_turn(runtime, session.thread_id, turn, transcript)
 
     return observed_outcomes
 
@@ -72,8 +72,6 @@ def replay_turn(
     thread_id: str,
     turn: str,
     transcript: list[dict[str, str]],
-    *,
-    turn_index: int,
 ) -> dict[str, object]:
     transcript.append({"role": "user", "content": turn})
     state = runtime.workflow.run(thread_id, turn)

@@ -163,9 +163,6 @@ class OpenAIProvider:
                 if attempt == MAX_PARSE_ATTEMPTS - 1:
                     raise
                 time.sleep(BASE_RETRY_SECONDS * (2**attempt))
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("Structured parse failed without an exception")
 
     def _complete(
         self,

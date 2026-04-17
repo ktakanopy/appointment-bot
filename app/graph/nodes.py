@@ -51,6 +51,9 @@ APPOINTMENT_ACTIONS = {
 
 MESSAGE_HISTORY_LIMIT = 6
 
+_GOTO_VERIFY = "verify"
+_GOTO_EXECUTE = "execute_action"
+
 INVALID_RESPONSES = {
     "full_name": TurnIssue.INVALID_FULL_NAME,
     "phone": TurnIssue.INVALID_PHONE,
@@ -71,16 +74,9 @@ def make_ingest_node(logger):
 
     def ingest(state: ConversationGraphState) -> dict[str, dict]:
         turn = _reset_turn_output(turn_state(state))
-        updated_state = {**state, "turn": turn.model_dump()}
-        log_event(logger, "ingest", updated_state)
-        record_node_trace(
-            logger,
-            tracer,
-            node="ingest",
-            state_before=state,
-            state_after=updated_state,
-        )
-        return {"turn": turn.model_dump()}
+        updates = {"turn": turn.model_dump()}
+        _observe(logger, tracer, "ingest", {**state, **updates})
+        return updates
 
     return ingest
 
@@ -162,13 +158,12 @@ def make_interpret_node(logger, provider: LLMProvider):
         )
         # Routing happens immediately after interpretation. From this point on,
         # the flow is deterministic again.
-        goto = "verify" if verification_required(next_state) else "execute_action"
+        goto = _GOTO_VERIFY if verification_required(next_state) else _GOTO_EXECUTE
         record_node_trace(
             logger,
             tracer,
             node="interpret",
-            state_before=state,
-            state_after=next_state,
+            state=next_state,
             extra={
                 "provider_result": result.model_dump(mode="json"),
                 "goto": goto,
@@ -205,16 +200,7 @@ def make_verification_node(
         turn = turn_state(state)
         if verification.verification_status == VerificationStatus.LOCKED:
             updates = _set_locked_response(turn)
-            next_state = {**state, **updates}
-            log_event(logger, "verify", next_state, outcome="locked")
-            record_node_trace(
-                logger,
-                tracer,
-                node="verify",
-                state_before=state,
-                state_after=next_state,
-                extra={"outcome": "locked"},
-            )
+            _observe(logger, tracer, "verify", {**state, **updates}, outcome="locked")
             return Command(update=updates, goto=END)
 
         previous_status = verification.verification_status
@@ -229,18 +215,9 @@ def make_verification_node(
                 previous_status=previous_status,
                 state=state,
             )
-            next_state = {**state, **updates}
-            log_event(logger, "verify", next_state, outcome="collect_missing_field")
-            record_node_trace(
-                logger,
-                tracer,
-                node="verify",
-                state_before=state,
-                state_after=next_state,
-                extra={
-                    "outcome": "collect_missing_field",
-                    "missing_field": missing_field,
-                },
+            _observe(
+                logger, tracer, "verify", {**state, **updates},
+                outcome="collect_missing_field", missing_field=missing_field,
             )
             return Command(update=updates, goto=END)
 
@@ -255,16 +232,7 @@ def make_verification_node(
                 turn,
                 max_verification_attempts=max_verification_attempts,
             )
-            next_state = {**state, **updates}
-            log_event(logger, "verify", next_state, outcome=outcome)
-            record_node_trace(
-                logger,
-                tracer,
-                node="verify",
-                state_before=state,
-                state_after=next_state,
-                extra={"outcome": outcome},
-            )
+            _observe(logger, tracer, "verify", {**state, **updates}, outcome=outcome)
             return Command(update=updates, goto=END)
 
         # A successful match does not immediately perform confirm/cancel. The
@@ -273,17 +241,8 @@ def make_verification_node(
         updates = _handle_successful_verification(
             verification, turn, patient_id=patient.id
         )
-        next_state = {**state, **updates}
-        log_event(logger, "verify", next_state, outcome="verified")
-        record_node_trace(
-            logger,
-            tracer,
-            node="verify",
-            state_before=state,
-            state_after=next_state,
-            extra={"outcome": "verified"},
-        )
-        return Command(update=updates, goto="execute_action")
+        _observe(logger, tracer, "verify", {**state, **updates}, outcome="verified")
+        return Command(update=updates, goto=_GOTO_EXECUTE)
 
     return verify
 
@@ -321,19 +280,9 @@ def make_list_node(appointment_service: AppointmentService, logger):
             "appointments": updated_appointments.model_dump(),
             "turn": updated_turn.model_dump(),
         }
-        log_event(
-            logger,
-            "list_appointments",
-            {**state, **updates},
+        _observe(
+            logger, tracer, "list_appointments", {**state, **updates},
             appointment_count=len(appointments),
-        )
-        record_node_trace(
-            logger,
-            tracer,
-            node="list_appointments",
-            state_before=state,
-            state_after={**state, **updates},
-            extra={"appointment_count": len(appointments)},
         )
         return updates
 
@@ -417,14 +366,7 @@ def make_help_node(logger):
             }
         )
         updates = {"turn": updated_turn.model_dump()}
-        log_event(logger, "help_or_unknown", {**state, **updates})
-        record_node_trace(
-            logger,
-            tracer,
-            node="help_or_unknown",
-            state_before=state,
-            state_after={**state, **updates},
-        )
+        _observe(logger, tracer, "help_or_unknown", {**state, **updates})
         return updates
 
     return help_or_unknown
@@ -459,6 +401,12 @@ def make_execute_action_node(
         return help_node(state)
 
     return execute_action
+
+
+def _observe(logger, tracer, node: str, state, **extra) -> None:
+    """Emit a structured log event and a node trace in one call."""
+    log_event(logger, node, state, **extra)
+    record_node_trace(logger, tracer, node=node, state=state, extra=extra or None)
 
 
 def _update_appointment_reference(
@@ -503,19 +451,9 @@ def _execute_appointment_mutation(
         operation=operation,
     )
     if appointment is None:
-        log_event(
-            logger,
-            "resolve_appointment_reference",
-            {**state, **resolve_updates},
+        _observe(
+            logger, tracer, "resolve_appointment_reference", {**state, **resolve_updates},
             outcome=turn_state({"turn": resolve_updates["turn"]}).issue.value,
-        )
-        record_node_trace(
-            logger,
-            tracer,
-            node="resolve_appointment_reference",
-            state_before=state,
-            state_after={**state, **resolve_updates},
-            extra={"outcome": turn_state({"turn": resolve_updates["turn"]}).issue.value},
         )
         return resolve_updates
 
@@ -531,15 +469,7 @@ def _execute_appointment_mutation(
         }
         issue, outcome_str = error_map[type(exc)]
         updates = _turn_issue_updates(turn, operation, issue)
-        log_event(logger, event_name, {**state, **updates}, outcome=outcome_str)
-        record_node_trace(
-            logger,
-            tracer,
-            node=event_name,
-            state_before=state,
-            state_after={**state, **updates},
-            extra={"outcome": outcome_str},
-        )
+        _observe(logger, tracer, event_name, {**state, **updates}, outcome=outcome_str)
         return updates
 
     updated_turn = turn.model_copy(update={
@@ -560,20 +490,9 @@ def _execute_appointment_mutation(
         "turn": updated_turn.model_dump(),
         "appointments": updated_appointments.model_dump(),
     }
-    log_event(
-        logger,
-        event_name,
-        {**state, **updates},
-        outcome=outcome.value,
-        appointment_id=appointment.id,
-    )
-    record_node_trace(
-        logger,
-        tracer,
-        node=event_name,
-        state_before=state,
-        state_after={**state, **updates},
-        extra={"outcome": outcome.value, "appointment_id": appointment.id},
+    _observe(
+        logger, tracer, event_name, {**state, **updates},
+        outcome=outcome.value, appointment_id=appointment.id,
     )
     return updates
 
@@ -816,23 +735,3 @@ def verification_required(state: ConversationGraphState) -> bool:
         not verification.verified
         and (operation.requires_verification or operation.triggers_verification_flow)
     )
-
-
-def should_skip_action_execution(state: ConversationGraphState) -> bool:
-    """Return True when the verify node has already produced a response for this turn.
-
-    If either turn.issue or turn.operation_result is set, verify consumed the
-    turn and execute_action has nothing left to do. The graph routes straight to
-    END instead of dispatching a business action.
-
-    This happens in two cases:
-    - Verification failed: turn.issue is set to INVALID_IDENTITY or
-      VERIFICATION_LOCKED, and the response is already determined.
-    - A required identity field is still missing: turn.issue is set to
-      INVALID_FULL_NAME, INVALID_PHONE, or INVALID_DOB, and the assistant is
-      asking the user for that field rather than executing an action.
-
-    When verification succeeds neither field is set, so this returns False and
-    the graph continues to execute_action to run the actual business operation.
-    """
-    return turn_state(state).has_turn_output()

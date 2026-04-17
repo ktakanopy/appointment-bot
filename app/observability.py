@@ -62,13 +62,6 @@ def set_eval_scenario(logger: logging.Logger, scenario_id: str | None, scenario_
     setattr(logger, "eval_scenario_title", scenario_title)
 
 
-def log_eval_event(logger: logging.Logger, message: str) -> None:
-    if getattr(logger, "human_readable_logs", False):
-        logger.info(_format_eval_message(logger, message))
-        return
-    logger.info(message)
-
-
 def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) -> None:
     verification = _as_mapping(_state_value(state, "verification"))
     turn = _as_mapping(_state_value(state, "turn"))
@@ -126,15 +119,13 @@ def record_node_trace(
     tracer,
     *,
     node: str,
-    state_before: Any,
-    state_after: Any,
+    state: Any,
     extra: dict[str, Any] | None = None,
 ) -> None:
     payload = {
-        "thread_id": _state_value(state_after, "thread_id") or _state_value(state_before, "thread_id"),
+        "thread_id": _state_value(state, "thread_id"),
         "node": node,
-        "input": summarize_state_for_trace(state_before),
-        "output": summarize_state_for_trace(state_after),
+        "state": summarize_state_for_trace(state),
         "metadata": redact_trace_payload(extra or {}),
     }
     record_trace_event(logger, tracer, f"node.{node}", payload)
