@@ -256,24 +256,15 @@ def make_verification_node(
             )
             next_state = {**state, **updates}
             log_event(logger, "verify", next_state, outcome=outcome)
-            goto = END if should_skip_action_execution(next_state) else "execute_action"
             record_node_trace(
                 logger,
                 getattr(logger, "tracer", None),
                 node="verify",
                 state_before=state,
                 state_after=next_state,
-                extra={
-                    "outcome": outcome,
-                    "goto": "__end__" if goto == END else goto,
-                    "routing": {
-                        "decision": "should_skip_action_execution",
-                        "chosen_next": "__end__" if goto == END else goto,
-                        "outcome": outcome,
-                    },
-                },
+                extra={"outcome": outcome},
             )
-            return Command(update=updates, goto=goto)
+            return Command(update=updates, goto=END)
 
         # A successful match does not immediately perform confirm/cancel. The
         # workflow always lands on list_appointments first so the patient has a
