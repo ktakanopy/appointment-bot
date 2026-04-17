@@ -92,26 +92,46 @@ class ConversationState(BaseModel):
 
 
 def verification_state(state: ConversationGraphState | dict[str, Any]) -> VerificationState:
-    # LangGraph updates can be partial, so readers always merge against a full
-    # typed default model before accessing nested keys.
+    """Read verification state from the LangGraph state dict as a typed model.
+
+    LangGraph stores nested state as plain dicts and node updates can be
+    partial — a node only returns the keys it changed. Calling model_validate
+    against the raw dict (or an empty dict when the key is missing) fills in
+    all defaults so callers always get a fully-typed object with no KeyError
+    risk.
+    """
     return VerificationState.model_validate(
         cast(dict[str, Any], state.get("verification", {}))
     )
 
 
 def turn_state(state: ConversationGraphState | dict[str, Any]) -> TurnState:
+    """Read per-turn state from the LangGraph state dict as a typed model.
+
+    Same pattern as verification_state: the graph holds dicts, this reader
+    gives nodes and helpers a typed surface to work with.
+    """
     return TurnState.model_validate(cast(dict[str, Any], state.get("turn", {})))
 
 
 def appointment_state(state: ConversationGraphState | dict[str, Any]) -> AppointmentState:
+    """Read appointment state from the LangGraph state dict as a typed model.
+
+    Same pattern as verification_state: the graph holds dicts, this reader
+    gives nodes and helpers a typed surface to work with.
+    """
     return AppointmentState.model_validate(
         cast(dict[str, Any], state.get("appointments", {}))
     )
 
 
 def latest_user_message(state: ConversationGraphState) -> str:
-    # The newest human message is the only input the interpret node needs from
-    # the message channel; older context is passed separately in serialized form.
+    """Return the most recent human message text from the LangGraph message channel.
+
+    LangGraph accumulates all messages in the channel across turns. Nodes only
+    need the current user input, so we scan backwards and stop at the first
+    HumanMessage instead of re-processing the full history.
+    """
     for message in reversed(state.get("messages", [])):
         if isinstance(message, HumanMessage):
             return _message_content(message).strip()
