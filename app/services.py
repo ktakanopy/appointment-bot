@@ -15,11 +15,12 @@ from app.models import (
     SessionNotFoundError,
     SessionRecord,
 )
+from app.ports import AppointmentRepository, PatientRepository
 from app.repositories import InMemorySessionStore
 
 
 class VerificationService:
-    def __init__(self, patient_repository):
+    def __init__(self, patient_repository: PatientRepository):
         self.patient_repository = patient_repository
 
     def verify_identity(self, full_name: str, phone: str, dob: str) -> Patient | None:
@@ -31,7 +32,7 @@ class VerificationService:
 
 
 class AppointmentService:
-    def __init__(self, appointment_repository):
+    def __init__(self, appointment_repository: AppointmentRepository):
         self.appointment_repository = appointment_repository
 
     def list_appointments(self, patient_id: str) -> list[Appointment]:

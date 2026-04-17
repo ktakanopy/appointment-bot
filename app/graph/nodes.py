@@ -13,6 +13,7 @@ from app.graph.parsing import (
     extract_phone,
     resolve_appointment_reference,
 )
+from app.ports import LLMProvider
 from app.graph.state import (
     AppointmentState,
     ConversationGraphState,
@@ -41,6 +42,7 @@ from app.models import (
     VerificationStatus,
 )
 from app.observability import log_event, record_node_trace
+from app.services import AppointmentService, VerificationService
 
 APPOINTMENT_ACTIONS = {
     ConversationOperation.CONFIRM_APPOINTMENT,
@@ -82,7 +84,7 @@ def make_ingest_node(logger):
     return ingest
 
 
-def make_interpret_node(logger, provider):
+def make_interpret_node(logger, provider: LLMProvider):
     """
     Build the node that maps the latest user message into structured intent.
 
@@ -183,7 +185,7 @@ def make_interpret_node(logger, provider):
 
 
 def make_verification_node(
-    verification_service, logger, max_verification_attempts: int
+    verification_service: VerificationService, logger, max_verification_attempts: int
 ):
     """
     Build the node that owns the identity-verification lifecycle.
@@ -303,7 +305,7 @@ def make_verification_node(
     return verify
 
 
-def make_list_node(appointment_service, logger):
+def make_list_node(appointment_service: AppointmentService, logger):
     """
     Build the node that lists appointments for the verified patient.
 
@@ -354,7 +356,7 @@ def make_list_node(appointment_service, logger):
     return list_appointments
 
 
-def make_confirm_node(appointment_service, logger):
+def make_confirm_node(appointment_service: AppointmentService, logger):
     """
     Build the confirm-action node.
 
@@ -384,7 +386,7 @@ def make_confirm_node(appointment_service, logger):
     return confirm_appointment
 
 
-def make_cancel_node(appointment_service, logger):
+def make_cancel_node(appointment_service: AppointmentService, logger):
     """
     Build the cancel-action node.
 
@@ -503,7 +505,7 @@ def _update_appointment_reference(
 
 def _execute_appointment_mutation(
     state: ConversationGraphState,
-    appointment_service,
+    appointment_service: AppointmentService,
     logger,
     *,
     operation: ConversationOperation,
@@ -792,7 +794,7 @@ def _invalid_issue_for_field(
 
 def _resolve_target_appointment(
     state: ConversationGraphState,
-    appointment_service,
+    appointment_service: AppointmentService,
     *,
     operation: ConversationOperation,
 ) -> tuple[Appointment | None, dict[str, dict]]:
