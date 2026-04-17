@@ -36,6 +36,7 @@ def test_record_trace_event_does_not_raise_when_tracer_fails(caplog):
 
 def test_eval_logger_formats_workflow_events_human_readably(caplog):
     logger = get_eval_logger()
+    setattr(logger, "suppress_logs", False)
 
     with caplog.at_level(logging.INFO, logger="appointment_bot.eval"):
         record_trace_event(
@@ -59,6 +60,8 @@ def test_eval_logger_formats_workflow_events_human_readably(caplog):
                 },
             },
         )
+
+    setattr(logger, "suppress_logs", True)
 
     assert "workflow.end thread=thread-1 op=list_appointments" in caplog.text
     assert '"event": "workflow.end"' not in caplog.text

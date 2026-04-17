@@ -123,10 +123,12 @@ Fields:
   - values come from `ConversationOperationResult`
   - examples include outcomes like `listed`, `confirmed`, `already_confirmed`, `canceled`
   - this is what later becomes `last_action_result` in `ChatTurnResponse`
+  - it exists so the API, evals, and traces can observe the action outcome without parsing free-form response text
 - `issue`
   - machine-readable description of the problem encountered in the turn
   - values come from `TurnIssue`
   - examples: `invalid_identity`, `missing_list_context`, `ambiguous_appointment_reference`
+  - it exists so the API, evals, and traces can distinguish what went wrong even when the final user-facing text changes
 
 The response builder now derives the user-facing text directly from
 `requested_operation`, `operation_result`, `issue`, verification state, and the
@@ -150,6 +152,11 @@ This split lets the workflow resolve references deterministically:
 
 - `appointment_reference` says what the user pointed at
 - `listed_appointments` says what candidate list that reference should apply to
+
+These fields also make traces easier to understand because they show both:
+
+- what reference the user gave in this turn
+- what appointment list context was available for resolution
 
 ## State example
 

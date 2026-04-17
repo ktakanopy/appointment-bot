@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from contextlib import contextmanager
 from typing import Any
 
 from app.config import Settings
@@ -34,6 +36,7 @@ def get_logger() -> logging.Logger:
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+    setattr(logger, "tracer", None)
     return logger
 
 
@@ -47,7 +50,7 @@ def get_eval_logger() -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.propagate = True
     setattr(logger, "human_readable_logs", True)
-    setattr(logger, "suppress_logs", False)
+    setattr(logger, "suppress_logs", True)
     setattr(logger, "eval_scenario_id", None)
     setattr(logger, "eval_scenario_title", None)
     setattr(logger, "_appointment_bot_eval_configured", True)
@@ -69,6 +72,7 @@ def log_eval_event(logger: logging.Logger, message: str) -> None:
 def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) -> None:
     verification = _as_mapping(_state_value(state, "verification"))
     turn = _as_mapping(_state_value(state, "turn"))
+    appointments = _as_mapping(_state_value(state, "appointments"))
     payload = {
         "thread_id": _state_value(state, "thread_id"),
         "node": node,
@@ -76,9 +80,82 @@ def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) ->
         "verified": verification.get("verified"),
         "verification_status": verification.get("verification_status"),
         "issue": turn.get("issue"),
+        "appointment_reference": appointments.get("appointment_reference"),
+        "appointment_count": len(appointments.get("listed_appointments", []) or []),
     }
     payload.update(extra)
     _emit_log(logger, payload)
+
+
+def summarize_state_for_trace(state: Any) -> dict[str, Any]:
+    verification = _as_mapping(_state_value(state, "verification"))
+    turn = _as_mapping(_state_value(state, "turn"))
+    appointments = _as_mapping(_state_value(state, "appointments"))
+    messages = _state_value(state, "messages") or []
+    return redact_trace_payload(
+        {
+            "thread_id": _state_value(state, "thread_id"),
+            "messages": _serialize_trace_messages(messages),
+            "verification": {
+                "verified": verification.get("verified"),
+                "verification_failures": verification.get("verification_failures"),
+                "verification_status": verification.get("verification_status"),
+                "patient_id": verification.get("patient_id"),
+                "provided_full_name": verification.get("provided_full_name"),
+                "provided_phone": verification.get("provided_phone"),
+                "provided_dob": verification.get("provided_dob"),
+            },
+            "turn": {
+                "requested_operation": turn.get("requested_operation"),
+                "issue": turn.get("issue"),
+                "operation_result": _summarize_operation_result(turn.get("operation_result")),
+            },
+            "appointments": {
+                "appointment_reference": appointments.get("appointment_reference"),
+                "listed_appointments": [
+                    _summarize_appointment(appointment)
+                    for appointment in (appointments.get("listed_appointments") or [])
+                ],
+            },
+        }
+    )
+
+
+def record_node_trace(
+    logger: logging.Logger,
+    tracer,
+    *,
+    node: str,
+    state_before: Any,
+    state_after: Any,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    payload = {
+        "thread_id": _state_value(state_after, "thread_id") or _state_value(state_before, "thread_id"),
+        "node": node,
+        "input": summarize_state_for_trace(state_before),
+        "output": summarize_state_for_trace(state_after),
+        "metadata": redact_trace_payload(extra or {}),
+    }
+    record_trace_event(logger, tracer, f"node.{node}", payload)
+
+
+def record_routing_decision(
+    logger: logging.Logger,
+    tracer,
+    *,
+    state: Any,
+    decision_name: str,
+    chosen_next: str,
+    metadata: dict[str, Any],
+) -> None:
+    payload = {
+        "thread_id": _state_value(state, "thread_id"),
+        "decision": decision_name,
+        "chosen_next": chosen_next,
+        "metadata": redact_trace_payload(metadata),
+    }
+    record_trace_event(logger, tracer, "routing.decision", payload)
 
 
 def redact_trace_payload(payload: dict) -> dict:
@@ -118,6 +195,83 @@ def record_trace_event(logger: logging.Logger, tracer, event_name: str, payload:
 
 def record_provider_event(logger: logging.Logger, tracer, event_name: str, payload: dict) -> None:
     record_trace_event(logger, tracer, f"provider.{event_name}", payload)
+
+
+def get_or_create_trace(tracer, thread_id: str | None):
+    if tracer is None:
+        return None
+    trace_id = str(thread_id or "appointment-bot")
+    return tracer.trace(id=trace_id, name="appointment_bot", session_id=trace_id)
+
+
+@contextmanager
+def trace_span(
+    logger: logging.Logger,
+    tracer,
+    *,
+    thread_id: str | None,
+    name: str,
+    input_payload: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+):
+    trace = get_or_create_trace(tracer, thread_id)
+    span = None
+    started_at = time.perf_counter()
+    safe_input = redact_trace_payload(input_payload or {})
+    safe_metadata = redact_trace_payload(metadata or {})
+    try:
+        if trace is not None:
+            span = trace.span(name=name, input=safe_input or None, metadata=safe_metadata or None)
+        yield span
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        if span is not None:
+            span.update(metadata={**safe_metadata, "duration_ms": duration_ms, "status": "ok"})
+    except Exception as exc:
+        if span is not None:
+            span.update(
+                level="ERROR",
+                status_message=type(exc).__name__,
+                metadata={**safe_metadata, "error_type": type(exc).__name__},
+            )
+        raise
+
+
+@contextmanager
+def trace_generation(
+    logger: logging.Logger,
+    tracer,
+    *,
+    thread_id: str | None,
+    name: str,
+    model: str,
+    input_payload: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+):
+    trace = get_or_create_trace(tracer, thread_id)
+    generation = None
+    started_at = time.perf_counter()
+    safe_input = redact_trace_payload(input_payload)
+    safe_metadata = redact_trace_payload(metadata or {})
+    try:
+        if trace is not None:
+            generation = trace.generation(
+                name=name,
+                model=model,
+                input=safe_input,
+                metadata=safe_metadata or None,
+            )
+        yield generation
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        if generation is not None:
+            generation.update(metadata={**safe_metadata, "duration_ms": duration_ms, "status": "ok"})
+    except Exception as exc:
+        if generation is not None:
+            generation.update(
+                level="ERROR",
+                status_message=type(exc).__name__,
+                metadata={**safe_metadata, "error_type": type(exc).__name__},
+            )
+        raise
 
 
 def _redact_phone(value: str) -> str:
@@ -213,6 +367,49 @@ def _format_human_readable_log(payload: dict[str, Any]) -> str:
         )
 
     return json.dumps(payload, ensure_ascii=True, default=str)
+
+
+def _serialize_trace_messages(messages: list[Any]) -> list[dict[str, str]]:
+    serialized = []
+    for message in messages:
+        if isinstance(message, dict):
+            serialized.append({
+                "role": str(message.get("role", "assistant")),
+                "content": str(message.get("content", "")),
+            })
+            continue
+        role = getattr(message, "type", None) or getattr(message, "role", None) or "assistant"
+        content = getattr(message, "content", "")
+        serialized.append({"role": str(role), "content": str(content)})
+    return serialized
+
+
+def _summarize_operation_result(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    mapping = _as_mapping(value)
+    if not mapping:
+        return None
+    return {
+        "operation": mapping.get("operation"),
+        "outcome": mapping.get("outcome"),
+        "appointment_id": mapping.get("appointment_id"),
+    }
+
+
+def _summarize_appointment(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    mapping = _as_mapping(value)
+    if not mapping:
+        return None
+    return {
+        "id": mapping.get("id"),
+        "date": mapping.get("date"),
+        "time": mapping.get("time"),
+        "doctor": mapping.get("doctor"),
+        "status": mapping.get("status"),
+    }
 
 
 def _format_eval_message(logger: logging.Logger, message: str) -> str:

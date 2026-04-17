@@ -42,6 +42,19 @@ In practice that usually means:
 - `issue`
 - `last_outcome`
 
+Those fields exist because the runtime exposes a small structured summary of the
+turn through `ChatTurnResponse`. That gives evals something stable to assert
+against without depending on exact wording in the assistant message.
+
+In particular:
+
+- `issue` explains what kind of problem occurred
+- `last_outcome` explains what business action actually happened
+
+That is why the graph keeps fields like `turn.issue` and
+`turn.operation_result` even though the user also receives a natural-language
+response.
+
 ### `EvaluationResult`
 
 Also defined in `app/evals/models.py`.

@@ -85,7 +85,7 @@ Shared domain and API models live here:
 
 - value objects such as `FullName`, `Phone`, and `DateOfBirth`
 - domain entities such as `Patient` and `Appointment`
-- enums such as `ConversationOperation`, `ResponseKey`, and `VerificationStatus`
+- enums such as `ConversationOperation`, `TurnIssue`, and `VerificationStatus`
 - request and response DTOs
 - domain and application errors
 
@@ -285,6 +285,38 @@ Higher-level trace events include:
 - `provider.interpret`
 - `provider.judge`
 
+The local tracing model is intentionally more detailed than the plain logs.
+
+For each conversation thread, the app creates:
+
+- one Langfuse trace keyed by `thread_id`
+- one `workflow.run` span per user turn
+- one trace event per node transition with summarized input and output state
+- one routing decision event whenever the graph chooses a branch
+- one provider generation for each LLM call (`interpret` and `judge`)
+
+That gives a trace shape that is much easier to inspect in Langfuse:
+
+- what the user sent into the turn
+- how the graph state changed at each node
+- which branch the workflow chose and why
+- what went into the LLM call
+- what came back from the LLM call
+- whether retries or provider errors happened
+
+Node-level traces include redacted state snapshots before and after execution.
+Those snapshots are intentionally summarized rather than dumping the entire
+raw object so the trace stays readable.
+
+Provider traces include:
+
+- redacted input payload
+- target response model
+- configured model name
+- parsed structured output
+- retry attempts
+- error type when the call fails
+
 Eval runs use a separate human-readable logger path.
 
 All trace payloads are redacted before logging or tracing:
@@ -305,7 +337,6 @@ The main architecture decisions for this project are:
 - deterministic final responses from `app/responses.py`
 - in-memory workflow checkpoints and in-memory business repositories
 - one main appointment action per user turn
-- no deferred protected action state after verification
 
 ## Why this shape works for the task
 

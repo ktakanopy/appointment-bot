@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.graph.state import ConversationGraphInput, ConversationState, build_conversation_state, serialize_messages
-from app.observability import record_trace_event
+from app.observability import record_trace_event, summarize_state_for_trace, trace_span
 
 
 class LangGraphWorkflow:
@@ -30,8 +30,25 @@ class LangGraphWorkflow:
                 },
             },
         )
-        result = self.graph.invoke(payload, config)
-        conversation_state = build_conversation_state(result)
+        with trace_span(
+            self.logger,
+            self.tracer,
+            thread_id=thread_id,
+            name="workflow.run",
+            input_payload={
+                "thread_id": thread_id,
+                "incoming_message": incoming_message,
+                "payload": {
+                    "thread_id": thread_id,
+                    "messages": serialize_messages(payload["messages"]),
+                },
+            },
+            metadata={"component": "workflow"},
+        ) as span:
+            result = self.graph.invoke(payload, config)
+            conversation_state = build_conversation_state(result)
+            if span is not None:
+                span.update(output=summarize_state_for_trace(conversation_state))
         record_trace_event(
             self.logger,
             self.tracer,

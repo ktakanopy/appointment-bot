@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.config import ProviderSettings
 from app.llm.prompt import INTENT_PROMPT
 from app.llm.schemas import IntentPrediction, JudgeResult
-from app.observability import record_provider_event
+from app.observability import record_provider_event, trace_generation
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -44,6 +44,7 @@ class OpenAIProvider:
             response_model=IntentPrediction,
             system_message=INTENT_PROMPT,
             payload=payload,
+            thread_id=state.get("thread_id"),
         )
 
     def judge(self, scenario: dict[str, Any], transcript: list[dict[str, Any]], observed_outcomes: dict[str, Any]) -> JudgeResult:
@@ -60,6 +61,7 @@ class OpenAIProvider:
                 "Use status values pass, fail, or error. Score should be between 0 and 1 when present."
             ),
             payload=payload,
+            thread_id=scenario.get("scenario_id"),
         )
 
     def _complete_model(
@@ -69,22 +71,61 @@ class OpenAIProvider:
         response_model: type[T],
         system_message: str,
         payload: dict[str, Any],
+        thread_id: str | None,
     ) -> T:
+        generation_input = {
+            "system_message": system_message,
+            "payload": payload,
+            "response_model": response_model.__name__,
+        }
         try:
-            result = self._complete_with_retries(
-                response_model=response_model,
-                system_message=system_message,
-                user_message=json.dumps(payload, ensure_ascii=True, default=str),
-            )
+            with trace_generation(
+                self.logger,
+                self.tracer,
+                thread_id=thread_id,
+                name=f"provider.{event_name}",
+                model=self.settings.model_name,
+                input_payload=generation_input,
+                metadata={
+                    "provider": self.name,
+                    "response_model": response_model.__name__,
+                    "timeout_seconds": self.settings.timeout_seconds,
+                },
+            ) as generation:
+                result = self._complete_with_retries(
+                    response_model=response_model,
+                    system_message=system_message,
+                    user_message=json.dumps(payload, ensure_ascii=True, default=str),
+                    event_name=event_name,
+                    thread_id=thread_id,
+                )
+                if generation is not None:
+                    generation.update(output=result.model_dump(mode="json"))
         except Exception as exc:
             record_provider_event(
                 self.logger,
                 self.tracer,
                 event_name,
-                {"provider": self.name, "status": "error", "error_type": type(exc).__name__},
+                {
+                    "provider": self.name,
+                    "status": "error",
+                    "error_type": type(exc).__name__,
+                    "thread_id": thread_id,
+                    "response_model": response_model.__name__,
+                },
             )
             raise
-        record_provider_event(self.logger, self.tracer, event_name, {"provider": self.name, "status": "ok"})
+        record_provider_event(
+            self.logger,
+            self.tracer,
+            event_name,
+            {
+                "provider": self.name,
+                "status": "ok",
+                "thread_id": thread_id,
+                "response_model": response_model.__name__,
+            },
+        )
         return result
 
     def _complete_with_retries(
@@ -93,6 +134,8 @@ class OpenAIProvider:
         response_model: type[T],
         system_message: str,
         user_message: str,
+        event_name: str,
+        thread_id: str | None,
     ) -> T:
         last_error: Exception | None = None
         for attempt in range(MAX_PARSE_ATTEMPTS):
@@ -104,6 +147,19 @@ class OpenAIProvider:
                 )
             except Exception as error:
                 last_error = error
+                record_provider_event(
+                    self.logger,
+                    self.tracer,
+                    f"{event_name}.retry",
+                    {
+                        "provider": self.name,
+                        "status": "retry",
+                        "thread_id": thread_id,
+                        "attempt": attempt + 1,
+                        "max_attempts": MAX_PARSE_ATTEMPTS,
+                        "error_type": type(error).__name__,
+                    },
+                )
                 if attempt == MAX_PARSE_ATTEMPTS - 1:
                     raise
                 time.sleep(BASE_RETRY_SECONDS * (2**attempt))

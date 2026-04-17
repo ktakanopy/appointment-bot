@@ -46,7 +46,7 @@ from app.models import (
     TurnIssue,
     VerificationStatus,
 )
-from app.observability import log_event
+from app.observability import log_event, record_node_trace, record_routing_decision
 
 APPOINTMENT_ACTIONS = {
     ConversationOperation.CONFIRM_APPOINTMENT,
@@ -76,6 +76,13 @@ def make_ingest_node(logger):
         turn = _reset_turn_output(turn_state(state))
         updated_state = {**state, "turn": turn}
         log_event(logger, "ingest_user_message", updated_state)
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node="ingest_user_message",
+            state_before=state,
+            state_after=updated_state,
+        )
         return {"turn": turn}
 
     return ingest
@@ -152,6 +159,31 @@ def make_interpret_node(logger, provider):
             appointment_reference=updated_appointments["appointment_reference"],
         )
         goto = "verify" if verification_required(next_state) else "execute_action"
+        record_routing_decision(
+            logger,
+            getattr(logger, "tracer", None),
+            state=next_state,
+            decision_name="verification_required",
+            chosen_next=goto,
+            metadata={
+                "requested_operation": updated_turn["requested_operation"],
+                "verified": updated_verification["verified"],
+                "missing_verification_fields": VerificationStateModel.model_validate(
+                    updated_verification
+                ).missing_fields(),
+            },
+        )
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node="parse_intent_and_entities",
+            state_before=state,
+            state_after=next_state,
+            extra={
+                "provider_result": result.model_dump(mode="json"),
+                "goto": goto,
+            },
+        )
         return Command(update=updates, goto=goto)
 
     return interpret
@@ -179,6 +211,14 @@ def make_verification_node(
             updates = _set_locked_response(turn)
             next_state = {**state, **updates}
             log_event(logger, "verify_identity", next_state, outcome="locked")
+            record_node_trace(
+                logger,
+                getattr(logger, "tracer", None),
+                node="verify_identity",
+                state_before=state,
+                state_after=next_state,
+                extra={"outcome": "locked"},
+            )
             return Command(update=updates, goto=END)
 
         previous_status = verification["verification_status"]
@@ -195,6 +235,14 @@ def make_verification_node(
             )
             next_state = {**state, **updates}
             log_event(logger, "collect_missing_verification_fields", next_state)
+            record_node_trace(
+                logger,
+                getattr(logger, "tracer", None),
+                node="collect_missing_verification_fields",
+                state_before=state,
+                state_after=next_state,
+                extra={"missing_field": missing_field},
+            )
             return Command(update=updates, goto=END)
 
         patient = verification_service.verify_identity(
@@ -211,6 +259,22 @@ def make_verification_node(
             next_state = {**state, **updates}
             log_event(logger, "verify_identity", next_state, outcome=outcome)
             goto = END if should_skip_action_execution(next_state) else "execute_action"
+            record_routing_decision(
+                logger,
+                getattr(logger, "tracer", None),
+                state=next_state,
+                decision_name="should_skip_action_execution",
+                chosen_next="__end__" if goto == END else goto,
+                metadata={"outcome": outcome},
+            )
+            record_node_trace(
+                logger,
+                getattr(logger, "tracer", None),
+                node="verify_identity",
+                state_before=state,
+                state_after=next_state,
+                extra={"outcome": outcome, "goto": "__end__" if goto == END else goto},
+            )
             return Command(update=updates, goto=goto)
 
         updates = _handle_successful_verification(
@@ -219,6 +283,22 @@ def make_verification_node(
         next_state = {**state, **updates}
         log_event(logger, "verify_identity", next_state, outcome="verified")
         goto = END if should_skip_action_execution(next_state) else "execute_action"
+        record_routing_decision(
+            logger,
+            getattr(logger, "tracer", None),
+            state=next_state,
+            decision_name="should_skip_action_execution",
+            chosen_next="__end__" if goto == END else goto,
+            metadata={"outcome": "verified"},
+        )
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node="verify_identity",
+            state_before=state,
+            state_after=next_state,
+            extra={"outcome": "verified", "goto": "__end__" if goto == END else goto},
+        )
         return Command(update=updates, goto=goto)
 
     return verify
@@ -262,6 +342,14 @@ def make_list_node(appointment_service, logger):
             "list_appointments",
             {**state, **updates},
             appointment_count=len(appointments),
+        )
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node="list_appointments",
+            state_before=state,
+            state_after={**state, **updates},
+            extra={"appointment_count": len(appointments)},
         )
         return updates
 
@@ -345,6 +433,13 @@ def make_help_node(logger):
         }
         updates = {"turn": updated_turn}
         log_event(logger, "handle_help_or_unknown", {**state, **updates})
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node="handle_help_or_unknown",
+            state_before=state,
+            state_after={**state, **updates},
+        )
         return updates
 
     return help_or_unknown
@@ -377,6 +472,14 @@ def make_execute_action_node(
     ) -> dict[str, GraphAppointmentState | GraphTurnState]:
         if should_skip_action_execution(state):
             log_event(logger, "execute_action", state, outcome="skipped")
+            record_node_trace(
+                logger,
+                getattr(logger, "tracer", None),
+                node="execute_action",
+                state_before=state,
+                state_after=state,
+                extra={"outcome": "skipped"},
+            )
             return {}
         operation = turn_state(state)["requested_operation"]
         if operation == ConversationOperation.LIST_APPOINTMENTS:
@@ -430,6 +533,14 @@ def _execute_appointment_mutation(
             {**state, **resolve_updates},
             outcome=resolve_updates["turn"]["issue"].value,
         )
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node="resolve_appointment_reference",
+            state_before=state,
+            state_after={**state, **resolve_updates},
+            extra={"outcome": resolve_updates["turn"]["issue"].value},
+        )
         return resolve_updates
 
     try:
@@ -445,6 +556,14 @@ def _execute_appointment_mutation(
         }
         updates = {"turn": updated_turn}
         log_event(logger, event_name, {**state, **updates}, outcome=not_allowed_outcome)
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node=event_name,
+            state_before=state,
+            state_after={**state, **updates},
+            extra={"outcome": not_allowed_outcome},
+        )
         return updates
     except AppointmentNotOwnedError:
         updated_turn = {
@@ -455,6 +574,14 @@ def _execute_appointment_mutation(
         }
         updates = {"turn": updated_turn}
         log_event(logger, event_name, {**state, **updates}, outcome="not_owned")
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node=event_name,
+            state_before=state,
+            state_after={**state, **updates},
+            extra={"outcome": "not_owned"},
+        )
         return updates
     except AppointmentNotFoundError:
         updated_turn = {
@@ -465,6 +592,14 @@ def _execute_appointment_mutation(
         }
         updates = {"turn": updated_turn}
         log_event(logger, event_name, {**state, **updates}, outcome="not_found")
+        record_node_trace(
+            logger,
+            getattr(logger, "tracer", None),
+            node=event_name,
+            state_before=state,
+            state_after={**state, **updates},
+            extra={"outcome": "not_found"},
+        )
         return updates
 
     updated_turn = {
@@ -493,6 +628,14 @@ def _execute_appointment_mutation(
         {**state, **updates},
         outcome=outcome.value,
         appointment_id=appointment.id,
+    )
+    record_node_trace(
+        logger,
+        getattr(logger, "tracer", None),
+        node=event_name,
+        state_before=state,
+        state_after={**state, **updates},
+        extra={"outcome": outcome.value, "appointment_id": appointment.id},
     )
     return updates
 
