@@ -181,7 +181,6 @@ def _format_human_readable_log(payload: dict[str, Any]) -> str:
             f"op={turn.get('requested_operation', '-')} "
             f"verified={verification.get('verified', False)} "
             f"status={verification.get('verification_status', '-')} "
-            f"response={turn.get('response_key', '-')} "
             f"issue={turn.get('issue', '-')} "
             f"appointments={appointment_count}"
         )

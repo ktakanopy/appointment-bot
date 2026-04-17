@@ -123,29 +123,14 @@ Fields:
   - values come from `ConversationOperationResult`
   - examples include outcomes like `listed`, `confirmed`, `already_confirmed`, `canceled`
   - this is what later becomes `last_action_result` in `ChatTurnResponse`
-- `response_key`
-  - deterministic key used to build the user-facing response text
-  - values come from `ResponseKey`
-  - examples: `collect_full_name`, `appointments_list`, `confirm_ambiguous_reference`
 - `issue`
   - machine-readable description of the problem encountered in the turn
   - values come from `TurnIssue`
   - examples: `invalid_identity`, `missing_list_context`, `ambiguous_appointment_reference`
-- `subject_appointment`
-  - the resolved appointment for confirm/cancel when one was identified successfully
-  - `null` when the turn does not target a specific appointment
 
-Why `response_key` and `issue` are both present:
-
-- `issue` captures what went wrong semantically
-- `response_key` captures which exact response variant should be shown
-
-That distinction matters because the same issue can map to different response
-text depending on the operation. For example:
-
-- `issue=ambiguous_appointment_reference`
-- `response_key=confirm_ambiguous_reference`
-- `response_key=cancel_ambiguous_reference`
+The response builder now derives the user-facing text directly from
+`requested_operation`, `operation_result`, `issue`, verification state, and the
+cached appointment list. That makes the turn state smaller and easier to read.
 
 ### `appointments`
 
@@ -175,7 +160,6 @@ plain English:
 - `verification.verification_status = collecting`
 - no identity fields have been collected yet
 - `turn.requested_operation = verify_identity`
-- `turn.response_key = collect_full_name`
 - `turn.issue = null`
 
 That means the workflow interpreted the turn as the start of identity
@@ -187,8 +171,8 @@ collection, and the next assistant response should ask for the full name.
 
 Resets turn-level output fields so one turn does not leak into the next.
 
-Without this step, old `response_key`, `issue`, or `operation_result` values
-could stick around and produce stale responses.
+Without this step, old `issue` or `operation_result` values could stick around
+and produce stale responses.
 
 ### `interpret`
 

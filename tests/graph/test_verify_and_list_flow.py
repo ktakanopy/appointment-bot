@@ -1,5 +1,6 @@
-from app.models import ConversationOperation, ResponseKey
+from app.models import ConversationOperation
 from app.llm.schemas import IntentPrediction, JudgeResult
+from app.responses import build_response_text
 from tests.support import build_test_workflow
 
 
@@ -38,13 +39,16 @@ def test_verify_then_list_flow_lists_after_verification():
     third = workflow.run("graph-verify-list", "11999998888")
     final = workflow.run("graph-verify-list", "1990-05-10")
 
-    assert first.turn.response_key == ResponseKey.COLLECT_FULL_NAME
-    assert second.turn.response_key == ResponseKey.COLLECT_PHONE
-    assert third.turn.response_key == ResponseKey.COLLECT_DOB
+    assert first.turn.issue is None
+    assert "full name" in build_response_text(first).lower()
+    assert second.turn.issue is None
+    assert "phone number" in build_response_text(second).lower()
+    assert third.turn.issue is None
+    assert "date of birth" in build_response_text(third).lower()
     assert final.verification.verified is True
     assert final.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
     assert len(final.appointments.listed_appointments) == 2
-    assert final.turn.response_key == ResponseKey.APPOINTMENTS_LIST
+    assert "current appointments" in build_response_text(final).lower()
 
 
 def test_verify_then_list_ignores_operation_changes_during_identity_collection():
@@ -57,8 +61,8 @@ def test_verify_then_list_ignores_operation_changes_during_identity_collection()
 
     assert final.verification.verified is True
     assert final.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
-    assert final.turn.response_key == ResponseKey.APPOINTMENTS_LIST
     assert len(final.appointments.listed_appointments) == 2
+    assert "current appointments" in build_response_text(final).lower()
 
 
 def test_verify_without_prior_action_lists_appointments():
@@ -70,8 +74,8 @@ def test_verify_without_prior_action_lists_appointments():
 
     assert final.verification.verified is True
     assert final.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS
-    assert final.turn.response_key == ResponseKey.APPOINTMENTS_LIST
     assert len(final.appointments.listed_appointments) == 2
+    assert "current appointments" in build_response_text(final).lower()
 
 
 def test_greeting_routes_into_verification_before_help():
@@ -80,4 +84,4 @@ def test_greeting_routes_into_verification_before_help():
     result = workflow.run("graph-greeting-verify", "hello")
 
     assert result.turn.requested_operation == ConversationOperation.VERIFY_IDENTITY
-    assert result.turn.response_key == ResponseKey.COLLECT_FULL_NAME
+    assert "full name" in build_response_text(result).lower()

@@ -2,54 +2,52 @@ from __future__ import annotations
 
 from app.graph.state import ConversationState
 from app.models import (
+    ActionOutcome,
     ChatTurnResponse,
     ConversationOperation,
     NewSessionResponseData,
-    ResponseKey,
+    TurnIssue,
 )
-
-STATIC_RESPONSES: dict[ResponseKey, str] = {
-    ResponseKey.COLLECT_FULL_NAME: "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?",
-    ResponseKey.COLLECT_PHONE: "Thanks. What phone number is on your clinic record?",
-    ResponseKey.COLLECT_DOB: "Thanks. What is your date of birth? Use YYYY-MM-DD.",
-    ResponseKey.INVALID_FULL_NAME: "That full name looks invalid. Please enter your first and last name.",
-    ResponseKey.INVALID_PHONE: "That phone number looks invalid. Please enter at least 10 digits.",
-    ResponseKey.INVALID_DOB: "That date of birth looks invalid. Please use YYYY-MM-DD.",
-    ResponseKey.VERIFICATION_FAILED: "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?",
-    ResponseKey.VERIFICATION_LOCKED: "I couldn't verify your identity. For your security, this session is now locked. Please start a new session to try again.",
-    ResponseKey.HELP_VERIFIED: "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one.",
-    ResponseKey.HELP_UNVERIFIED: "I'm CAPY. I need to verify your identity first. Please tell me your full name.",
-    ResponseKey.CONFIRM_NOT_ALLOWED: "I couldn't confirm that appointment. Please choose a scheduled appointment.",
-    ResponseKey.CANCEL_NOT_ALLOWED: "I couldn't cancel that appointment. Please choose a scheduled or confirmed appointment.",
-    ResponseKey.APPOINTMENT_NOT_OWNED: "I couldn't complete that request. Please choose one of your appointments.",
-    ResponseKey.APPOINTMENT_NOT_FOUND: "I couldn't find that appointment. Please ask to see your appointments first, then choose one by number or date.",
-    ResponseKey.CONFIRM_MISSING_LIST_CONTEXT: "Please ask to see your appointments first, then tell me which one you want to confirm.",
-    ResponseKey.CANCEL_MISSING_LIST_CONTEXT: "Please ask to see your appointments first, then tell me which one you want to cancel.",
-    ResponseKey.CONFIRM_AMBIGUOUS_REFERENCE: "I couldn't tell which appointment you want to confirm. Please choose by number or date.",
-    ResponseKey.CANCEL_AMBIGUOUS_REFERENCE: "I couldn't tell which appointment you want to cancel. Please choose by number or date.",
-}
-
-APPOINTMENT_UPDATE_RESPONSES: dict[ResponseKey, str] = {
-    ResponseKey.CONFIRM_SUCCESS: "Confirmed. Here is your updated appointment list.",
-    ResponseKey.CONFIRM_ALREADY_CONFIRMED: "That appointment was already confirmed. Here is your updated appointment list.",
-    ResponseKey.CANCEL_SUCCESS: "Canceled. Here is your updated appointment list.",
-    ResponseKey.CANCEL_ALREADY_CANCELED: "That appointment was already canceled. Here is your updated appointment list.",
-}
 
 
 def build_response_text(state: ConversationState) -> str:
-    response_key = state.turn.response_key
-    if response_key is None:
-        return "I couldn't complete that request right now. Please try again."
-    if response_key == ResponseKey.APPOINTMENTS_LIST:
-        if not state.appointments.listed_appointments:
-            return "Thanks, you're verified. You do not have any appointments right now."
-        lines = ["Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments."]
-        lines.extend(_appointment_lines(state))
-        return "\n".join(lines)
-    if response_key in APPOINTMENT_UPDATE_RESPONSES:
-        return _build_appointment_update_response(state, response_key)
-    return STATIC_RESPONSES.get(response_key, "I couldn't complete that request right now. Please try again.")
+    issue = state.turn.issue
+    if issue is not None:
+        return _issue_response(state, issue)
+
+    result = state.turn.operation_result
+    if result is not None:
+        if result.operation == ConversationOperation.LIST_APPOINTMENTS:
+            return _appointments_list_response(state)
+        if result.outcome == ActionOutcome.CONFIRMED:
+            return _with_appointments_list("Confirmed. Here is your updated appointment list.", state)
+        if result.outcome == ActionOutcome.ALREADY_CONFIRMED:
+            return _with_appointments_list(
+                "That appointment was already confirmed. Here is your updated appointment list.",
+                state,
+            )
+        if result.outcome == ActionOutcome.CANCELED:
+            return _with_appointments_list("Canceled. Here is your updated appointment list.", state)
+        if result.outcome == ActionOutcome.ALREADY_CANCELED:
+            return _with_appointments_list(
+                "That appointment was already canceled. Here is your updated appointment list.",
+                state,
+            )
+
+    if state.turn.requested_operation == ConversationOperation.LIST_APPOINTMENTS and state.verification.verified:
+        return _appointments_list_response(state)
+
+    if not state.verification.verified:
+        return _verification_prompt(state)
+
+    if state.turn.requested_operation in {
+        ConversationOperation.HELP,
+        ConversationOperation.UNKNOWN,
+        ConversationOperation.VERIFY_IDENTITY,
+    }:
+        return "I'm CAPY. You are verified. You can ask me to list your appointments, confirm one, or cancel one."
+
+    return "I couldn't complete that request right now. Please try again."
 
 
 def build_chat_response(thread_id: str, response_text: str, state: ConversationState) -> ChatTurnResponse:
@@ -95,10 +93,58 @@ def build_new_session_response(session) -> NewSessionResponseData:
     )
 
 
-def _build_appointment_update_response(state: ConversationState, response_key: ResponseKey) -> str:
-    if state.turn.subject_appointment is None:
-        return "I couldn't complete that request right now. Please try again."
-    return _with_appointments_list(APPOINTMENT_UPDATE_RESPONSES[response_key], state)
+def _appointments_list_response(state: ConversationState) -> str:
+    if not state.appointments.listed_appointments:
+        return "Thanks, you're verified. You do not have any appointments right now."
+    lines = ["Thanks, you're verified. I am here to list, confirm, and cancel appointments. Here are your current appointments."]
+    lines.extend(_appointment_lines(state))
+    return "\n".join(lines)
+
+
+def _issue_response(state: ConversationState, issue: TurnIssue) -> str:
+    if issue == TurnIssue.INVALID_FULL_NAME:
+        return "That full name looks invalid. Please enter your first and last name."
+    if issue == TurnIssue.INVALID_PHONE:
+        return "That phone number looks invalid. Please enter at least 10 digits."
+    if issue == TurnIssue.INVALID_DOB:
+        return "That date of birth looks invalid. Please use YYYY-MM-DD."
+    if issue == TurnIssue.INVALID_IDENTITY:
+        return "I couldn't verify your identity because the provided name, phone number, and date of birth do not match our records. Let's try again. What is your full name?"
+    if issue == TurnIssue.VERIFICATION_LOCKED:
+        return "I couldn't verify your identity. For your security, this session is now locked. Please start a new session to try again."
+    if issue == TurnIssue.APPOINTMENT_NOT_CONFIRMABLE:
+        return "I couldn't confirm that appointment. Please choose a scheduled appointment."
+    if issue == TurnIssue.APPOINTMENT_NOT_CANCELABLE:
+        return "I couldn't cancel that appointment. Please choose a scheduled or confirmed appointment."
+    if issue == TurnIssue.APPOINTMENT_NOT_OWNED:
+        return "I couldn't complete that request. Please choose one of your appointments."
+    if issue == TurnIssue.APPOINTMENT_NOT_FOUND:
+        return "I couldn't find that appointment. Please ask to see your appointments first, then choose one by number or date."
+    if issue == TurnIssue.MISSING_LIST_CONTEXT:
+        if state.turn.requested_operation == ConversationOperation.CONFIRM_APPOINTMENT:
+            return "Please ask to see your appointments first, then tell me which one you want to confirm."
+        return "Please ask to see your appointments first, then tell me which one you want to cancel."
+    if issue == TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE:
+        if state.turn.requested_operation == ConversationOperation.CONFIRM_APPOINTMENT:
+            return "I couldn't tell which appointment you want to confirm. Please choose by number or date."
+        return "I couldn't tell which appointment you want to cancel. Please choose by number or date."
+    return "I couldn't complete that request right now. Please try again."
+
+
+def _verification_prompt(state: ConversationState) -> str:
+    if state.turn.requested_operation == ConversationOperation.HELP:
+        return "I'm CAPY. I need to verify your identity first. Please tell me your full name."
+
+    missing = state.verification.missing_fields()
+    if not missing:
+        return "I'm CAPY. I need to verify your identity first. Please tell me your full name."
+
+    next_field = missing[0]
+    if next_field == "full_name":
+        return "I'm CAPY. I can help you list, confirm, and cancel appointments, but first you need to identify yourself. What is your full name?"
+    if next_field == "phone":
+        return "Thanks. What phone number is on your clinic record?"
+    return "Thanks. What is your date of birth? Use YYYY-MM-DD."
 
 
 def _with_appointments_list(text: str, state: ConversationState) -> str:

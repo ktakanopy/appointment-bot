@@ -51,7 +51,6 @@ def test_eval_logger_formats_workflow_events_human_readably(caplog):
                     },
                     "turn": {
                         "requested_operation": "list_appointments",
-                        "response_key": "appointments_list",
                         "issue": None,
                     },
                     "appointments": {

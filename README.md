@@ -204,10 +204,10 @@ The main pieces are:
 
 - `app/main.py`: FastAPI routes
 - `app/runtime.py`: runtime wiring and dependency creation
-- `app/graph/`: workflow nodes, state, routing, and the LangGraph wrapper
+- `app/graph/`: workflow nodes, state, parsing, and the LangGraph wrapper
 - `app/services.py`: verification, appointment, and session services
 - `app/repositories.py`: seeded in-memory repositories
-- `app/responses.py`: deterministic response building
+- `app/responses.py`: deterministic response building from issues and action results
 - `app/llm/`: OpenAI provider, schemas, and prompt
 - `frontend/`: Streamlit chat UI
 - `tests/`: unit, graph, API, and eval coverage

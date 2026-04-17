@@ -13,7 +13,6 @@ from app.graph.parsing import (
     extract_phone,
     resolve_appointment_reference,
 )
-from app.graph.routing import should_skip_action_execution, verification_required
 from app.graph.state import (
     ConversationGraphState,
     GraphAppointmentState,
@@ -44,7 +43,6 @@ from app.models import (
     DateOfBirth,
     FullName,
     Phone,
-    ResponseKey,
     TurnIssue,
     VerificationStatus,
 )
@@ -57,16 +55,10 @@ APPOINTMENT_ACTIONS = {
 
 MESSAGE_HISTORY_LIMIT = 6
 
-PROMPTS = {
-    "full_name": ResponseKey.COLLECT_FULL_NAME,
-    "phone": ResponseKey.COLLECT_PHONE,
-    "dob": ResponseKey.COLLECT_DOB,
-}
-
 INVALID_RESPONSES = {
-    "full_name": (ResponseKey.INVALID_FULL_NAME, TurnIssue.INVALID_FULL_NAME),
-    "phone": (ResponseKey.INVALID_PHONE, TurnIssue.INVALID_PHONE),
-    "dob": (ResponseKey.INVALID_DOB, TurnIssue.INVALID_DOB),
+    "full_name": TurnIssue.INVALID_FULL_NAME,
+    "phone": TurnIssue.INVALID_PHONE,
+    "dob": TurnIssue.INVALID_DOB,
 }
 
 
@@ -259,9 +251,7 @@ def make_list_node(appointment_service, logger):
                 operation=ConversationOperation.LIST_APPOINTMENTS,
                 outcome=ActionOutcome.LISTED,
             ),
-            "response_key": ResponseKey.APPOINTMENTS_LIST,
             "issue": None,
-            "subject_appointment": None,
         }
         updates = {
             "appointments": updated_appointments,
@@ -299,14 +289,9 @@ def make_confirm_node(appointment_service, logger):
             operation=ConversationOperation.CONFIRM_APPOINTMENT,
             mutate_appointment=appointment_service.confirm_appointment,
             not_allowed_error=AppointmentNotConfirmableError,
-            not_allowed_response_key=ResponseKey.CONFIRM_NOT_ALLOWED,
             not_allowed_issue=TurnIssue.APPOINTMENT_NOT_CONFIRMABLE,
             not_allowed_outcome="not_confirmable",
             already_done_outcome=ActionOutcome.ALREADY_CONFIRMED,
-            success_response_key=ResponseKey.CONFIRM_SUCCESS,
-            already_done_response_key=ResponseKey.CONFIRM_ALREADY_CONFIRMED,
-            missing_list_context_key=ResponseKey.CONFIRM_MISSING_LIST_CONTEXT,
-            ambiguous_key=ResponseKey.CONFIRM_AMBIGUOUS_REFERENCE,
             event_name="confirm_appointment",
         )
 
@@ -332,14 +317,9 @@ def make_cancel_node(appointment_service, logger):
             operation=ConversationOperation.CANCEL_APPOINTMENT,
             mutate_appointment=appointment_service.cancel_appointment,
             not_allowed_error=AppointmentNotCancelableError,
-            not_allowed_response_key=ResponseKey.CANCEL_NOT_ALLOWED,
             not_allowed_issue=TurnIssue.APPOINTMENT_NOT_CANCELABLE,
             not_allowed_outcome="not_cancelable",
             already_done_outcome=ActionOutcome.ALREADY_CANCELED,
-            success_response_key=ResponseKey.CANCEL_SUCCESS,
-            already_done_response_key=ResponseKey.CANCEL_ALREADY_CANCELED,
-            missing_list_context_key=ResponseKey.CANCEL_MISSING_LIST_CONTEXT,
-            ambiguous_key=ResponseKey.CANCEL_AMBIGUOUS_REFERENCE,
             event_name="cancel_appointment",
         )
 
@@ -360,12 +340,8 @@ def make_help_node(logger):
         updated_turn = {
             **turn_state(state),
             "requested_operation": ConversationOperation.HELP,
-            "response_key": ResponseKey.HELP_VERIFIED
-            if verification["verified"]
-            else ResponseKey.HELP_UNVERIFIED,
             "issue": None,
             "operation_result": None,
-            "subject_appointment": None,
         }
         updates = {"turn": updated_turn}
         log_event(logger, "handle_help_or_unknown", {**state, **updates})
@@ -434,14 +410,9 @@ def _execute_appointment_mutation(
     operation: ConversationOperation,
     mutate_appointment: Callable[[str | None, str], tuple[Appointment, ActionOutcome]],
     not_allowed_error: type[Exception],
-    not_allowed_response_key: ResponseKey,
     not_allowed_issue: TurnIssue,
     not_allowed_outcome: str,
     already_done_outcome: ActionOutcome,
-    success_response_key: ResponseKey,
-    already_done_response_key: ResponseKey,
-    missing_list_context_key: ResponseKey,
-    ambiguous_key: ResponseKey,
     event_name: str,
 ) -> dict[str, GraphAppointmentState | GraphTurnState]:
     verification = verification_state(state)
@@ -451,8 +422,6 @@ def _execute_appointment_mutation(
         state,
         appointment_service,
         operation=operation,
-        missing_list_context_key=missing_list_context_key,
-        ambiguous_key=ambiguous_key,
     )
     if appointment is None:
         log_event(
@@ -471,10 +440,8 @@ def _execute_appointment_mutation(
         updated_turn = {
             **turn,
             "requested_operation": operation,
-            "response_key": not_allowed_response_key,
             "issue": not_allowed_issue,
             "operation_result": None,
-            "subject_appointment": None,
         }
         updates = {"turn": updated_turn}
         log_event(logger, event_name, {**state, **updates}, outcome=not_allowed_outcome)
@@ -483,10 +450,8 @@ def _execute_appointment_mutation(
         updated_turn = {
             **turn,
             "requested_operation": operation,
-            "response_key": ResponseKey.APPOINTMENT_NOT_OWNED,
             "issue": TurnIssue.APPOINTMENT_NOT_OWNED,
             "operation_result": None,
-            "subject_appointment": None,
         }
         updates = {"turn": updated_turn}
         log_event(logger, event_name, {**state, **updates}, outcome="not_owned")
@@ -495,10 +460,8 @@ def _execute_appointment_mutation(
         updated_turn = {
             **turn,
             "requested_operation": operation,
-            "response_key": ResponseKey.APPOINTMENT_NOT_FOUND,
             "issue": TurnIssue.APPOINTMENT_NOT_FOUND,
             "operation_result": None,
-            "subject_appointment": None,
         }
         updates = {"turn": updated_turn}
         log_event(logger, event_name, {**state, **updates}, outcome="not_found")
@@ -507,11 +470,7 @@ def _execute_appointment_mutation(
     updated_turn = {
         **turn,
         "requested_operation": operation,
-        "response_key": already_done_response_key
-        if outcome == already_done_outcome
-        else success_response_key,
         "issue": None,
-        "subject_appointment": updated,
         "operation_result": ConversationOperationResult(
             operation=operation,
             outcome=outcome,
@@ -542,10 +501,8 @@ def _set_locked_response(turn: GraphTurnState) -> dict[str, GraphTurnState]:
     updated_turn = {
         **turn,
         "requested_operation": ConversationOperation.VERIFY_IDENTITY,
-        "response_key": ResponseKey.VERIFICATION_LOCKED,
         "issue": TurnIssue.VERIFICATION_LOCKED,
         "operation_result": None,
-        "subject_appointment": None,
     }
     return {"turn": updated_turn}
 
@@ -562,16 +519,12 @@ def _collect_missing_field(
         **verification,
         "verification_status": VerificationStatus.COLLECTING,
     }
-    invalid_response = _invalid_response_for_field(state, field_name, previous_status)
+    invalid_issue = _invalid_issue_for_field(state, field_name, previous_status)
     updated_turn = {
         **turn,
         "requested_operation": ConversationOperation.VERIFY_IDENTITY,
-        "response_key": PROMPTS[field_name]
-        if invalid_response is None
-        else invalid_response[0],
-        "issue": None if invalid_response is None else invalid_response[1],
+        "issue": invalid_issue,
         "operation_result": None,
-        "subject_appointment": None,
     }
     return {
         "verification": updated_verification,
@@ -606,10 +559,8 @@ def _handle_failed_verification(
     updated_turn = {
         **turn,
         "requested_operation": ConversationOperation.VERIFY_IDENTITY,
-        "response_key": ResponseKey.VERIFICATION_FAILED,
         "issue": TurnIssue.INVALID_IDENTITY,
         "operation_result": None,
-        "subject_appointment": None,
     }
     return {
         "verification": updated_verification,
@@ -633,10 +584,8 @@ def _handle_successful_verification(
     updated_turn = {
         **turn,
         "requested_operation": ConversationOperation.LIST_APPOINTMENTS,
-        "response_key": None,
         "issue": None,
         "operation_result": None,
-        "subject_appointment": None,
     }
     return {
         "verification": updated_verification,
@@ -644,11 +593,11 @@ def _handle_successful_verification(
     }
 
 
-def _invalid_response_for_field(
+def _invalid_issue_for_field(
     state: ConversationGraphState,
     field_name: str,
     previous_status: VerificationStatus,
-) -> tuple[ResponseKey, TurnIssue] | None:
+) -> TurnIssue | None:
     if previous_status not in {
         VerificationStatus.COLLECTING,
         VerificationStatus.FAILED,
@@ -689,8 +638,6 @@ def _resolve_target_appointment(
     appointment_service,
     *,
     operation: ConversationOperation,
-    missing_list_context_key: ResponseKey,
-    ambiguous_key: ResponseKey,
 ) -> tuple[Appointment | None, dict[str, GraphTurnState]]:
     """pick the single appointment for confirm or cancel using state and services.
 
@@ -726,10 +673,8 @@ def _resolve_target_appointment(
             "turn": {
                 **turn,
                 "requested_operation": operation,
-                "response_key": missing_list_context_key,
                 "issue": TurnIssue.MISSING_LIST_CONTEXT,
                 "operation_result": None,
-                "subject_appointment": None,
             }
         }
 
@@ -745,10 +690,8 @@ def _resolve_target_appointment(
             "turn": {
                 **turn,
                 "requested_operation": operation,
-                "response_key": ambiguous_key,
                 "issue": TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE,
                 "operation_result": None,
-                "subject_appointment": None,
             }
         }
     return appointment, {}
@@ -774,8 +717,19 @@ def _fill_missing_fields(
 def _reset_turn_output(turn: GraphTurnState) -> GraphTurnState:
     return {
         **turn,
-        "response_key": None,
         "issue": None,
         "operation_result": None,
-        "subject_appointment": None,
     }
+
+
+def verification_required(state: ConversationGraphState) -> bool:
+    operation = turn_state(state)["requested_operation"]
+    verification = verification_state(state)
+    return bool(
+        not verification["verified"]
+        and (operation.requires_verification or operation.triggers_verification_flow)
+    )
+
+
+def should_skip_action_execution(state: ConversationGraphState) -> bool:
+    return TurnStateModel.model_validate(turn_state(state)).has_turn_output()

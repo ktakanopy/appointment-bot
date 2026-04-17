@@ -11,7 +11,6 @@ from app.models import (
     Appointment,
     ConversationOperation,
     ConversationOperationResult,
-    ResponseKey,
     TurnIssue,
     VerificationStatus,
 )
@@ -30,9 +29,7 @@ class GraphVerificationState(TypedDict):
 class GraphTurnState(TypedDict):
     requested_operation: ConversationOperation
     operation_result: ConversationOperationResult | None
-    response_key: ResponseKey | None
     issue: TurnIssue | None
-    subject_appointment: Appointment | None
 
 
 class GraphAppointmentState(TypedDict):
@@ -84,18 +81,14 @@ class TurnState(BaseModel):
 
     requested_operation: ConversationOperation = ConversationOperation.UNKNOWN
     operation_result: ConversationOperationResult | None = None
-    response_key: ResponseKey | None = None
     issue: TurnIssue | None = None
-    subject_appointment: Appointment | None = None
 
     def has_turn_output(self) -> bool:
         return any(
             value is not None
             for value in (
-                self.response_key,
                 self.issue,
                 self.operation_result,
-                self.subject_appointment,
             )
         )
 
@@ -133,9 +126,7 @@ def default_turn_state() -> GraphTurnState:
     return {
         "requested_operation": ConversationOperation.UNKNOWN,
         "operation_result": None,
-        "response_key": None,
         "issue": None,
-        "subject_appointment": None,
     }
 
 

@@ -117,7 +117,6 @@ This is the center of the project.
 
 - `builder.py` compiles the graph
 - `state.py` defines workflow state
-- `routing.py` holds routing predicates
 - `nodes.py` contains the graph nodes
 - `parsing.py` contains extraction helpers
 - `workflow.py` wraps the compiled graph for runtime use

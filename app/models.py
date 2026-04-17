@@ -67,32 +67,6 @@ class TurnIssue(str, Enum):
     APPOINTMENT_NOT_FOUND = "appointment_not_found"
 
 
-class ResponseKey(str, Enum):
-    COLLECT_FULL_NAME = "collect_full_name"
-    COLLECT_PHONE = "collect_phone"
-    COLLECT_DOB = "collect_dob"
-    INVALID_FULL_NAME = "invalid_full_name"
-    INVALID_PHONE = "invalid_phone"
-    INVALID_DOB = "invalid_dob"
-    VERIFICATION_FAILED = "verification_failed"
-    VERIFICATION_LOCKED = "verification_locked"
-    HELP_VERIFIED = "help_verified"
-    HELP_UNVERIFIED = "help_unverified"
-    APPOINTMENTS_LIST = "appointments_list"
-    CONFIRM_SUCCESS = "confirm_success"
-    CONFIRM_ALREADY_CONFIRMED = "confirm_already_confirmed"
-    CONFIRM_NOT_ALLOWED = "confirm_not_allowed"
-    CANCEL_SUCCESS = "cancel_success"
-    CANCEL_ALREADY_CANCELED = "cancel_already_canceled"
-    CANCEL_NOT_ALLOWED = "cancel_not_allowed"
-    APPOINTMENT_NOT_OWNED = "appointment_not_owned"
-    APPOINTMENT_NOT_FOUND = "appointment_not_found"
-    CONFIRM_MISSING_LIST_CONTEXT = "confirm_missing_list_context"
-    CANCEL_MISSING_LIST_CONTEXT = "cancel_missing_list_context"
-    CONFIRM_AMBIGUOUS_REFERENCE = "confirm_ambiguous_reference"
-    CANCEL_AMBIGUOUS_REFERENCE = "cancel_ambiguous_reference"
-
-
 class DomainError(Exception):
     pass
 
