@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, cast
 
-from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import MessagesState
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -171,8 +171,6 @@ def _message_role(message: BaseMessage) -> str:
         return "assistant"
     if isinstance(message, SystemMessage):
         return "system"
-    if isinstance(message, ToolMessage):
-        return "tool"
     return "assistant"
 
 

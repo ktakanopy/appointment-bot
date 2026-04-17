@@ -20,6 +20,7 @@ class LangGraphWorkflow:
             "messages": [HumanMessage(content=incoming_message)],
         }
         config = {"configurable": {"thread_id": thread_id}}
+        serialized_messages = serialize_messages(payload["messages"])
         record_trace_event(
             self.logger,
             self.tracer,
@@ -28,7 +29,7 @@ class LangGraphWorkflow:
                 "thread_id": thread_id,
                 "payload": {
                     "thread_id": thread_id,
-                    "messages": serialize_messages(payload["messages"]),
+                    "messages": serialized_messages,
                 },
             },
         )
@@ -42,7 +43,7 @@ class LangGraphWorkflow:
                 "incoming_message": incoming_message,
                 "payload": {
                     "thread_id": thread_id,
-                    "messages": serialize_messages(payload["messages"]),
+                    "messages": serialized_messages,
                 },
             },
             metadata={"component": "workflow"},
@@ -67,9 +68,6 @@ class LangGraphWorkflow:
         config = {"configurable": {"thread_id": thread_id}}
         self.graph.update_state(
             config,
-            {
-                "thread_id": thread_id,
-                "messages": [AIMessage(content=content)],
-            },
+            {"messages": [AIMessage(content=content)]},
             as_node="execute_action",
         )
