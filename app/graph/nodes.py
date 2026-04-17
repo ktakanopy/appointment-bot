@@ -889,4 +889,20 @@ def verification_required(state: ConversationGraphState) -> bool:
 
 
 def should_skip_action_execution(state: ConversationGraphState) -> bool:
+    """Return True when the verify node has already produced a response for this turn.
+
+    If either turn.issue or turn.operation_result is set, verify consumed the
+    turn and execute_action has nothing left to do. The graph routes straight to
+    END instead of dispatching a business action.
+
+    This happens in two cases:
+    - Verification failed: turn.issue is set to INVALID_IDENTITY or
+      VERIFICATION_LOCKED, and the response is already determined.
+    - A required identity field is still missing: turn.issue is set to
+      INVALID_FULL_NAME, INVALID_PHONE, or INVALID_DOB, and the assistant is
+      asking the user for that field rather than executing an action.
+
+    When verification succeeds neither field is set, so this returns False and
+    the graph continues to execute_action to run the actual business operation.
+    """
     return turn_state(state).has_turn_output()
