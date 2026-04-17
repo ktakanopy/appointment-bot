@@ -340,6 +340,81 @@ CORE_SCENARIOS = [
         ),
         category="verification",
     ),
+    # --- idempotency: cancel ---
+    EvaluationScenario(
+        scenario_id="idempotent-cancel",
+        title="Repeated cancel remains idempotent",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "1990-05-10",
+            "cancel the first one",   # a1: SCHEDULED → CANCELED
+            "cancel the first one",   # a1: CANCELED → ALREADY_CANCELED
+        ],
+        expected_outcomes={"last_outcome": "already_canceled"},
+        judge_rubric=(
+            "The second cancel on an already-canceled appointment should not change state. "
+            "The assistant should acknowledge the appointment was already canceled."
+        ),
+        category="idempotency",
+    ),
+    # --- error path: confirm a canceled appointment ---
+    EvaluationScenario(
+        scenario_id="confirm-canceled-appointment",
+        title="Confirming a canceled appointment returns not-confirmable error",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "1990-05-10",
+            "cancel the first one",   # a1: SCHEDULED → CANCELED
+            "confirm the first one",  # a1: CANCELED → AppointmentNotConfirmableError
+        ],
+        expected_outcomes={"issue": "appointment_not_confirmable"},
+        judge_rubric=(
+            "After an appointment is canceled it cannot be confirmed. "
+            "The assistant should inform the user the appointment is not confirmable."
+        ),
+        category="mutations",
+    ),
+    # --- cancel on a CONFIRMED appointment ---
+    EvaluationScenario(
+        scenario_id="cancel-confirmed-appointment",
+        title="Canceling a confirmed appointment succeeds",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "1990-05-10",
+            "cancel the second one",  # a2 starts as CONFIRMED → CANCELED (valid per is_cancelable)
+        ],
+        expected_outcomes={"last_outcome": "canceled"},
+        judge_rubric=(
+            "A confirmed appointment is still cancelable. "
+            "The assistant should cancel it and confirm the updated status."
+        ),
+        category="mutations",
+    ),
+    # --- cancel then re-list reflects updated state ---
+    EvaluationScenario(
+        scenario_id="cancel-then-list-shows-updated-state",
+        title="Cancel followed by list reflects the canceled status",
+        input_turns=[
+            "show my appointments",
+            "Ana Silva",
+            "11999998888",
+            "1990-05-10",
+            "cancel the first one",  # a1: SCHEDULED → CANCELED
+            "show my appointments",  # re-list should show a1 as canceled
+        ],
+        expected_outcomes={"verified": True, "current_operation": "list_appointments"},
+        judge_rubric=(
+            "After canceling an appointment the subsequent list should reflect "
+            "the updated canceled status of that appointment."
+        ),
+        category="mutations",
+    ),
     EvaluationScenario(
         scenario_id="second-patient-retry-wrong-dob",
         title="Carlos Souza recovers after wrong DOB on first attempt",
