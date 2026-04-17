@@ -140,24 +140,6 @@ def record_node_trace(
     record_trace_event(logger, tracer, f"node.{node}", payload)
 
 
-def record_routing_decision(
-    logger: logging.Logger,
-    tracer,
-    *,
-    state: Any,
-    decision_name: str,
-    chosen_next: str,
-    metadata: dict[str, Any],
-) -> None:
-    payload = {
-        "thread_id": _state_value(state, "thread_id"),
-        "decision": decision_name,
-        "chosen_next": chosen_next,
-        "metadata": redact_trace_payload(metadata),
-    }
-    record_trace_event(logger, tracer, "routing.decision", payload)
-
-
 def redact_trace_payload(payload: dict) -> dict:
     redacted = {}
     for key, value in payload.items():

@@ -13,6 +13,8 @@ class LangGraphWorkflow:
         self.tracer = tracer
 
     def run(self, thread_id: str, incoming_message: str) -> ConversationState:
+        # Each call represents one user turn. LangGraph merges this payload into
+        # the existing thread state and returns the new conversation snapshot.
         payload: ConversationGraphInput = {
             "thread_id": thread_id,
             "messages": [HumanMessage(content=incoming_message)],
@@ -60,6 +62,8 @@ class LangGraphWorkflow:
     def append_assistant_message(self, thread_id: str, content: str) -> None:
         if not content:
             return
+        # Store the rendered assistant reply back into the thread so the next
+        # interpret step can see the recent conversation, not just user turns.
         config = {"configurable": {"thread_id": thread_id}}
         self.graph.update_state(
             config,

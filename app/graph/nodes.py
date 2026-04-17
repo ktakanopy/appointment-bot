@@ -46,7 +46,7 @@ from app.models import (
     TurnIssue,
     VerificationStatus,
 )
-from app.observability import log_event, record_node_trace, record_routing_decision
+from app.observability import log_event, record_node_trace
 
 APPOINTMENT_ACTIONS = {
     ConversationOperation.CONFIRM_APPOINTMENT,
@@ -118,6 +118,9 @@ def make_interpret_node(logger, provider):
                 state.get("messages", []), MESSAGE_HISTORY_LIMIT
             ),
         }
+        # The provider gets a deliberately small context object: enough to infer
+        # the next action and missing identity fields, but not enough authority
+        # to make verification or mutation decisions itself.
         try:
             result = provider.interpret(message, provider_state)
         except Exception as exc:
@@ -158,21 +161,9 @@ def make_interpret_node(logger, provider):
             next_state,
             appointment_reference=updated_appointments["appointment_reference"],
         )
+        # Routing happens immediately after interpretation. From this point on,
+        # the flow is deterministic again.
         goto = "verify" if verification_required(next_state) else "execute_action"
-        record_routing_decision(
-            logger,
-            getattr(logger, "tracer", None),
-            state=next_state,
-            decision_name="verification_required",
-            chosen_next=goto,
-            metadata={
-                "requested_operation": updated_turn["requested_operation"],
-                "verified": updated_verification["verified"],
-                "missing_verification_fields": VerificationStateModel.model_validate(
-                    updated_verification
-                ).missing_fields(),
-            },
-        )
         record_node_trace(
             logger,
             getattr(logger, "tracer", None),
@@ -182,6 +173,15 @@ def make_interpret_node(logger, provider):
             extra={
                 "provider_result": result.model_dump(mode="json"),
                 "goto": goto,
+                "routing": {
+                    "decision": "verification_required",
+                    "chosen_next": goto,
+                    "requested_operation": updated_turn["requested_operation"],
+                    "verified": updated_verification["verified"],
+                    "missing_verification_fields": VerificationStateModel.model_validate(
+                        updated_verification
+                    ).missing_fields(),
+                },
             },
         )
         return Command(update=updates, goto=goto)
@@ -226,6 +226,8 @@ def make_verification_node(
             verification
         ).next_missing_field()
         if missing_field is not None:
+            # Keep verification conversational by asking only for the next
+            # missing field instead of resetting the whole identity flow.
             updates = _collect_missing_field(
                 verification,
                 turn,
@@ -259,45 +261,48 @@ def make_verification_node(
             next_state = {**state, **updates}
             log_event(logger, "verify_identity", next_state, outcome=outcome)
             goto = END if should_skip_action_execution(next_state) else "execute_action"
-            record_routing_decision(
-                logger,
-                getattr(logger, "tracer", None),
-                state=next_state,
-                decision_name="should_skip_action_execution",
-                chosen_next="__end__" if goto == END else goto,
-                metadata={"outcome": outcome},
-            )
             record_node_trace(
                 logger,
                 getattr(logger, "tracer", None),
                 node="verify_identity",
                 state_before=state,
                 state_after=next_state,
-                extra={"outcome": outcome, "goto": "__end__" if goto == END else goto},
+                extra={
+                    "outcome": outcome,
+                    "goto": "__end__" if goto == END else goto,
+                    "routing": {
+                        "decision": "should_skip_action_execution",
+                        "chosen_next": "__end__" if goto == END else goto,
+                        "outcome": outcome,
+                    },
+                },
             )
             return Command(update=updates, goto=goto)
 
+        # A successful match does not immediately perform confirm/cancel. The
+        # workflow always lands on list_appointments first so the patient has a
+        # visible, stable appointment context for follow-up actions.
         updates = _handle_successful_verification(
             verification, turn, patient_id=patient.id
         )
         next_state = {**state, **updates}
         log_event(logger, "verify_identity", next_state, outcome="verified")
         goto = END if should_skip_action_execution(next_state) else "execute_action"
-        record_routing_decision(
-            logger,
-            getattr(logger, "tracer", None),
-            state=next_state,
-            decision_name="should_skip_action_execution",
-            chosen_next="__end__" if goto == END else goto,
-            metadata={"outcome": "verified"},
-        )
         record_node_trace(
             logger,
             getattr(logger, "tracer", None),
             node="verify_identity",
             state_before=state,
             state_after=next_state,
-            extra={"outcome": "verified", "goto": "__end__" if goto == END else goto},
+            extra={
+                "outcome": "verified",
+                "goto": "__end__" if goto == END else goto,
+                "routing": {
+                    "decision": "should_skip_action_execution",
+                    "chosen_next": "__end__" if goto == END else goto,
+                    "outcome": "verified",
+                },
+            },
         )
         return Command(update=updates, goto=goto)
 
@@ -471,6 +476,8 @@ def make_execute_action_node(
         state: ConversationGraphState,
     ) -> dict[str, GraphAppointmentState | GraphTurnState]:
         if should_skip_action_execution(state):
+            # Verification can already produce the full turn result. In that
+            # case there is nothing left for the action dispatcher to do.
             log_event(logger, "execute_action", state, outcome="skipped")
             record_node_trace(
                 logger,
@@ -498,6 +505,8 @@ def _update_appointment_reference(
     requested_operation: ConversationOperation,
     appointment_reference: str | None,
 ) -> GraphAppointmentState:
+    # Only confirm/cancel should carry appointment targeting context across the
+    # turn boundary. Listing or help requests clear it.
     if requested_operation not in APPOINTMENT_ACTIONS:
         return {**appointments, "appointment_reference": None}
     if appointment_reference:
@@ -521,6 +530,11 @@ def _execute_appointment_mutation(
     verification = verification_state(state)
     appointments = appointment_state(state)
     turn = turn_state(state)
+    # Both confirm and cancel follow the same sequence:
+    # 1. resolve a single target appointment
+    # 2. run the service mutation
+    # 3. translate domain errors into turn issues
+    # 4. refresh the cached appointment list for the next turn
     appointment, resolve_updates = _resolve_target_appointment(
         state,
         appointment_service,
@@ -662,6 +676,9 @@ def _collect_missing_field(
         **verification,
         "verification_status": VerificationStatus.COLLECTING,
     }
+    # Invalid field feedback is attached to the current turn, but the partially
+    # collected identity values stay in verification state so the user can retry
+    # without losing prior valid inputs.
     invalid_issue = _invalid_issue_for_field(state, field_name, previous_status)
     updated_turn = {
         **turn,
@@ -692,6 +709,8 @@ def _handle_failed_verification(
         "provided_phone": None,
         "provided_dob": None,
     }
+    # A full identity mismatch resets collected identity fields. That prevents
+    # the next attempt from accidentally mixing data from two different people.
     if failures >= max_verification_attempts:
         updated_verification["verification_status"] = VerificationStatus.LOCKED
         updates = {

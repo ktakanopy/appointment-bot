@@ -17,6 +17,7 @@ from app.models import (
 
 
 class GraphVerificationState(TypedDict):
+    # Raw LangGraph state stays dict-shaped because nodes update it incrementally.
     verified: bool
     verification_failures: int
     verification_status: VerificationStatus
@@ -60,6 +61,8 @@ class VerificationState(BaseModel):
     provided_dob: str | None = None
 
     def missing_fields(self) -> list[str]:
+        # Verification is intentionally progressive: we ask for one missing
+        # field at a time instead of forcing the user to restate everything.
         missing = []
         if not self.provided_full_name:
             missing.append("full_name")
@@ -138,6 +141,8 @@ def default_appointment_state() -> GraphAppointmentState:
 
 
 def verification_state(state: ConversationGraphState) -> GraphVerificationState:
+    # LangGraph updates can be partial, so readers always merge against a full
+    # default shape before accessing nested keys.
     return {
         **default_verification_state(),
         **cast(dict[str, Any], state.get("verification", {})),
@@ -159,6 +164,8 @@ def appointment_state(state: ConversationGraphState) -> GraphAppointmentState:
 
 
 def latest_user_message(state: ConversationGraphState) -> str:
+    # The newest human message is the only input the interpret node needs from
+    # the message channel; older context is passed separately in serialized form.
     for message in reversed(state.get("messages", [])):
         if isinstance(message, HumanMessage):
             return _message_content(message).strip()
@@ -177,6 +184,8 @@ def serialize_messages(messages: Sequence[AnyMessage], limit: int | None = None)
 
 
 def build_conversation_state(state: ConversationGraphState | dict[str, Any]) -> ConversationState:
+    # Convert the mutable graph snapshot into a typed object that the API,
+    # response builder, and tests can read more comfortably.
     verification = verification_state(state)
     turn = turn_state(state)
     appointments = appointment_state(state)

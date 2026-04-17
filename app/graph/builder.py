@@ -32,6 +32,8 @@ def build_graph(
     cancel_node = make_cancel_node(appointment_service, logger)
     help_node = make_help_node(logger)
 
+    # The graph is intentionally small: every turn is normalized, interpreted,
+    # optionally verified, and then dispatched to exactly one business action.
     builder = StateGraph(ConversationGraphState, input_schema=ConversationGraphInput)
     builder.add_node("ingest", make_ingest_node(logger))
     builder.add_node("interpret", make_interpret_node(logger, provider=provider))

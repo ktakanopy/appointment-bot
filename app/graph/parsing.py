@@ -41,6 +41,8 @@ def extract_full_name(message: str) -> str | None:
         if match:
             return FullName.try_parse(match.group(1))
 
+    # Fallback for short identity replies such as "Ana Silva" during the
+    # verification flow when the user does not include any explicit marker.
     cleaned = re.sub(r"[^A-Za-zÀ-ÿ\s]", " ", message)
     candidate = " ".join(part for part in cleaned.strip().split())
     if len(candidate.split()) < 2:
@@ -70,6 +72,8 @@ def extract_appointment_reference(message: str) -> str | None:
     if date_match:
         return date_match.group(0)
 
+    # Ordinal references are common in chat after a list response, for example
+    # "confirm the first one".
     for word, index in ORDINAL_WORDS.items():
         if word in lowered:
             return str(index)
@@ -95,10 +99,13 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
     if not reference:
         return None
 
+    # Exact ids are the strongest reference because they do not depend on list
+    # ordering and they remain stable across turns.
     exact_matches = [appointment for appointment in appointments if appointment.id == reference]
     if exact_matches:
         return exact_matches[0]
 
+    # A date is only usable when it identifies exactly one appointment.
     date_matches = [appointment for appointment in appointments if appointment.date == reference]
     if len(date_matches) == 1:
         return date_matches[0]
@@ -106,6 +113,8 @@ def resolve_appointment_reference(reference: str | None, appointments: list[Appo
         return None
 
     if reference.isdigit():
+        # Numeric references are treated as the 1-based position from the last
+        # visible appointment list.
         index = int(reference)
         if 1 <= index <= len(appointments):
             return appointments[index - 1]
