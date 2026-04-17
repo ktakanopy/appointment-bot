@@ -23,16 +23,28 @@ Those are workflow questions, not creative-writing questions. A LangGraph
 ## Graph shape
 
 ```mermaid
-flowchart TD
-    start([Start]) --> ingest[ingest]
-    ingest --> interpret[interpret]
-    interpret --> need_verify{verification_required?}
-    need_verify -->|yes| verify[verify]
-    need_verify -->|no| execute[execute_action]
-    verify --> ready{turn output present?}
-    ready -->|yes| finish([End])
-    ready -->|no| execute
-    execute --> finish
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	ingest(ingest)
+	interpret(interpret)
+	verify(verify)
+	execute_action(execute_action)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> ingest;
+	ingest --> interpret;
+	interpret -.-> execute_action;
+	interpret -.-> verify;
+	verify -.-> __end__;
+	verify -.-> execute_action;
+	execute_action --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
 ```
 
 Each user message makes one pass through this graph.
