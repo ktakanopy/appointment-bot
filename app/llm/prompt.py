@@ -22,6 +22,7 @@ For selected_index:
 Examples:
 - "I want to see my appointments" -> {"requested_operation":"list_appointments","full_name":null,"phone":null,"dob":null,"selected_index":null}
 - "confirm the first one" -> {"requested_operation":"confirm_appointment","full_name":null,"phone":null,"dob":null,"selected_index":1}
+- "cancel the second one" -> {"requested_operation":"cancel_appointment","full_name":null,"phone":null,"dob":null,"selected_index":2}
 - "cancel 2" -> {"requested_operation":"cancel_appointment","full_name":null,"phone":null,"dob":null,"selected_index":2}
 - "cancel the Friday one" (list shows appointment 1 on Monday, appointment 2 on Friday) -> {"requested_operation":"cancel_appointment","full_name":null,"phone":null,"dob":null,"selected_index":2}
 - "confirm the one with Dr. Lima" (list shows appointment 2 with Dr. Lima) -> {"requested_operation":"confirm_appointment","full_name":null,"phone":null,"dob":null,"selected_index":2}

@@ -70,6 +70,14 @@ def test_cancel_by_ordinal_first():
     assert result.turn.operation_result.appointment_id == "a1"
 
 
+def test_cancel_by_ordinal_second():
+    wf = _verified_workflow("cancel-ordinal-second")
+    result = wf.run("cancel-ordinal-second", "cancel the second one")
+
+    assert result.turn.operation_result.outcome == ActionOutcome.CANCELED
+    assert result.turn.operation_result.appointment_id == "a2"
+
+
 def test_cancel_second_appointment_after_first_was_already_canceled():
     """Ordinal reference resolves correctly against state that changed in the same session."""
     wf = _verified_workflow("cancel-after-cancel")
