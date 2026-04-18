@@ -37,6 +37,9 @@ Demo:
 - appointment confirmation
 - appointment cancellation
 - multi-turn conversation flow with rerouting between actions
+- bounded recent-message context to reduce context rot
+- verification retry handling with lockout after repeated failed identity attempts
+- Langfuse tracing and observability
 - Streamlit demo frontend
 - automated tests for core workflow and failure paths
 - eval scenarios for multi-turn behavior and quality assurance
@@ -229,46 +232,35 @@ If you want more detail, start with:
 - [`docs/security.md`](docs/security.md)
 - [`docs/evaluation.md`](docs/evaluation.md)
 
-## Scope, trade-offs, and next steps
+## Scope
 
-This project is intentionally exercise-sized. I focused on the core workflow the
-task is really about: a patient starts a chat session, verifies identity, sees
-appointments, and can then confirm or cancel one of them. The goal was to make
-that path clear, deterministic, and testable rather than to make the project
-look like a full production healthcare system.
+This project is intentionally exercise-sized and focused on the core appointment
+workflow. A user starts a chat session, verifies identity, views appointments,
+and can confirm or cancel one appointment. The goal is to keep the behavior
+clear, deterministic, and easy to test, not to present a full production
+healthcare system.
 
-In scope for this submission:
+## Out of Scope
 
-- session-based chat flow, so the assistant can handle a multi-turn conversation instead of treating every message as an isolated request
-- verification-gated access to appointments, so protected actions only run after the patient provides full name, phone number, and date of birth
-- listing, confirming, and canceling appointments, because those are the core business actions in the exercise
-- rerouting between those actions in one session, so a user can naturally move from listing to confirming or canceling without starting over
-- test coverage around the main workflow and failure paths, including verification failures, lockout behavior, and protected-action rules
+- real EHR or EMR integration
+- production-grade authentication and authorization
+- cross-session memory for returning users
+- long-history compaction through summarization
+- handling multiple appointment actions in a single message
+- production-grade persistence and background cleanup
 
-Intentionally out of scope:
+Provider failures currently propagate as controlled errors instead of degrading
+gracefully. This trade-off is intentional to avoid fallback complexity beyond
+the scope of this exercise.
 
-- real EHR or EMR integration: EHR means Electronic Health Record and EMR means Electronic Medical Record. In practice, this would mean connecting to a real clinic or hospital system instead of using seeded demo data
-- real authentication beyond demo identity verification: there is no production auth flow here such as OAuth, JWT, staff roles, or patient login accounts
-- cross-session remembered identity: if a user starts a new session, they need to verify again instead of being remembered automatically
-- multiple appointment mutations in one user message: the system handles one main appointment action per turn, not commands like `confirm the first one and cancel the second`
-- production-grade persistence for patients, appointments, and sessions: the project uses simple local storage and in-memory repositories because the goal is to show workflow behavior, not build a full persistence stack
+## Future Improvements
 
-One more deliberate trade-off is provider failure handling. If the LLM provider
-fails, the `/chat` endpoint returns a controlled HTTP 503 instead of trying to
-guess the user's intent with a fallback parser. I think that is the better
-trade for a take-home. A clean failure is easier to understand and safer than a
-half-reliable recovery path that only works sometimes.
-
-If I were taking the project beyond demo scope, the next changes would be pretty
-practical:
-
-- stream responses to the frontend so the chat feels faster
-- move sessions, workflow state, patients, and appointments to real persistence
-- add a proper authentication system
-- add a small deterministic fallback for a few well-covered extraction cases when the provider is unavailable
-- replace request-path cleanup and in-memory mutable state with safer background cleanup and shared storage
-- expand evaluation coverage for more natural-language variation and edge cases
-- add cross-session remembered identity only if the product actually needs it
+- deterministic fallback for intent and entity extraction in well-covered cases
+- graceful degradation when provider calls fail
+- cross-session memory for returning users
+- conversation history summarization to preserve relevant context while
+  controlling token growth
+- stronger persistence and operational hardening
 
 ## Documentation
 
