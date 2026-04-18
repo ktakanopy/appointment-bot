@@ -262,6 +262,7 @@ If extended further, likely next steps would be:
 - cross-session memory for returning users, so stable user context can persist across separate conversations
 - conversation history summarization to preserve relevant context while controlling token growth
 - stronger persistence and operational hardening
+- appointment reference could be only a digit instead of date or other thing. 
 
 ## Documentation
 
