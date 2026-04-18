@@ -33,14 +33,14 @@ class HistoryAwareProvider:
         if message == "confirm the first one":
             return IntentPrediction(
                 requested_operation=ConversationOperation.CONFIRM_APPOINTMENT,
-                appointment_reference="1",
+                selected_index=1,
             )
         if message == "cancel it":
             history = state.get("messages", [])
             if any(item.get("content") == "confirm the first one" for item in history):
                 return IntentPrediction(
                     requested_operation=ConversationOperation.CANCEL_APPOINTMENT,
-                    appointment_reference="1",
+                    selected_index=1,
                 )
         return IntentPrediction()
 

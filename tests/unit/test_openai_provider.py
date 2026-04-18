@@ -57,7 +57,7 @@ class IntentPayload:
             "full_name": "Ana Silva",
             "phone": "11999998888",
             "dob": "1990-05-10",
-            "appointment_reference": None,
+            "selected_index": None,
         }
 
 

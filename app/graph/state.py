@@ -78,7 +78,7 @@ class AppointmentState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     listed_appointments: list[Appointment] = Field(default_factory=list)
-    appointment_reference: str | None = None
+    selected_index: int | None = None
 
 
 class ConversationState(BaseModel):

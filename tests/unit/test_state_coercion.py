@@ -3,12 +3,10 @@
 LangGraph stores node output via model_dump(), so listed_appointments is
 persisted as a list of plain dicts between turns. appointment_state() must
 coerce those dicts back to Appointment objects before any node reads .id,
-.date, or .status. If that coercion breaks, resolve_appointment_reference
-raises AttributeError: 'dict' object has no attribute 'id'.
+.date, or .status. If that coercion breaks, index resolution crashes with
+AttributeError: 'dict' object has no attribute 'id'.
 """
 from __future__ import annotations
-
-import pytest
 
 from app.graph.state import appointment_state
 from app.models import Appointment, AppointmentStatus
@@ -34,7 +32,7 @@ SERIALIZED_STATE = {
                 "status": "confirmed",
             },
         ],
-        "appointment_reference": "2",
+        "selected_index": 2,
     }
 }
 
@@ -47,8 +45,7 @@ def test_appointment_state_coerces_dicts_to_appointment_objects():
     for appt in state.listed_appointments:
         assert isinstance(appt, Appointment), (
             f"Expected Appointment, got {type(appt).__name__}. "
-            "If this fails, resolve_appointment_reference will crash with "
-            "AttributeError: 'dict' object has no attribute 'id'."
+            "If this fails, index resolution will crash with AttributeError."
         )
 
 
@@ -68,40 +65,20 @@ def test_appointment_state_preserves_field_values_after_coercion():
     assert second.status == AppointmentStatus.CONFIRMED
 
 
-def test_appointment_state_preserves_appointment_reference():
+def test_appointment_state_preserves_selected_index():
     state = appointment_state(SERIALIZED_STATE)
 
-    assert state.appointment_reference == "2"
+    assert state.selected_index == 2
 
 
 def test_appointment_state_returns_empty_list_when_appointments_key_missing():
     state = appointment_state({})
 
     assert state.listed_appointments == []
-    assert state.appointment_reference is None
+    assert state.selected_index is None
 
 
 def test_appointment_state_handles_empty_listed_appointments():
     state = appointment_state({"appointments": {"listed_appointments": []}})
 
     assert state.listed_appointments == []
-
-
-def test_resolve_appointment_reference_crashes_on_raw_dicts():
-    """Documents the failure mode that appointment_state() guards against.
-
-    This test exists as a sentinel: if resolve_appointment_reference ever starts
-    accepting dicts silently (hiding the bug), this assertion will flip and
-    alert maintainers that the guard assumption changed.
-    """
-    from app.graph.parsing import resolve_appointment_reference
-
-    raw_dicts = [
-        {"id": "a1", "patient_id": "p1", "date": "2026-04-20", "time": "14:00",
-         "doctor": "Dr. Costa", "status": "scheduled"},
-        {"id": "a2", "patient_id": "p1", "date": "2026-04-23", "time": "09:30",
-         "doctor": "Dr. Lima", "status": "confirmed"},
-    ]
-
-    with pytest.raises(AttributeError):
-        resolve_appointment_reference("2", raw_dicts)

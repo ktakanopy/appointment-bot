@@ -240,7 +240,7 @@ The provider returns a structured prediction with:
 - `full_name`
 - `phone`
 - `dob`
-- `appointment_reference`
+- `selected_index`
 
 The model does not:
 

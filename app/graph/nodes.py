@@ -7,11 +7,9 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.graph.parsing import (
-    extract_appointment_reference,
     extract_dob,
     extract_full_name,
     extract_phone,
-    resolve_appointment_reference,
 )
 from app.ports import LLMProvider
 from app.graph.state import (
@@ -136,14 +134,10 @@ def make_interpret_node(logger, provider: LLMProvider):
             )
             raise DependencyUnavailableError("provider interpret failed") from exc
         log_event(logger, "interpret", state, outcome="provider_ok")
-        # get from llm or try deterministic reference
         full_name = FullName.try_parse(result.full_name) or extract_full_name(message)
         phone = Phone.try_parse(result.phone) or extract_phone(message)
         dob = DateOfBirth.try_parse(result.dob) or extract_dob(message)
-        # get from llm or try deterministic reference
-        appointment_reference = (
-            result.appointment_reference or extract_appointment_reference(message)
-        )
+        selected_index = result.selected_index
         requested_operation = result.requested_operation
         updated_verification = _fill_missing_fields(
             verification,
@@ -152,8 +146,8 @@ def make_interpret_node(logger, provider: LLMProvider):
             dob=dob,
         )
         updated_turn = turn.model_copy(update={"requested_operation": requested_operation})
-        updated_appointments = _update_appointment_reference(
-            appointments, requested_operation, appointment_reference
+        updated_appointments = _update_selected_index(
+            appointments, requested_operation, selected_index
         )
         updates = {
             "verification": updated_verification.model_dump(),
@@ -165,7 +159,7 @@ def make_interpret_node(logger, provider: LLMProvider):
             logger,
             "interpret",
             next_state,
-            appointment_reference=updated_appointments.appointment_reference,
+            selected_index=updated_appointments.selected_index,
         )
         # Routing happens immediately after interpretation. From this point on,
         # the flow is deterministic again.
@@ -277,7 +271,7 @@ def make_list_node(appointment_service: AppointmentService, logger):
         appointments = appointment_service.list_appointments(verification.patient_id)
         updated_appointments = AppointmentState(
             listed_appointments=appointments,
-            appointment_reference=appointment_state(state).appointment_reference,
+            selected_index=appointment_state(state).selected_index,
         )
         updated_turn = turn.model_copy(update={
             "requested_operation": ConversationOperation.LIST_APPOINTMENTS,
@@ -420,17 +414,17 @@ def _observe(logger, tracer, node: str, state, **extra) -> None:
     record_node_trace(logger, tracer, node=node, state=state, extra=extra or None)
 
 
-def _update_appointment_reference(
+def _update_selected_index(
     appointments: AppointmentState,
     requested_operation: ConversationOperation,
-    appointment_reference: str | None,
+    selected_index: int | None,
 ) -> AppointmentState:
     # Only confirm/cancel should carry appointment targeting context across the
     # turn boundary. Listing or help requests clear it.
     if requested_operation not in APPOINTMENT_ACTIONS:
-        return appointments.model_copy(update={"appointment_reference": None})
-    if appointment_reference:
-        return appointments.model_copy(update={"appointment_reference": appointment_reference})
+        return appointments.model_copy(update={"selected_index": None})
+    if selected_index is not None:
+        return appointments.model_copy(update={"selected_index": selected_index})
     return appointments
 
 
@@ -458,12 +452,11 @@ def _execute_appointment_mutation(
     # 4. refresh the cached appointment list for the next turn
     appointment, resolve_updates = _resolve_target_appointment(
         state,
-        appointment_service,
         operation=operation,
     )
     if appointment is None:
         _observe(
-            logger, tracer, "resolve_appointment_reference", {**state, **resolve_updates},
+            logger, tracer, "resolve_selected_index", {**state, **resolve_updates},
             outcome=turn_state({"turn": resolve_updates["turn"]}).issue.value,
         )
         return resolve_updates
@@ -654,68 +647,28 @@ def _invalid_issue_for_field(
 
 def _resolve_target_appointment(
     state: ConversationGraphState,
-    appointment_service: AppointmentService,
     *,
     operation: ConversationOperation,
 ) -> tuple[Appointment | None, dict[str, dict]]:
-    """pick the single appointment for confirm or cancel using state and services.
+    """Resolve selected_index against the displayed appointment list.
 
-    reads appointment_reference from graph state (set during interpretation)
-    and resolves it against a candidate list. if the user gave a numeric index
-    (e.g. "1" for "the first one") but there is no in-session list from a prior
-    list_appointments turn, resolution cannot proceed: returns (none, turn
-    update) with missing_list_context so the assistant can ask them to list
-    first.
-
-    otherwise builds appointment_options from the cached list when present,
-    or falls back to the patient's current appointments from the repository so
-    id and date references still work after verification without requiring a
-    prior list.
-
-    delegates matching to resolve_appointment_reference. if that returns none
-    (missing reference, no match, duplicate dates, or out-of-range index),
-    returns (none, turn update) with ambiguous_appointment_reference and the
-    caller-specific ambiguous_key for the user-facing message.
-
-    returns (appointment, {}) on success; the empty dict means no partial
-    state merge is needed beyond the mutation node itself.
+    selected_index is 1-based and must fall within the currently displayed list.
+    If no list has been shown yet, returns MISSING_LIST_CONTEXT so the assistant
+    can ask the user to list first. If selected_index is absent or out of bounds,
+    returns AMBIGUOUS_APPOINTMENT_REFERENCE.
     """
     appointments = appointment_state(state)
     turn = turn_state(state)
-    verification = verification_state(state)
     listed_appointments = appointments.listed_appointments or []
-    reference = appointments.appointment_reference
+    selected_index = appointments.selected_index
 
-    # ordinal-style references only make sense relative to a list the user saw.
-    if reference and reference.isdigit() and not listed_appointments:
-        return None, {
-            "turn": turn.model_copy(
-                update={
-                    "requested_operation": operation,
-                    "issue": TurnIssue.MISSING_LIST_CONTEXT,
-                    "operation_result": None,
-                }
-            ).model_dump()
-        }
+    if not listed_appointments:
+        return None, _turn_issue_updates(turn, operation, TurnIssue.MISSING_LIST_CONTEXT)
 
-    # prefer the session cache; otherwise load fresh appointments for id/date resolution.
-    appointment_options = listed_appointments or appointment_service.list_appointments(
-        verification.patient_id
-    )
-    appointment = resolve_appointment_reference(reference, appointment_options)
+    if selected_index is None or not (1 <= selected_index <= len(listed_appointments)):
+        return None, _turn_issue_updates(turn, operation, TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE)
 
-    # any failure to pin down exactly one appointment is surfaced as ambiguous for this turn.
-    if appointment is None:
-        return None, {
-            "turn": turn.model_copy(
-                update={
-                    "requested_operation": operation,
-                    "issue": TurnIssue.AMBIGUOUS_APPOINTMENT_REFERENCE,
-                    "operation_result": None,
-                }
-            ).model_dump()
-        }
-    return appointment, {}
+    return listed_appointments[selected_index - 1], {}
 
 
 def _fill_missing_fields(

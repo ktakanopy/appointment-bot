@@ -16,7 +16,7 @@ class IntentPrediction(BaseModel):
     full_name: str | None = None
     phone: str | None = None
     dob: str | None = None
-    appointment_reference: str | None = None
+    selected_index: int | None = None
 
 
 class JudgeResult(BaseModel):

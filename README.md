@@ -191,7 +191,7 @@ It can suggest:
 - `full_name`
 - `phone`
 - `dob`
-- `appointment_reference`: the way the user points to a specific appointment, usually something like `1` in `confirm the first one`, but it can also be a date or explicit appointment id
+- `selected_index`: a 1-based integer the LLM extracts when the user points at a specific appointment (e.g. `1` in `confirm the first one`); `null` when no appointment was targeted
 
 It does not decide authorization, mutate appointments, or generate the final
 patient-facing response. Final wording comes from deterministic response
@@ -262,7 +262,6 @@ If extended further, likely next steps would be:
 - cross-session memory for returning users, so stable user context can persist across separate conversations
 - conversation history summarization to preserve relevant context while controlling token growth
 - stronger persistence and operational hardening
-- appointment reference could be only a digit instead of date or other thing. 
 
 ## Documentation
 

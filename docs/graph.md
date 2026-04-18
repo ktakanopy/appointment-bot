@@ -155,15 +155,14 @@ Fields:
 - `listed_appointments`
   - the last appointment list shown to the user
   - used to resolve ordinal references like `the first one`
-- `appointment_reference`
-  - the raw reference extracted from the latest user turn
-  - examples: `1`, `2026-04-20`, `a1`
+- `selected_index`
+  - the 1-based integer index extracted from the latest user turn
   - `null` when the user did not specify a target appointment
 
 This split lets the workflow resolve references deterministically:
 
-- `appointment_reference` says what the user pointed at
-- `listed_appointments` says what candidate list that reference should apply to
+- `selected_index` says which position the user pointed at
+- `listed_appointments` says what candidate list that index should apply to
 
 These fields also make traces easier to understand because they show both:
 
@@ -203,15 +202,14 @@ It extracts:
 - `full_name`
 - `phone`
 - `dob`
-- `appointment_reference`
+- `selected_index`
 
 The node uses the structured LLM output first. If the LLM call succeeds but
 leaves one of those fields empty, the node applies a few small deterministic
 parsers to fill only that missing value. That mainly helps with phone numbers,
-dates of birth, short full-name replies during verification, and appointment
-references such as `first`, `2`, or `2026-04-20`. If the provider call itself
-fails, the workflow does not fall back to a full deterministic parser; it raises
-`DependencyUnavailableError` and the API returns HTTP 503.
+dates of birth, and short full-name replies during verification. If the provider
+call itself fails, the workflow does not fall back to a full deterministic
+parser; it raises `DependencyUnavailableError` and the API returns HTTP 503.
 
 After that, the workflow is deterministic again.
 
@@ -290,7 +288,7 @@ list appointments in the same turn.
 ### Confirm after listing
 
 1. User: `confirm the first one`
-2. `interpret` extracts `confirm_appointment` and `appointment_reference=1`
+2. `interpret` extracts `confirm_appointment` and `selected_index=1`
 3. user is already verified, so the graph skips `verify`
 4. `execute_action` resolves `1` against the stored appointment list
 5. appointment is confirmed or returns an idempotent outcome if it was already confirmed

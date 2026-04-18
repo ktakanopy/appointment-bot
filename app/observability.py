@@ -73,7 +73,7 @@ def log_event(logger: logging.Logger, node: str, state: Any, **extra: object) ->
         "verified": verification.get("verified"),
         "verification_status": verification.get("verification_status"),
         "issue": turn.get("issue"),
-        "appointment_reference": appointments.get("appointment_reference"),
+        "selected_index": appointments.get("selected_index"),
         "appointment_count": len(appointments.get("listed_appointments", []) or []),
     }
     payload.update(extra)
@@ -104,7 +104,7 @@ def summarize_state_for_trace(state: Any) -> dict[str, Any]:
                 "operation_result": _summarize_operation_result(turn.get("operation_result")),
             },
             "appointments": {
-                "appointment_reference": appointments.get("appointment_reference"),
+                "selected_index": appointments.get("selected_index"),
                 "listed_appointments": [
                     _summarize_appointment(appointment)
                     for appointment in (appointments.get("listed_appointments") or [])
@@ -329,8 +329,8 @@ def _format_human_readable_log(payload: dict[str, Any]) -> str:
         extra_parts = []
         if payload.get("outcome") is not None:
             extra_parts.append(f"outcome={payload['outcome']}")
-        if payload.get("appointment_reference") is not None:
-            extra_parts.append(f"reference={payload['appointment_reference']}")
+        if payload.get("selected_index") is not None:
+            extra_parts.append(f"index={payload['selected_index']}")
         if payload.get("appointment_count") is not None:
             extra_parts.append(f"appointments={payload['appointment_count']}")
         extra = f" {' '.join(extra_parts)}" if extra_parts else ""

@@ -2,12 +2,11 @@
 
 These tests guard against the regression where listed_appointments was stored
 as plain dicts via model_dump() but read back without coercion, causing
-AttributeError: 'dict' object has no attribute 'id' inside
-resolve_appointment_reference.
+AttributeError on index resolution.
 
-Covers the three resolution strategies (ordinal numeric index, date string,
-appointment ID) for both cancel and confirm, exercised after a real
-list_appointments turn so the state round-trip through LangGraph is included.
+Covers ordinal words and numeric index for both cancel and confirm, exercised
+after a real list_appointments turn so the state round-trip through LangGraph
+is included.
 """
 from __future__ import annotations
 
@@ -60,33 +59,12 @@ def test_cancel_by_numeric_index_2_targets_second_appointment():
 
 
 # ---------------------------------------------------------------------------
-# Cancel by date reference
+# Cancel by ordinal word
 # ---------------------------------------------------------------------------
 
-def test_cancel_by_date_reference_targets_matching_appointment():
-    wf = _verified_workflow("cancel-date")
-    result = wf.run("cancel-date", "cancel my 2026-04-20 appointment")
-
-    assert result.turn.operation_result.outcome == ActionOutcome.CANCELED
-    assert result.turn.operation_result.appointment_id == "a1"
-
-
-def test_cancel_by_date_for_second_appointment():
-    wf = _verified_workflow("cancel-date-2")
-    result = wf.run("cancel-date-2", "cancel my 2026-04-23 appointment")
-
-    assert result.turn.operation_result.outcome == ActionOutcome.CANCELED
-    assert result.turn.operation_result.appointment_id == "a2"
-
-
-# ---------------------------------------------------------------------------
-# Cancel by appointment ID
-# ---------------------------------------------------------------------------
-
-def test_cancel_by_numeric_index_0_is_alias_for_first():
-    """Index 0 is accepted as an alias for the first appointment."""
-    wf = _verified_workflow("cancel-idx-0")
-    result = wf.run("cancel-idx-0", "cancel 0")
+def test_cancel_by_ordinal_first():
+    wf = _verified_workflow("cancel-ordinal-first")
+    result = wf.run("cancel-ordinal-first", "cancel the first one")
 
     assert result.turn.operation_result.outcome == ActionOutcome.CANCELED
     assert result.turn.operation_result.appointment_id == "a1"
@@ -105,6 +83,18 @@ def test_cancel_second_appointment_after_first_was_already_canceled():
 
 
 # ---------------------------------------------------------------------------
+# Cancel with out-of-bounds index → ambiguous
+# ---------------------------------------------------------------------------
+
+def test_cancel_out_of_bounds_index_is_ambiguous():
+    wf = _verified_workflow("cancel-oob")
+    result = wf.run("cancel-oob", "cancel 99")
+
+    assert result.turn.operation_result is None
+    assert result.turn.issue is not None
+
+
+# ---------------------------------------------------------------------------
 # Confirm by numeric index
 # ---------------------------------------------------------------------------
 
@@ -120,9 +110,7 @@ def test_confirm_by_numeric_index_1_targets_first_appointment():
 def test_confirm_by_numeric_index_2_targets_second_appointment():
     wf = _verified_workflow("confirm-idx-2")
 
-    # a2 is already CONFIRMED, so we confirm a1 first to get a clean state,
-    # then confirm 2 to verify the index targets the right slot.
-    wf.run("confirm-idx-2", "confirm 1")
+    # a2 is already CONFIRMED — confirming it again exercises the idempotent path.
     result = wf.run("confirm-idx-2", "confirm 2")
 
     assert result.turn.operation_result.outcome == ActionOutcome.ALREADY_CONFIRMED
@@ -130,24 +118,12 @@ def test_confirm_by_numeric_index_2_targets_second_appointment():
 
 
 # ---------------------------------------------------------------------------
-# Confirm by date reference
-# ---------------------------------------------------------------------------
-
-def test_confirm_by_date_reference():
-    wf = _verified_workflow("confirm-date")
-    result = wf.run("confirm-date", "confirm my 2026-04-20 appointment")
-
-    assert result.turn.operation_result.outcome == ActionOutcome.CONFIRMED
-    assert result.turn.operation_result.appointment_id == "a1"
-
-
-# ---------------------------------------------------------------------------
 # listed_appointments reflects mutation after state round-trip
 # ---------------------------------------------------------------------------
 
 def test_listed_appointments_are_appointment_objects_after_mutation():
-    """Ensure that listed_appointments returned after a mutation are typed
-    Appointment objects, not plain dicts — guarding the state coercion path."""
+    """Ensure listed_appointments returned after a mutation are typed Appointment
+    objects, not plain dicts — guards the state coercion path."""
     from app.models import Appointment
 
     wf = _verified_workflow("coercion-check")
