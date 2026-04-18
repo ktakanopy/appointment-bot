@@ -274,11 +274,10 @@ The `docs/` folder has the main technical notes:
 
 ## Process notes
 
-I used the exercise prompt as the source of truth and kept the planning
-artifacts in:
+I used those documents to design the first versions of this project with SDD:
 
 - `specs/001-appointment-management/`
 - `specs/002-frontend-llm-memory/`
 
 I would not expect a reviewer to read those first. They are there if you want
-to see the design trail.
+to see the design trail. 
