@@ -10,7 +10,6 @@ from app.graph.nodes import (
     make_confirm_node,
     make_execute_action_node,
     make_help_node,
-    make_ingest_node,
     make_interpret_node,
     make_list_node,
     make_verification_node,
@@ -32,10 +31,9 @@ def build_graph(
     cancel_node = make_cancel_node(appointment_service, logger)
     help_node = make_help_node(logger)
 
-    # The graph is intentionally small: every turn is normalized, interpreted,
+    # The graph is intentionally small: every turn is interpreted,
     # optionally verified, and then dispatched to exactly one business action.
     builder = StateGraph(ConversationGraphState, input_schema=ConversationGraphInput)
-    builder.add_node("ingest", make_ingest_node(logger))
     builder.add_node("interpret", make_interpret_node(logger, provider=provider))
     builder.add_node(
         "verify",
@@ -56,8 +54,7 @@ def build_graph(
         ),
     )
 
-    builder.add_edge(START, "ingest")
-    builder.add_edge("ingest", "interpret")
+    builder.add_edge(START, "interpret")
     builder.add_edge("execute_action", END)
 
     return builder.compile(checkpointer=checkpointer)

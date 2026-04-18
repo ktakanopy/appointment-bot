@@ -59,26 +59,6 @@ INVALID_RESPONSES = {
 }
 
 
-def make_ingest_node(logger):
-    """
-    Build the graph node responsible for turn initialization.
-
-    At this stage the current user message is already part of the `messages`
-    channel because LangGraph merged the new input through the message reducer.
-    This node only clears per-turn output fields so later nodes work with a
-    clean response surface.
-    """
-    tracer = getattr(logger, "tracer", None)
-
-    def ingest(state: ConversationGraphState) -> dict[str, dict]:
-        turn = _reset_turn_output(turn_state(state))
-        updates = {"turn": turn.model_dump()}
-        _observe(logger, tracer, "ingest", {**state, **updates})
-        return updates
-
-    return ingest
-
-
 def make_interpret_node(logger, provider: LLMProvider):
     """
     Build the node that maps the latest user message into structured intent.
@@ -686,10 +666,6 @@ def _fill_missing_fields(
     if verification.provided_dob is None and dob:
         updates["provided_dob"] = dob
     return verification.model_copy(update=updates)
-
-
-def _reset_turn_output(turn: TurnState) -> TurnState:
-    return turn.model_copy(update={"issue": None, "operation_result": None})
 
 
 def verification_required(state: ConversationGraphState) -> bool:
