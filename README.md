@@ -248,7 +248,7 @@ To keep the exercise focused, some production concerns were intentionally left o
 - production-grade authentication and authorization
 - cross-session memory for returning users, so users are not remembered across separate sessions
 - long-history compaction through summarization, so older conversation context is not condensed into a persistent summary
-- handling multiple appointment actions in a single message. The bot should understand commands like "confirm the first and cancel the second".
+- handling multiple appointment actions in a single message. The bot should not understand commands like "confirm the first and cancel the second".
 - production-grade persistence and background cleanup
 
 Provider failures also currently propagate instead of degrading gracefully. In other words, the system returns a controlled failure instead of falling back to a reduced but still-available experience.
@@ -258,7 +258,7 @@ Provider failures also currently propagate instead of degrading gracefully. In o
 If extended further, likely next steps would be:
 
 - deterministic fallback for intent and entity extraction in well-covered cases
-- graceful degradation for provider failures, so the system can still offer a reduced experience when the LLM is unavailable
+- graceful degradation for provider failures, so the system can still offer a reduced experience when the LLM is unavailable, but not stop the system entirely. 
 - cross-session memory for returning users, so stable user context can persist across separate conversations
 - conversation history summarization to preserve relevant context while controlling token growth
 - stronger persistence and operational hardening
