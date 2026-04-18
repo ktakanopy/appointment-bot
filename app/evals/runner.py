@@ -117,28 +117,23 @@ def build_evaluation_result(
 
 
 def build_results_summary(results: list[EvaluationResult]) -> dict[str, float | int | None]:
-    scored_results = [result.score for result in results if result.score is not None]
     pass_count = sum(1 for result in results if result.status == "pass")
     fail_count = sum(1 for result in results if result.status == "fail")
     error_count = sum(1 for result in results if result.status == "error")
     total_count = len(results)
-    average_score = sum(scored_results) / len(scored_results) if scored_results else None
     pass_rate = (pass_count / total_count) if total_count else None
     return {
         "total": total_count,
         "pass": pass_count,
         "fail": fail_count,
         "error": error_count,
-        "average_score": average_score,
         "pass_rate": pass_rate,
     }
 
 
 def format_results_summary(results: list[EvaluationResult]) -> str:
     summary = build_results_summary(results)
-    average_score = summary["average_score"]
     pass_rate = summary["pass_rate"]
-    average_score_text = f"{average_score:.2f}" if average_score is not None else "n/a"
     pass_rate_text = f"{pass_rate * 100:.1f}%" if pass_rate is not None else "n/a"
     return "\n".join(
         [
@@ -149,7 +144,6 @@ def format_results_summary(results: list[EvaluationResult]) -> str:
             f"Passed        : {summary['pass']}",
             f"Failed        : {summary['fail']}",
             f"Errors        : {summary['error']}",
-            f"Average score : {average_score_text}",
             f"Pass rate     : {pass_rate_text}",
         ]
     )
