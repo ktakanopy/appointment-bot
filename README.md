@@ -242,24 +242,25 @@ healthcare system.
 
 ## Out of Scope
 
-- real EHR or EMR integration
+To keep the exercise focused, some production concerns were intentionally left out:
+
+- real EHR or EMR integration (Electronic Health Record or Electronic Medical Record), meaning a connection to a real healthcare record system instead of seeded demo data
 - production-grade authentication and authorization
-- cross-session memory for returning users
-- long-history compaction through summarization
-- handling multiple appointment actions in a single message
+- cross-session memory for returning users, so users are not remembered across separate sessions
+- long-history compaction through summarization, so older conversation context is not condensed into a persistent summary
+- handling multiple appointment actions in a single message. The bot should understand commands like "confirm the first and cancel the second".
 - production-grade persistence and background cleanup
 
-Provider failures currently propagate as controlled errors instead of degrading
-gracefully. This trade-off is intentional to avoid fallback complexity beyond
-the scope of this exercise.
+Provider failures also currently propagate instead of degrading gracefully. In other words, the system returns a controlled failure instead of falling back to a reduced but still-available experience.
 
 ## Future Improvements
 
+If extended further, likely next steps would be:
+
 - deterministic fallback for intent and entity extraction in well-covered cases
-- graceful degradation when provider calls fail
-- cross-session memory for returning users
-- conversation history summarization to preserve relevant context while
-  controlling token growth
+- graceful degradation for provider failures, so the system can still offer a reduced experience when the LLM is unavailable
+- cross-session memory for returning users, so stable user context can persist across separate conversations
+- conversation history summarization to preserve relevant context while controlling token growth
 - stronger persistence and operational hardening
 
 ## Documentation
